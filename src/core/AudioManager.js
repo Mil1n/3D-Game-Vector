@@ -15,6 +15,8 @@ const SOUND_PRESETS = Object.freeze({
   carbineShot: { group: 'weapons', duration: 0.13, gain: 0.42, noise: 0.45, filter: 1800, layers: [['sawtooth', 145, 72, 0.5], ['square', 82, 42, 0.2]] },
   scatterShot: { group: 'weapons', duration: 0.28, gain: 0.58, noise: 0.85, filter: 1050, layers: [['sawtooth', 94, 38, 0.5], ['triangle', 58, 28, 0.3]] },
   railShot: { group: 'weapons', duration: 0.52, gain: 0.48, noise: 0.2, filter: 4200, layers: [['sine', 1380, 120, 0.42], ['sawtooth', 310, 72, 0.22]] },
+  plasmaShot: { group: 'weapons', duration: 0.09, gain: 0.3, noise: 0.1, filter: 5200, layers: [['square', 1650, 520, 0.2], ['sine', 790, 240, 0.34]] },
+  novaShot: { group: 'weapons', duration: 0.72, gain: 0.56, noise: 0.72, filter: 1350, layers: [['sawtooth', 180, 38, 0.42], ['sine', 62, 24, 0.5], ['triangle', 980, 105, 0.14]] },
   enemyShot: { group: 'effects', duration: 0.2, gain: 0.26, noise: 0.22, filter: 2200, layers: [['square', 380, 120, 0.34]] },
   dryFire: { group: 'weapons', duration: 0.055, gain: 0.2, noise: 0.35, filter: 3900, layers: [['square', 180, 120, 0.14]] },
   reload: { group: 'weapons', duration: 0.16, gain: 0.17, noise: 0.2, filter: 2600, layers: [['triangle', 240, 410, 0.18]] },
@@ -42,6 +44,8 @@ const ALIASES = Object.freeze({
   carbine: 'carbineShot',
   scatter: 'scatterShot',
   rail: 'railShot',
+  plasma: 'plasmaShot',
+  nova: 'novaShot',
   gunshot: 'carbineShot',
   shotgun: 'scatterShot',
   footstep: 'step',
@@ -253,7 +257,14 @@ export class AudioManager {
   }
 
   playWeapon(weaponId, options = {}) {
-    return this.play({ carbine: 'carbineShot', scatter: 'scatterShot', rail: 'railShot', empty: 'dryFire' }[weaponId] ?? weaponId, {
+    return this.play({
+      carbine: 'carbineShot',
+      scatter: 'scatterShot',
+      rail: 'railShot',
+      plasma: 'plasmaShot',
+      nova: 'novaShot',
+      empty: 'dryFire',
+    }[weaponId] ?? weaponId, {
       group: 'weapons',
       ...options,
     });

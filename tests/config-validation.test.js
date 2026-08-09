@@ -28,8 +28,8 @@ test('game timing and difficulty configs are complete and balanced', () => {
   assert.ok(DIFFICULTY_CONFIGS.hard.resourceMultiplier < DIFFICULTY_CONFIGS.normal.resourceMultiplier);
 });
 
-test('all three weapon configs expose the WeaponSystem contract', () => {
-  assert.deepEqual(WEAPON_ORDER, ['carbine', 'scatter', 'rail']);
+test('all five weapon configs expose the WeaponSystem contract', () => {
+  assert.deepEqual(WEAPON_ORDER, ['carbine', 'scatter', 'rail', 'plasma', 'nova']);
   const required = [
     'id', 'name', 'shortName', 'description', 'type', 'damage', 'fireRate', 'magazine',
     'reserve', 'reloadTime', 'spread', 'moveSpread', 'adsSpread', 'recoil', 'range',
@@ -47,6 +47,10 @@ test('all three weapon configs expose the WeaponSystem contract', () => {
     assert.ok(weapon.falloffStart < weapon.falloffEnd && weapon.falloffEnd <= weapon.range);
     positive(weapon.recoil.recovery, `${id}.recoil.recovery`);
   }
+  assert.equal(WEAPON_CONFIGS.plasma.automatic, true);
+  assert.ok(WEAPON_CONFIGS.plasma.fireRate > WEAPON_CONFIGS.carbine.fireRate);
+  positive(WEAPON_CONFIGS.nova.impactBlast.radius, 'nova.impactBlast.radius');
+  positive(WEAPON_CONFIGS.nova.impactBlast.damage, 'nova.impactBlast.damage');
 });
 
 test('enemy configs cover ranged, flanker and elite roles', () => {

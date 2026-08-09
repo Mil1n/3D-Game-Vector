@@ -26,19 +26,43 @@ function createWeaponModel(config) {
     details.push(mesh);
     return mesh;
   };
+  const addTorus = (radius, tube, position, material = glow, rotation = [0, 0, 0]) => {
+    const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 7, 18), material);
+    mesh.position.set(...position);
+    mesh.rotation.set(...rotation);
+    group.add(mesh);
+    details.push(mesh);
+    return mesh;
+  };
 
-  if (config.id === 'scatter') {
+  const modelStyle = config.model ?? config.id;
+  if (modelStyle === 'scatter') {
     addBox([0.18, 0.19, 0.92], [0.02, -0.01, -0.4]);
     addBox([0.08, 0.08, 0.72], [-0.07, 0.08, -0.74], dark);
     addBox([0.08, 0.08, 0.72], [0.07, 0.08, -0.74], dark);
     addBox([0.22, 0.08, 0.29], [0, -0.13, -0.18], dark, [-0.28, 0, 0]);
     addBox([0.24, 0.018, 0.42], [0, 0.12, -0.49], glow);
-  } else if (config.id === 'rail') {
+  } else if (modelStyle === 'rail') {
     addBox([0.16, 0.2, 1.24], [0, 0, -0.56]);
     addBox([0.28, 0.05, 0.92], [0, 0.13, -0.68], dark);
     addBox([0.035, 0.035, 1.1], [-0.12, 0.13, -0.72], glow);
     addBox([0.035, 0.035, 1.1], [0.12, 0.13, -0.72], glow);
     addBox([0.17, 0.2, 0.27], [0, -0.17, -0.18], dark, [-0.2, 0, 0]);
+  } else if (modelStyle === 'plasma-smg') {
+    addBox([0.22, 0.18, 0.62], [0, 0.01, -0.34]);
+    addBox([0.12, 0.1, 0.46], [0, 0.055, -0.68], dark);
+    addBox([0.035, 0.12, 0.48], [-0.135, 0.055, -0.42], glow);
+    addBox([0.035, 0.12, 0.48], [0.135, 0.055, -0.42], glow);
+    addBox([0.15, 0.25, 0.16], [0, -0.17, -0.2], glow, [-0.2, 0, 0]);
+    addTorus(0.09, 0.018, [0, 0.055, -0.81], glow);
+  } else if (modelStyle === 'nova-cannon') {
+    addBox([0.28, 0.25, 0.92], [0, -0.005, -0.45]);
+    addBox([0.2, 0.17, 0.5], [0, 0.045, -0.93], dark);
+    addBox([0.3, 0.08, 0.72], [0, 0.15, -0.55], dark);
+    addBox([0.22, 0.3, 0.24], [0, -0.2, -0.2], dark, [-0.18, 0, 0]);
+    addTorus(0.15, 0.026, [0, 0.045, -0.76], glow);
+    addTorus(0.14, 0.024, [0, 0.045, -0.93], glow);
+    addTorus(0.12, 0.021, [0, 0.045, -1.09], glow);
   } else {
     addBox([0.17, 0.21, 0.82], [0, 0, -0.36]);
     addBox([0.075, 0.075, 0.62], [0, 0.06, -0.82], dark);
@@ -48,14 +72,18 @@ function createWeaponModel(config) {
   }
 
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0.06, config.id === 'rail' ? -1.22 : config.id === 'scatter' ? -0.83 : -0.91);
+  muzzle.position.set(
+    0,
+    0.06,
+    config.viewModel?.muzzleZ ?? (config.id === 'rail' ? -1.22 : config.id === 'scatter' ? -0.83 : -0.91),
+  );
   group.add(muzzle);
   group.userData.muzzle = muzzle;
   group.userData.materials = [shell, dark, glow];
-  group.userData.basePosition = new THREE.Vector3(0.43, -0.36, -0.72);
-  group.userData.adsPosition = new THREE.Vector3(0, -0.245, -0.62);
+  group.userData.basePosition = new THREE.Vector3(...(config.viewModel?.basePosition ?? [0.43, -0.36, -0.72]));
+  group.userData.adsPosition = new THREE.Vector3(...(config.viewModel?.adsPosition ?? [0, -0.245, -0.62]));
   group.position.copy(group.userData.basePosition);
-  group.scale.setScalar(0.92);
+  group.scale.setScalar(config.viewModel?.scale ?? 0.92);
   group.traverse((child) => {
     child.frustumCulled = false;
     child.renderOrder = 10;
@@ -183,6 +211,8 @@ export class WeaponSystem {
     if (input.wasPressed?.('weapon1')) this.switchTo(0);
     if (input.wasPressed?.('weapon2')) this.switchTo(1);
     if (input.wasPressed?.('weapon3')) this.switchTo(2);
+    if (input.wasPressed?.('weapon4')) this.switchTo(3);
+    if (input.wasPressed?.('weapon5')) this.switchTo(4);
     const wheel = input.consumeWheel?.() ?? 0;
     if (wheel) this.switchTo((this.index + Math.sign(wheel) + this.weaponOrder.length) % this.weaponOrder.length);
 
@@ -246,7 +276,9 @@ export class WeaponSystem {
 
     if (!this.infiniteAmmo) ammo.magazine -= 1;
     this.cooldown = 1 / config.fireRate;
-    this.modelKick = Math.min(1.8, this.modelKick + (config.id === 'scatter' ? 1.4 : config.id === 'rail' ? 1.65 : 0.48));
+    const configuredKick = config.viewModel?.kick;
+    const modelKick = configuredKick ?? (config.id === 'scatter' ? 1.4 : config.id === 'rail' ? 1.65 : 0.48);
+    this.modelKick = Math.min(2.2, this.modelKick + modelKick);
     this.recoilKick = Math.min(3, this.recoilKick + 1);
     this.shotsFired += 1;
     this.camera.getWorldPosition(this.tempOrigin);
@@ -259,30 +291,39 @@ export class WeaponSystem {
     let anyHit = false;
     let headshot = false;
     let lastPoint = null;
+    let lastResult = null;
+    const traceThisShot = (config.tracerEvery ?? 1) <= 1 || this.shotsFired % config.tracerEvery === 0;
     for (let pellet = 0; pellet < pellets; pellet += 1) {
       const direction = this.spreadDirection(this.tempDirection, spread, pellet, pellets);
       const result = this.traceShot(this.tempOrigin, direction, config);
+      lastResult = result;
       if (result.enemyHit) {
         anyHit = true;
         headshot ||= result.zone === 'head';
       }
       lastPoint = result.point;
-      if (pellet < 5 || config.id !== 'scatter') {
-        this.effects.spawnTracer(this.tempMuzzle, result.point, config.color, config.id === 'rail' ? 1.8 : 1);
+      if (traceThisShot && (pellet < 5 || config.id !== 'scatter')) {
+        const tracerWidth = config.vfx?.tracerWidth ?? (config.id === 'rail' ? 1.8 : 1);
+        this.effects.spawnTracer(this.tempMuzzle, result.point, config.color, tracerWidth);
       }
     }
+    if (config.impactBlast && lastResult?.point) {
+      const blast = this.applyImpactBlast(lastResult.point, config);
+      anyHit ||= blast.hits > 0;
+    }
     if (anyHit) this.shotsHit += 1;
-    this.effects.spawnMuzzle(this.tempMuzzle, this.tempDirection, config.color, config.id === 'rail' ? 1.5 : 1);
+    const muzzleIntensity = config.vfx?.muzzleIntensity ?? (config.id === 'rail' ? 1.5 : 1);
+    this.effects.spawnMuzzle(this.tempMuzzle, this.tempDirection, config.color, muzzleIntensity);
     this.player?.addRecoil?.(
       (config.recoil?.pitch ?? 0.012) * (0.85 + Math.random() * 0.3),
       (config.recoil?.yaw ?? 0.004) * (Math.random() - 0.5) * 2,
     );
-    this.audio?.playWeapon?.(config.id, { position: this.tempOrigin, pitch: 0.96 + Math.random() * 0.08 });
+    this.audio?.playWeapon?.(config.sound ?? config.id, { position: this.tempOrigin, pitch: 0.96 + Math.random() * 0.08 });
     this.eventBus?.emit?.('combat:shot', {
       weapon: config.id,
       origin: this.tempOrigin.clone(),
       direction: this.tempDirection.clone(),
-      loudness: config.id === 'rail' ? 1.35 : 1,
+      loudness: config.loudness ?? (config.id === 'rail' ? 1.35 : 1),
       hit: anyHit,
       headshot,
       point: lastPoint?.clone?.(),
@@ -327,7 +368,12 @@ export class WeaponSystem {
       if (hit.zone === 'head' && this.player?.modifiers?.shieldOnHit > 0) {
         this.player.addArmor?.(this.player.modifiers.shieldOnHit);
       }
-      this.effects.spawnImpact(point, direction.clone().negate(), hit.zone === 'head' ? 0xffdc78 : config.color, hit.zone === 'head' ? 12 : 6);
+      this.effects.spawnImpact(
+        point,
+        direction.clone().negate(),
+        hit.zone === 'head' ? 0xffdc78 : config.color,
+        hit.zone === 'head' ? Math.max(12, config.vfx?.impactCount ?? 0) : (config.vfx?.impactCount ?? 6),
+      );
       this.audio?.playEffect?.(hit.zone === 'head' ? 'headshot' : 'hit', { position: point });
       this.eventBus?.emit?.('combat:hit', {
         damage,
@@ -339,13 +385,38 @@ export class WeaponSystem {
       if (config.id === 'rail' && this.modifiers.railRicochet > 0) {
         this.applyRailRicochet(hit.enemy, point, damage * 0.48, config);
       }
-      return { point, enemyHit: true, zone: hit.zone, killed: Boolean(outcome?.killed) };
+      return { point, enemyHit: true, enemy: hit.enemy, zone: hit.zone, killed: Boolean(outcome?.killed) };
     }
     if (worldHit) {
-      this.effects.spawnImpact(point, worldHit.normal ?? direction.clone().negate(), worldHit.material === 'energy' ? 0xd36bff : 0x7fe5f0, 4);
+      this.effects.spawnImpact(
+        point,
+        worldHit.normal ?? direction.clone().negate(),
+        worldHit.material === 'energy' ? 0xd36bff : config.color ?? 0x7fe5f0,
+        config.vfx?.impactCount ?? 4,
+      );
       this.audio?.playEffect?.('impact', { position: point, material: worldHit.material ?? 'metal' });
     }
     return { point, enemyHit: false, zone: null, killed: false };
+  }
+
+  applyImpactBlast(point, config) {
+    const blast = config.impactBlast;
+    if (!blast || !point) return { hits: 0, radius: 0, damage: 0 };
+    const lowHealthBonus = (this.player?.health ?? 100) / (this.player?.maxHealth ?? 100) < 0.35
+      ? 1 + this.modifiers.lowHealthDamage
+      : 1;
+    const damage = blast.damage * this.modifiers.damage * lowHealthBonus;
+    const radius = blast.radius;
+    const hits = this.enemySystem?.damageInRadius?.(point, radius, damage, {
+      source: 'player',
+      weapon: `${config.id}-blast`,
+      zone: 'body',
+      direction: this.tempDirection.clone(),
+    }) ?? 0;
+    this.effects.spawnExplosion?.(point, radius, blast.color ?? config.color);
+    this.audio?.playEffect?.('explosion', { position: point, pitch: 0.78, volume: 0.92 });
+    this.eventBus?.emit?.('combat:blast', { weapon: config.id, point: point.clone(), radius, damage, hits });
+    return { hits, radius, damage };
   }
 
   applyRailRicochet(sourceEnemy, sourcePoint, damage, config) {

@@ -22,14 +22,20 @@ function makeEnemyVisual(type, config) {
   root.name = `${config.name ?? type}`;
   const accentColor = config.color ?? ENEMY_COLORS[type] ?? 0xff684d;
   const armor = new THREE.MeshStandardMaterial({
-    color: type === 'warden' ? 0x241d35 : 0x171f24,
+    color: type === 'warden' ? 0x4b3862 : 0x34434b,
     emissive: accentColor,
-    emissiveIntensity: type === 'hunter' ? 0.22 : 0.12,
-    roughness: 0.42,
-    metalness: 0.78,
+    emissiveIntensity: type === 'hunter' ? 0.5 : 0.34,
+    roughness: 0.48,
+    metalness: 0.62,
   });
-  const glow = new THREE.MeshBasicMaterial({ color: accentColor });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x05080a, roughness: 0.7, metalness: 0.4 });
+  const glow = new THREE.MeshStandardMaterial({
+    color: accentColor,
+    emissive: accentColor,
+    emissiveIntensity: 1.65,
+    roughness: 0.22,
+    metalness: 0.25,
+  });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x182228, roughness: 0.72, metalness: 0.32 });
   const scale = type === 'warden' ? 1.35 : type === 'hunter' ? 0.88 : 1;
   const body = new THREE.Mesh(
     type === 'hunter' ? new THREE.ConeGeometry(0.52, 1.3, 7) : new THREE.BoxGeometry(0.82, 1.2, 0.48),
@@ -393,4 +399,462 @@ export class EnemySystem {
     if (!visible && enemy.lastSeenAge > 3) return;
     if (distance > 2.15) {
       this.setState(enemy, distance < 7 ? 'flank' : 'combat');
-      const target = this.player.positÛ]¹¶‰žËkºwµç@ÀìÍ¡½Ð€ð€ÌìÍ¡½Ð€¬ô€Ä¤ì(€€€€€½¹ÍÐ‘¥É•Ñ¥½¸€ôÑ…É•Ð¹±½¹” ¤¹ÍÕˆ¡½É¥¥¸¤¹¹½Éµ…±¥é” ¤ì(€€€€€‘¥É•Ñ¥½¸¹à€¬ô€¡Ñ¡¥Ì¹É…¹‘½´ ¤€´€À¸Ô¤€¨€ Ä€´…ÕÉ…ä¤€¨€À¸ÈÐì(€€€€€‘¥É•Ñ¥½¸¹ä€¬ô€¡Ñ¡¥Ì¹É…¹‘½´ ¤€´€À¸Ô¤€¨€ Ä€´…ÕÉ…ä¤€¨€À¸Äàì(€€€€€‘¥É•Ñ¥½¸¹è€¬ô€¡Ñ¡¥Ì¹É…¹‘½´ ¤€´€À¸Ô¤€¨€ Ä€´…ÕÉ…ä¤€¨€À¸ÈÐì(€€€€€Ñ¡¥Ì¹ÍÁ…Ý¹AÉ½©•Ñ¥±”¡½É¥¥¸°‘¥É•Ñ¥½¸¹¹½Éµ…±¥é” ¤°€Ää€¬Í¡½Ð€¨€Ä¸È°•¹•µä¹½¹™¥œ¹‘…µ…”€üü€à°€Áá™™„ÐÍ„°€À¸ÄØ¤ì(€€€ô(€€€•¹•µä¹…ÑÑ…­½½±‘½Ý¸€ôÑ¡¥Ì¹‘¥™™¥Õ±Ñä€ôôô€¡…Éœ€ü€Ä¸ÄÔ€è€Ä¸ØÔì(€ô((€•á•ÕÑ•=É‰Y½±±•ä¡•¹•µä¤ì(€€€½¹ÍÐ½É¥¥¸€ô•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€Ä¸ØÔ°€À¤¤ì(€€€½¹ÍÐ‰…Í”€ôÑ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€À¸ä°€À¤¤¹ÍÕˆ¡½É¥¥¸¤¹¹½Éµ…±¥é” ¤ì(€€€½¹ÍÐ½Õ¹Ð€ô•¹•µä¹•±¥Ñ•A¡…Í”€øô€Ì€ü€Ü€è€Ôì(€€€™½È€¡±•Ð¥¹‘•à€ô€Àì¥¹‘•à€ð½Õ¹Ðì¥¹‘•à€¬ô€Ä¤ì(€€€€€½¹ÍÐ…¹±”€ô€¡¥¹‘•à€´€¡½Õ¹Ð€´€Ä¤€¼€È¤€¨€À¸ÀÜÔì(€€€€€½¹ÍÐ‘¥É•Ñ¥½¸€ô‰…Í”¹±½¹” ¤¹…ÁÁ±åá¥Í¹±”¡U@°…¹±”¤ì(€€€€€Ñ¡¥Ì¹ÍÁ…Ý¹AÉ½©•Ñ¥±”¡½É¥¥¸°‘¥É•Ñ¥½¸°•¹•µä¹•±¥Ñ•A¡…Í”€øô€Ì€ü€ÄÌ€è€ÄÀ¸Ô°•¹•µä¹½¹™¥œ¹‘…µ…”€üü€ÄÌ°€ÁáˆÔÙ™˜°€À¸ÈÔ¤ì(€€€ô(€€€•¹•µä¹…ÑÑ…­½½±‘½Ý¸€ô•¹•µä¹•±¥Ñ•A¡…Í”€øô€Ì€ü€Ä¸ÀÔ€è€Ä¸ÔÔì(€ô((€•á•ÕÑ•!…é…É¡•¹•µä¤ì(€€€½¹ÍÐÑ…É•Ð€ôÑ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡Ñ¡¥Ì¹Á±…å•È¹Ù•±½¥Ñäü¹±½¹”ü¸ ¤¹µÕ±Ñ¥Á±åM…±…È À¸ÐÔ¤€üü¹•ÜQ!I¹Y•Ñ½ÈÌ ¤¤ì(€€€½¹ÍÐ¡…é…É€ôÑ¡¥Ì¹¡…é…É‘Ì¹¹•áÐ ¤ì(€€€¡…é…É¹µ•Í ¹Á½Í¥Ñ¥½¸¹Í•Ð¡Ñ…É•Ð¹à°€À¸ÀÔÔ°Ñ…É•Ð¹è¤ì(€€€¡…é…É¹É…‘¥ÕÌ€ô•¹•µä¹•±¥Ñ•A¡…Í”€øô€Ì€ü€Ì¸à€è€Ì¸Äì(€€€¡…é…É¹µ•Í ¹Í…±”¹Í•ÑM…±…È¡¡…é…É¹É…‘¥ÕÌ¤ì(€€€¡…é…É¹µ•Í ¹µ…Ñ•É¥…°¹½±½È¹Í•Ð ÁáˆÔÙ™˜¤ì(€€€¡…é…É¹Ñ•±•É…Á €ô€Ä¸ÈÔì(€€€¡…é…É¹‘ÕÉ…Ñ¥½¸€ô€Ð¸Èì(€€€¡…é…É¹Ñ¥¬€ô€Àì(€€€¡…é…É¹‘…µ…”€ô•¹•µä¹½¹™¥œ¹¡…é…É‘…µ…”€üü€ÄÌì(€€€•¹•µä¹…ÑÑ…­½½±‘½Ý¸€ô€È¸Ðì(€ô((€ÍÁ…Ý¹AÉ½©•Ñ¥±”¡½É¥¥¸°‘¥É•Ñ¥½¸°ÍÁ••°‘…µ…”°½±½È°É…‘¥ÕÌ¤ì(€€€½¹ÍÐÁÉ½©•Ñ¥±”€ôÑ¡¥Ì¹ÁÉ½©•Ñ¥±•Ì¹¹•áÐ ¤ì(€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹Á½Í¥Ñ¥½¸¹½Áä¡½É¥¥¸¤ì(€€€ÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ¹½Áä¡½É¥¥¸¤ì(€€€ÁÉ½©•Ñ¥±”¹Ù•±½¥Ñä¹½Áä¡‘¥É•Ñ¥½¸¤¹µÕ±Ñ¥Á±åM…±…È¡ÍÁ••¤ì(€€€ÁÉ½©•Ñ¥±”¹‘…µ…”€ô‘…µ…”ì(€€€ÁÉ½©•Ñ¥±”¹É…‘¥ÕÌ€ôÉ…‘¥ÕÌì(€€€ÁÉ½©•Ñ¥±”¹±¥™”€ô€Ðì(€€€ÁÉ½©•Ñ¥±”¹½±½È€ô½±½Èì(€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹µ…Ñ•É¥…°¹½±½È¹Í•Ð¡½±½È¤ì(€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹Í…±”¹Í•ÑM…±…È¡É…‘¥ÕÌ€¼€À¸ÄÈ¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼ü¹Á±…å™™•Ðü¸ •¹•µåM¡½Ðœ°ìÁ½Í¥Ñ¥½¸è½É¥¥¸°Á¥Ñ è€À¸ä€¬Ñ¡¥Ì¹É…¹‘½´ ¤€¨€À¸Èô¤ì(€ô((€ÕÁ‘…Ñ•AÉ½©•Ñ¥±•Ì¡‘Ð¤ì(€€€™½È€¡½¹ÍÐÁÉ½©•Ñ¥±”½˜Ñ¡¥Ì¹ÁÉ½©•Ñ¥±•Ì¹¥Ñ•µÌ¤ì(€€€€€¥˜€ …ÁÉ½©•Ñ¥±”¹…Ñ¥Ù”¤½¹Ñ¥¹Õ”ì(€€€€€ÁÉ½©•Ñ¥±”¹±¥™”€´ô‘Ðì(€€€€€ÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ¹½Áä¡ÁÉ½©•Ñ¥±”¹µ•Í ¹Á½Í¥Ñ¥½¸¤ì(€€€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹Á½Í¥Ñ¥½¸¹…‘‘M…±•‘Y•Ñ½È¡ÁÉ½©•Ñ¥±”¹Ù•±½¥Ñä°‘Ð¤ì(€€€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹É½Ñ…Ñ¥½¸¹à€¬ô‘Ð€¨€Üì(€€€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹É½Ñ…Ñ¥½¸¹ä€¬ô‘Ð€¨€äì(€€€€€½¹ÍÐ‘•±Ñ„€ôÑ¡¥Ì¹Ñ•µÁ¥É•Ñ¥½¸¹ÍÕ‰Y•Ñ½ÉÌ¡ÁÉ½©•Ñ¥±”¹µ•Í ¹Á½Í¥Ñ¥½¸°ÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ¤ì(€€€€€½¹ÍÐ‘¥ÍÑ…¹”€ô‘•±Ñ„¹±•¹Ñ  ¤ì(€€€€€½¹ÍÐ‘¥É•Ñ¥½¸€ô‘¥ÍÑ…¹”€ø€À€ü‘•±Ñ„¹µÕ±Ñ¥Á±åM…±…È Ä€¼‘¥ÍÑ…¹”¤€è‘•±Ñ„ì(€€€€€½¹ÍÐÝ½É±‘!¥Ð€ô‘¥ÍÑ…¹”€ø€À€üÑ¡¥Ì¹…É•¹„ü¹É…å…ÍÑ]½É±ü¸¡ÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ°‘¥É•Ñ¥½¸°‘¥ÍÑ…¹”€¬ÁÉ½©•Ñ¥±”¹É…‘¥ÕÌ¤€è¹Õ±°ì(€€€€€½¹ÍÐÁ±…å•ÉA½¥¹Ð€ôÑ¡¥Ì¹Ñ•µÁA±…å•È¹½Áä¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤ì(€€€€€Á±…å•ÉA½¥¹Ð¹ä€¬ô€À¸äì(€€€€€½¹ÍÐÁ±…å•É±½¹M•µ•¹Ð€ô‘¥ÍÑ…¹”€ø€À(€€€€€€€€üQ!I¹5…Ñ¡UÑ¥±Ì¹±…µÀ¡Ñ¡¥Ì¹Ñ•µÁAÉ½©•Ñ¥±•Q½A±…å•È¹ÍÕ‰Y•Ñ½ÉÌ¡Á±…å•ÉA½¥¹Ð°ÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ¤¹‘½Ð¡‘¥É•Ñ¥½¸¤°€À°‘¥ÍÑ…¹”¤(€€€€€€€€è€Àì(€€€€€½¹ÍÐ±½Í•ÍÑQ½A±…å•È€ôÑ¡¥Ì¹Ñ•µÁAÉ½©•Ñ¥±•±½Í•ÍÐ¹½Áä¡‘¥É•Ñ¥½¸¤¹µÕ±Ñ¥Á±åM…±…È¡Á±…å•É±½¹M•µ•¹Ð¤¹…‘¡ÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ¤ì(€€€€€½¹ÍÐÁ±…å•É!¥Ð€ô±½Í•ÍÑQ½A±…å•È¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Á±…å•ÉA½¥¹Ð¤€ðô€¡ÁÉ½©•Ñ¥±”¹É…‘¥ÕÌ€¬€À¸ÔÔ¤€¨¨€Èì(€€€€€½¹ÍÐÁ±…å•É!¥Ñ¥ÍÑ…¹”€ôÁ±…å•É!¥Ð€ü5…Ñ ¹µ…à À°Á±…å•É±½¹M•µ•¹Ð€´ÁÉ½©•Ñ¥±”¹É…‘¥ÕÌ¤€è%¹™¥¹¥Ñäì(€€€€€½¹ÍÐÝ½É±‘!¥Ñ¥ÍÑ…¹”€ôÝ½É±‘!¥Ðü¹‘¥ÍÑ…¹”€üü%¹™¥¹¥Ñäì((€€€€€¥˜€¡Ý½É±‘!¥Ñ¥ÍÑ…¹”€ðôÁ±…å•É!¥Ñ¥ÍÑ…¹”€˜˜Ý½É±‘!¥Ñ¥ÍÑ…¹”€ðô‘¥ÍÑ…¹”€¬ÁÉ½©•Ñ¥±”¹É…‘¥ÕÌ¤ì(€€€€€€€Ñ¡¥Ì¹•™™•ÑÌ¹ÍÁ…Ý¹%µÁ…Ð¡Ý½É±‘!¥Ð¹Á½¥¹Ð€üüÁÉ½©•Ñ¥±”¹µ•Í ¹Á½Í¥Ñ¥½¸°Ý½É±‘!¥Ð¹¹½Éµ…°€üüU@°ÁÉ½©•Ñ¥±”¹½±½È°€Ø¤ì(€€€€€€€Ñ¡¥Ì¹‘•…Ñ¥Ù…Ñ•AÉ½©•Ñ¥±”¡ÁÉ½©•Ñ¥±”¤ì(€€€€€€€½¹Ñ¥¹Õ”ì(€€€€€ô(€€€€€¥˜€¡Á±…å•É!¥Ð¤ì(€€€€€€€Ñ¡¥Ì¹Á±…å•È¹‘…µ…”ü¸¡ÁÉ½©•Ñ¥±”¹‘…µ…”°ìÍ½ÕÉ”è€•¹•µåAÉ½©•Ñ¥±”œ°Á½Í¥Ñ¥½¸èÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ°…ÕÍ”è€ŸBcBóBÿFBïF3FƒBÿFBûFBãBËB÷BãBëBÀœô¤ì(€€€€€€€Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹•µ¥Ðü¸ ½µ‰…ÐéÁ±…å•Èµ¡¥Ðœ°ì‘…µ…”èÁÉ½©•Ñ¥±”¹‘…µ…”°Í½ÕÉ”èÁÉ½©•Ñ¥±”¹ÁÉ•Ù¥½ÕÌ¹±½¹” ¤°…ÕÍ”è€ŸBcBóBÿFBïF3FƒBÿFBûFBãBËB÷BãBëBÀœô¤ì(€€€€€€€Ñ¡¥Ì¹•™™•ÑÌ¹ÍÁ…Ý¹%µÁ…Ð¡±½Í•ÍÑQ½A±…å•È°ÁÉ½©•Ñ¥±”¹Ù•±½¥Ñä¹±½¹” ¤¹¹•…Ñ” ¤¹¹½Éµ…±¥é” ¤°€Áá™˜ØÄÝŒ°€ä¤ì(€€€€€€€Ñ¡¥Ì¹‘•…Ñ¥Ù…Ñ•AÉ½©•Ñ¥±”¡ÁÉ½©•Ñ¥±”¤ì(€€€€€€€½¹Ñ¥¹Õ”ì(€€€€€ô(€€€€€¥˜€¡ÁÉ½©•Ñ¥±”¹±¥™”€ðô€À¤Ñ¡¥Ì¹‘•…Ñ¥Ù…Ñ•AÉ½©•Ñ¥±”¡ÁÉ½©•Ñ¥±”¤ì(€€€ô(€ô((€‘•…Ñ¥Ù…Ñ•AÉ½©•Ñ¥±”¡ÁÉ½©•Ñ¥±”¤ì(€€€ÁÉ½©•Ñ¥±”¹…Ñ¥Ù”€ô™…±Í”ì(€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹Ù¥Í¥‰±”€ô™…±Í”ì(€ô((€ÕÁ‘…Ñ•!…é…É‘Ì¡‘Ð¤ì(€€€™½È€¡½¹ÍÐ¡…é…É½˜Ñ¡¥Ì¹¡…é…É‘Ì¹¥Ñ•µÌ¤ì(€€€€€¥˜€ …¡…é…É¹…Ñ¥Ù”¤½¹Ñ¥¹Õ”ì(€€€€€¡…é…É¹µ•Í ¹É½Ñ…Ñ¥½¸¹è€¬ô‘Ð€¨€À¸ÌÔì(€€€€€¥˜€¡¡…é…É¹Ñ•±•É…Á €ø€À¤ì(€€€€€€€¡…é…É¹Ñ•±•É…Á €´ô‘Ðì(€€€€€€€¡…é…É¹µ•Í ¹µ…Ñ•É¥…°¹½Á…¥Ñä€ô€À¸Äà€¬5…Ñ ¹Í¥¸¡¡…é…É¹Ñ•±•É…Á €¨€Äà¤€¨€À¸ÄÈì(€€€€€€€¥˜€¡¡…é…É¹Ñ•±•É…Á €ðô€À¤ì(€€€€€€€€€¡…é…É¹µ•Í ¹µ…Ñ•É¥…°¹½±½È¹Í•Ð Áá™˜ÐÐÙ˜¤ì(€€€€€€€€€¡…é…É¹µ•Í ¹µ…Ñ•É¥…°¹½Á…¥Ñä€ô€À¸ÔÔì(€€€€€€€€€Ñ¡¥Ì¹•™™•ÑÌ¹ÍÁ…Ý¹áÁ±½Í¥½¸¡¡…é…É¹µ•Í ¹Á½Í¥Ñ¥½¸°¡…é…É¹É…‘¥ÕÌ°€ÁáˆÔÙ™˜¤ì(€€€€€€€ô(€€€€€€€½¹Ñ¥¹Õ”ì(€€€€€ô(€€€€€¡…é…É¹‘ÕÉ…Ñ¥½¸€´ô‘Ðì(€€€€€¡…é…É¹Ñ¥¬€´ô‘Ðì(€€€€€¡…é…É¹µ•Í ¹µ…Ñ•É¥…°¹½Á…¥Ñä€ô€À¸ÌÈ€¬5…Ñ ¹Í¥¸¡¡…é…É¹‘ÕÉ…Ñ¥½¸€¨€ä¤€¨€À¸ÄÄì(€€€€€½¹ÍÐ‘à€ôÑ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¹à€´¡…é…É¹µ•Í ¹Á½Í¥Ñ¥½¸¹àì(€€€€€½¹ÍÐ‘è€ôÑ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¹è€´¡…é…É¹µ•Í ¹Á½Í¥Ñ¥½¸¹èì(€€€€€¥˜€¡‘à€¨‘à€¬‘è€¨‘è€ðô¡…é…É¹É…‘¥ÕÌ€¨¡…é…É¹É…‘¥ÕÌ€˜˜¡…é…É¹Ñ¥¬€ðô€À¤ì(€€€€€€€¡…é…É¹Ñ¥¬€ô€À¸ÜÈì(€€€€€€€Ñ¡¥Ì¹Á±…å•È¹‘…µ…”ü¸¡¡…é…É¹‘…µ…”°ìÍ½ÕÉ”è€Ý…É‘•¹!…é…Éœ°Á½Í¥Ñ¥½¸è¡…é…É¹µ•Í ¹Á½Í¥Ñ¥½¸°…ÕÍ”è€ŸB“BÃBßBûBËF/BäƒFBÃBßBïBûBðœô¤ì(€€€€€€€Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹•µ¥Ðü¸ ½µ‰…ÐéÁ±…å•Èµ¡¥Ðœ°ì‘…µ…”è¡…é…É¹‘…µ…”°Í½ÕÉ”è¡…é…É¹µ•Í ¹Á½Í¥Ñ¥½¸¹±½¹” ¤°…ÕÍ”è€ŸB“BÃBßBûBËF/BäƒFBÃBßBïBûBðœô¤ì(€€€€€ô(€€€€€¥˜€¡¡…é…É¹‘ÕÉ…Ñ¥½¸€ðô€À¤ì(€€€€€€€¡…é…É¹…Ñ¥Ù”€ô™…±Í”ì(€€€€€€€¡…é…É¹µ•Í ¹Ù¥Í¥‰±”€ô™…±Í”ì(€€€€€ô(€€€ô(€ô((€ÕÁ‘…Ñ•A¥­ÕÁÌ¡‘Ð¤ì(€€€™½È€¡½¹ÍÐÁ¥­ÕÀ½˜Ñ¡¥Ì¹Á¥­ÕÁÌ¹¥Ñ•µÌ¤ì(€€€€€¥˜€ …Á¥­ÕÀ¹…Ñ¥Ù”¤½¹Ñ¥¹Õ”ì(€€€€€Á¥­ÕÀ¹…”€¬ô‘Ðì(€€€€€Á¥­ÕÀ¹µ•Í ¹É½Ñ…Ñ¥½¸¹ä€¬ô‘Ð€¨€Ä¸àì(€€€€€Á¥­ÕÀ¹µ•Í ¹Á½Í¥Ñ¥½¸¹ä€ôÁ¥­ÕÀ¹µ•Í ¹ÕÍ•É…Ñ„¹‰…Í•d€¬5…Ñ ¹Í¥¸¡Á¥­ÕÀ¹…”€¨€Ì¤€¨€À¸ÄÈì(€€€€€¥˜€¡Á¥­ÕÀ¹µ•Í ¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤€ð€Ä¸ÜÔ¤ì(€€€€€€€Á¥­ÕÀ¹…Ñ¥Ù”€ô™…±Í”ì(€€€€€€€Á¥­ÕÀ¹µ•Í ¹Ù¥Í¥‰±”€ô™…±Í”ì(€€€€€€€Ñ¡¥Ì¹…Õ‘¥¼ü¹Á±…åU$ü¸ Á¥­ÕÀœ°ìÁ¥Ñ èÁ¥­ÕÀ¹ÑåÁ”€ôôô€¡•…±Ñ œ€ü€Ä¸ÄÔ€è€À¸äÈô¤ì(€€€€€€€Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹•µ¥Ðü¸ Á¥­ÕÀé½±±•Ñ•œ°ìÑåÁ”èÁ¥­ÕÀ¹ÑåÁ”°Ù…±Õ”èÁ¥­ÕÀ¹Ù…±Õ”ô¤ì(€€€€€ô•±Í”¥˜€¡Á¥­ÕÀ¹…”€ø€ÈÀ¤ì(€€€€€€€Á¥­ÕÀ¹…Ñ¥Ù”€ô™…±Í”ì(€€€€€€€Á¥­ÕÀ¹µ•Í ¹Ù¥Í¥‰±”€ô™…±Í”ì(€€€€€ô(€€€ô(€ô((€ÍÁ…Ý¹A¥­ÕÀ¡Á½Í¥Ñ¥½¸°Õ…É…¹Ñ••€ô™…±Í”¤ì(€€€¥˜€ …Õ…É…¹Ñ••€˜˜Ñ¡¥Ì¹É…¹‘½´ ¤€ø€À¸ÌÐ¤É•ÑÕÉ¸ì(€€€½¹ÍÐÁ¥­ÕÀ€ôÑ¡¥Ì¹Á¥­ÕÁÌ¹¹•áÐ ¤ì(€€€½¹ÍÐ¹••‘Í!•…±Ñ €ô€¡Ñ¡¥Ì¹Á±…å•È¹¡•…±Ñ €üü€ÄÀÀ¤€ð€¡Ñ¡¥Ì¹Á±…å•È¹µ…á!•…±Ñ €üü€ÄÀÀ¤€¨€À¸ÔÔì(€€€Á¥­ÕÀ¹ÑåÁ”€ô¹••‘Í!•…±Ñ €˜˜Ñ¡¥Ì¹É…¹‘½´ ¤€ð€À¸Ôà€ü€¡•…±Ñ œ€èÑ¡¥Ì¹É…¹‘½´ ¤€ð€À¸ÜÈ€ü€…µµ¼œ€è€…Éµ½Èœì(€€€Á¥­ÕÀ¹Ù…±Õ”€ôÁ¥­ÕÀ¹ÑåÁ”€ôôô€¡•…±Ñ œ€ü€ÈÐ€èÁ¥­ÕÀ¹ÑåÁ”€ôôô€…Éµ½Èœ€ü€Äà€è€Èàì(€€€Á¥­ÕÀ¹µ•Í ¹µ…Ñ•É¥…°¹½±½È¹Í•Ð¡Á¥­ÕÀ¹ÑåÁ”€ôôô€¡•…±Ñ œ€ü€ÁàÔÕ˜Èå„€èÁ¥­ÕÀ¹ÑåÁ”€ôôô€…Éµ½Èœ€ü€ÁàÕ•”Ý™˜€è€Áá™™ÐÕˆ¤ì(€€€Á¥­ÕÀ¹µ•Í ¹µ…Ñ•É¥…°¹•µ¥ÍÍ¥Ù”¹Í•Ð¡Á¥­ÕÀ¹µ•Í ¹µ…Ñ•É¥…°¹½±½È¤ì(€€€Á¥­ÕÀ¹µ•Í ¹Á½Í¥Ñ¥½¸¹½Áä¡Á½Í¥Ñ¥½¸¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€À¸ÔÔ°€À¤¤ì(€€€Á¥­ÕÀ¹µ•Í ¹ÕÍ•É…Ñ„¹‰…Í•d€ôÁ¥­ÕÀ¹µ•Í ¹Á½Í¥Ñ¥½¸¹äì(€ô((€½¹9½¥Í”¡ì½É¥¥¸°±½Õ‘¹•ÍÌ€ô€Äô¤ì(€€€¥˜€ …½É¥¥¸¤É•ÑÕÉ¸ì(€€€½¹ÍÐÉ…‘¥ÕÍMÄ€ô€ ÈÐ€¨±½Õ‘¹•ÍÌ¤€¨¨€Èì(€€€™½È€¡½¹ÍÐ•¹•µä½˜Ñ¡¥Ì¹•¹•µ¥•Ì¤ì(€€€€€¥˜€¡•¹•µä¹‘•…ñð•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡½É¥¥¸¤€øÉ…‘¥ÕÍMÄ¤½¹Ñ¥¹Õ”ì(€€€€€•¹•µä¹±…ÍÑ-¹½Ý¸¹½Áä¡½É¥¥¸¤ì(€€€€€•¹•µä¹±…ÍÑ!•…É‘”€ô€Àì(€€€€€¥˜€¡•¹•µä¹ÍÑ…Ñ”€ôôô€Á…ÑÉ½°œñð•¹•µä¹ÍÑ…Ñ”€ôôô€Í•…É œ¤Ñ¡¥Ì¹Í•ÑMÑ…Ñ”¡•¹•µä°€ÍÕÍÁ¥¥½ÕÌœ¤ì(€€€ô(€ô((€…ÍÍ¥¹ÑÑ…­Q½­•¹Ì ¤ì(€€€½¹ÍÐ…¹‘¥‘…Ñ•Ì€ôÑ¡¥Ì¹•¹•µ¥•Ì(€€€€€€¹™¥±Ñ•È ¡•¹•µä¤€ôø€…•¹•µä¹‘•…€˜˜•¹•µä¹ÑåÁ”€„ôô€Ý…É‘•¸œ€˜˜l½µ‰…Ðœ°€™±…¹¬œ°€Ñ…­•½Ù•Èt¹¥¹±Õ‘•Ì¡•¹•µä¹ÍÑ…Ñ”¤¤(€€€€€€¹Í½ÉÐ ¡„°ˆ¤€ôø„¹É½½Ð¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤€´ˆ¹É½½Ð¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤¤ì(€€€…¹‘¥‘…Ñ•Ì¹™½É…  ¡•¹•µä°¥¹‘•à¤€ôøì•¹•µä¹¡…ÍÑÑ…­Q½­•¸€ô¥¹‘•à€ðÑ¡¥Ì¹µ…áÑÑ…­•ÉÌìô¤ì(€€€™½È€¡½¹ÍÐ•¹•µä½˜Ñ¡¥Ì¹•¹•µ¥•Ì¤¥˜€¡•¹•µä¹ÑåÁ”€ôôô€Ý…É‘•¸œ€˜˜€…•¹•µä¹‘•…¤•¹•µä¹¡…ÍÑÑ…­Q½­•¸€ôÑÉÕ”ì(€ô((€Í•ÑMÑ…Ñ”¡•¹•µä°ÍÑ…Ñ”¤ì(€€€¥˜€¡•¹•µä¹ÍÑ…Ñ”€ôôôÍÑ…Ñ”¤É•ÑÕÉ¸ì(€€€½¹ÍÐÁÉ•Ù¥½ÕÌ€ô•¹•µä¹ÍÑ…Ñ”ì(€€€•¹•µä¹ÍÑ…Ñ”€ôÍÑ…Ñ”ì(€€€•¹•µä¹ÍÑ…Ñ•Q¥µ”€ô€Àì(€€€Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹•µ¥Ðü¸ •¹•µäéÍÑ…Ñ”œ°ì¥è•¹•µä¹¥°ÑåÁ”è•¹•µä¹ÑåÁ”°ÁÉ•Ù¥½ÕÌ°ÍÑ…Ñ”ô¤ì(€ô((€É…å…ÍÐ¡½É¥¥¸°‘¥É•Ñ¥½¸°µ…á¥ÍÑ…¹”€ô%¹™¥¹¥Ñä¤ì(€€€€¼¼I…å…ÍÑ•ÈÕÍ•Ìµ…ÑÉ¥á]½É±É…Ñ¡•ÈÑ¡…¸±½…°ÑÉ…¹Í™½ÉµÌ¸¹•µ¥•Ì…É”µ½Ù•(€€€€¼¼‘ÕÉ¥¹œ™¥á•ÕÁ‘…Ñ•Ì°Í¼µÕ±Ñ¥Á±”Í¥µÕ±…Ñ¥½¸ÍÑ•ÁÌ…¸¡…ÁÁ•¸‰•™½É”Ñ¡”(€€€€¼¼É•¹‘•É•È•ÑÌ„¡…¹”Ñ¼É•™É•Í Ñ¡½Í”µ…ÑÉ¥•Ì¸(€€€Ñ¡¥Ì¹É½ÕÀ¹ÕÁ‘…Ñ•5…ÑÉ¥á]½É±¡ÑÉÕ”¤ì(€€€Ñ¡¥Ì¹É…å…ÍÑ•È¹Í•Ð¡½É¥¥¸°‘¥É•Ñ¥½¸¤ì(€€€Ñ¡¥Ì¹É…å…ÍÑ•È¹™…È€ôµ…á¥ÍÑ…¹”ì(€€€½¹ÍÐ¥¹Ñ•ÉÍ•Ñ¥½¹Ì€ôÑ¡¥Ì¹É…å…ÍÑ•È¹¥¹Ñ•ÉÍ•Ñ=‰©•ÑÌ¡Ñ¡¥Ì¹¡¥Ñ5•Í¡•Ì°™…±Í”¤ì(€€€™½È€¡½¹ÍÐ¥¹Ñ•ÉÍ•Ñ¥½¸½˜¥¹Ñ•ÉÍ•Ñ¥½¹Ì¤ì(€€€€€½¹ÍÐ•¹•µä€ôÑ¡¥Ì¹‰å%¹•Ð¡¥¹Ñ•ÉÍ•Ñ¥½¸¹½‰©•Ð¹ÕÍ•É…Ñ„¹•¹•µå%¤ì(€€€€€¥˜€ …•¹•µäñð•¹•µä¹‘•…ñð€…•¹•µä¹É½½Ð¹Ù¥Í¥‰±”¤½¹Ñ¥¹Õ”ì(€€€€€É•ÑÕÉ¸ì(€€€€€€€•¹•µä°(€€€€€€€Á½¥¹Ðè¥¹Ñ•ÉÍ•Ñ¥½¸¹Á½¥¹Ð°(€€€€€€€‘¥ÍÑ…¹”è¥¹Ñ•ÉÍ•Ñ¥½¸¹‘¥ÍÑ…¹”°(€€€€€€€é½¹”è¥¹Ñ•ÉÍ•Ñ¥½¸¹½‰©•Ð¹ÕÍ•É…Ñ„¹¡¥Ñi½¹”€üü€‰½‘äœ°(€€€€€€€¹½Éµ…°è¥¹Ñ•ÉÍ•Ñ¥½¸¹™…”ü¹¹½Éµ…°ü¹±½¹”ü¸ ¤°(€€€€€ôì(€€€ô(€€€É•ÑÕÉ¸¹Õ±°ì(€ô((€‘…µ…”¡•¹•µå=É%°…µ½Õ¹Ð°½¹Ñ•áÐ€ôíô¤ì(€€€½¹ÍÐ•¹•µä€ôÑåÁ•½˜•¹•µå=É%€ôôô€ÍÑÉ¥¹œœ€üÑ¡¥Ì¹‰å%¹•Ð¡•¹•µå=É%¤€è•¹•µå=É%ì(€€€¥˜€ …•¹•µäñð•¹•µä¹‘•…ñð€…9Õµ‰•È¹¥Í¥¹¥Ñ”¡…µ½Õ¹Ð¤ñð…µ½Õ¹Ð€ðô€À¤É•ÑÕÉ¸ì…ÁÁ±¥•è€À°­¥±±•è™…±Í”ôì(€€€±•ÐÉ•µ…¥¹¥¹œ€ô…µ½Õ¹Ðì(€€€¥˜€¡•¹•µä¹Í¡¥•±€ø€À¤ì(€€€€€½¹ÍÐ…‰Í½É‰•€ô5…Ñ ¹µ¥¸¡•¹•µä¹Í¡¥•±°É•µ…¥¹¥¹œ¤ì(€€€€€•¹•µä¹Í¡¥•±€´ô…‰Í½É‰•ì(€€€€€É•µ…¥¹¥¹œ€´ô…‰Í½É‰•ì(€€€€€¥˜€¡•¹•µä¹É½½Ð¹ÕÍ•É…Ñ„¹Í¡¥•±¤ì(€€€€€€€•¹•µä¹É½½Ð¹ÕÍ•É…Ñ„¹Í¡¥•±¹µ…Ñ•É¥…°¹½Á…¥Ñä€ô€À¸ÄÔ€¬€¡•¹•µä¹Í¡¥•±€¼•¹•µä¹µ…áM¡¥•±¤€¨€À¸ÈÈì(€€€€€€€•¹•µä¹É½½Ð¹ÕÍ•É…Ñ„¹Í¡¥•±¹Ù¥Í¥‰±”€ô•¹•µä¹Í¡¥•±€ø€Àì(€€€€€ô(€€€€€Ñ¡¥Ì¹•™™•ÑÌ¹ÍÁ…Ý¹%µÁ…Ð¡½¹Ñ•áÐ¹Á½¥¹Ð€üü•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸°½¹Ñ•áÐ¹‘¥É•Ñ¥½¸ü¹±½¹”ü¸ ¤¹¹•…Ñ”ü¸ ¤€üüU@°€ÁáˆÔÙ™˜°€Ü¤ì(€€€ô(€€€¥˜€¡É•µ…¥¹¥¹œ€ø€À¤•¹•µä¹¡•…±Ñ €´ôÉ•µ…¥¹¥¹œì(€€€Ñ¡¥Ì¹Í•ÑMÑ…Ñ”¡•¹•µä°€½µ‰…Ðœ¤ì(€€€•¹•µä¹±…ÍÑ-¹½Ý¸¹½Áä¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤ì(€€€½¹ÍÐ­¥±±•€ô•¹•µä¹¡•…±Ñ €ðô€Àì(€€€¥˜€¡­¥±±•¤Ñ¡¥Ì¹­¥±°¡•¹•µä°½¹Ñ•áÐ¤ì(€€€•±Í”Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹•µ¥Ðü¸ •¹•µäé‘…µ…•œ°ì¥è•¹•µä¹¥°ÑåÁ”è•¹•µä¹ÑåÁ”°…µ½Õ¹Ð°¡•…±Ñ è•¹•µä¹¡•…±Ñ °µ…á!•…±Ñ è•¹•µä¹µ…á!•…±Ñ °Í¡¥•±è•¹•µä¹Í¡¥•±ô¤ì(€€€É•ÑÕÉ¸ì…ÁÁ±¥•è…µ½Õ¹Ð°­¥±±•°¡•…±Ñ è5…Ñ ¹µ…à À°•¹•µä¹¡•…±Ñ ¤°Í¡¥•±è•¹•µä¹Í¡¥•±ôì(€ô((€­¥±°¡•¹•µä°½¹Ñ•áÐ€ôíô¤ì(€€€•¹•µä¹‘•…€ôÑÉÕ”ì(€€€•¹•µä¹ÍÑ…Ñ”€ô€‘•…œì(€€€•¹•µä¹¡•…±Ñ €ô€Àì(€€€•¹•µä¹Á•¹‘¥¹ÑÑ…¬€ô¹Õ±°ì(€€€•¹•µä¹¡…ÍÑÑ…­Q½­•¸€ô™…±Í”ì(€€€™½È€¡½¹ÍÐµ•Í ½˜•¹•µä¹¡¥Ñ5•Í¡•Ì¤ì(€€€€€½¹ÍÐ¥¹‘•à€ôÑ¡¥Ì¹¡¥Ñ5•Í¡•Ì¹¥¹‘•á=˜¡µ•Í ¤ì(€€€€€¥˜€¡¥¹‘•à€øô€À¤Ñ¡¥Ì¹¡¥Ñ5•Í¡•Ì¹ÍÁ±¥”¡¥¹‘•à°€Ä¤ì(€€€ô(€€€½¹ÍÐÁ½Í¥Ñ¥½¸€ô•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€Ä°€À¤¤ì(€€€Ñ¡¥Ì¹•™™•ÑÌ¹ÍÁ…Ý¹¹•µå•…Ñ ¡Á½Í¥Ñ¥½¸°•¹•µä¹½¹™¥œ¹½±½È€üü95e}=1=IMm•¹•µä¹ÑåÁ•t°•¹•µä¹ÑåÁ”€ôôô€Ý…É‘•¸œ€ü€Ä¸à€è€Ä¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼ü¹Á±…å™™•Ðü¸ •¹•µå•…Ñ œ°ìÁ½Í¥Ñ¥½¸°Á¥Ñ è•¹•µä¹ÑåÁ”€ôôô€Ý…É‘•¸œ€ü€À¸Ðà€è€À¸àÔ€¬Ñ¡¥Ì¹É…¹‘½´ ¤€¨€À¸Ìô¤ì(€€€Ñ¡¥Ì¹ÍÁ…Ý¹A¥­ÕÀ¡•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸°•¹•µä¹ÑåÁ”€ôôô€Ý…É‘•¸œ¤ì(€€€Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹•µ¥Ðü¸ •¹•µäé­¥±±•œ°ì(€€€€€¥è•¹•µä¹¥°(€€€€€ÑåÁ”è•¹•µä¹ÑåÁ”°(€€€€€•±¥Ñ”è•¹•µä¹ÑåÁ”€ôôô€Ý…É‘•¸œ°(€€€€€¡•…‘Í¡½Ðè½¹Ñ•áÐ¹é½¹”€ôôô€¡•…œ°(€€€€€Ý•…Á½¸è½¹Ñ•áÐ¹Ý•…Á½¸°(€€€€€Á½Í¥Ñ¥½¸è•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹±½¹” ¤°(€€€€€Í½É”è•¹•µä¹½¹™¥œ¹Í½É”€üü€¡•¹•µä¹ÑåÁ”€ôôô€Ý…É‘•¸œ€ü€ÈÔÀÀ€è•¹•µä¹ÑåÁ”€ôôô€¡Õ¹Ñ•Èœ€ü€ÈÔÀ€è€ÄàÀ¤°(€€€ô¤ì(€ô((€‘…µ…•%¹I…‘¥ÕÌ¡Á½Í¥Ñ¥½¸°É…‘¥ÕÌ°‘…µ…”°½¹Ñ•áÐ€ôíô¤ì(€€€½¹ÍÐÉ…‘¥ÕÍMÄ€ôÉ…‘¥ÕÌ€¨É…‘¥ÕÌì(€€€±•Ð¡¥ÑÌ€ô€Àì(€€€™½È€¡½¹ÍÐ•¹•µä½˜Ñ¡¥Ì¹•¹•µ¥•Ì¤ì(€€€€€¥˜€¡•¹•µä¹‘•…ñð•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Á½Í¥Ñ¥½¸¤€øÉ…‘¥ÕÍMÄ¤½¹Ñ¥¹Õ”ì(€€€€€¥˜€ „¡Ñ¡¥Ì¹…É•¹„ü¹¡…Í1¥¹•=™M¥¡Ðü¸¡Á½Í¥Ñ¥½¸°•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¤€üüÑÉÕ”¤¤½¹Ñ¥¹Õ”ì(€€€€€½¹ÍÐ‘¥ÍÑ…¹”€ô5…Ñ ¹ÍÅÉÐ¡•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Á½Í¥Ñ¥½¸¤¤ì(€€€€€½¹ÍÐ…µ½Õ¹Ð€ô‘…µ…”€¨€ Ä€´Q!I¹5…Ñ¡UÑ¥±Ì¹±…µÀ¡‘¥ÍÑ…¹”€¼É…‘¥ÕÌ°€À°€Ä¤€¨€À¸ÜÈ¤ì(€€€€€Ñ¡¥Ì¹‘…µ…”¡•¹•µä°…µ½Õ¹Ð°ì€¸¸¹½¹Ñ•áÐ°Á½¥¹Ðè•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹±½¹” ¤°é½¹”è€‰½‘äœô¤ì(€€€€€¡¥ÑÌ€¬ô€Äì(€€€ô(€€€É•ÑÕÉ¸¡¥ÑÌì(€ô((€­¥±±±° ¤ì(€€€™½È€¡½¹ÍÐ•¹•µä½˜Ñ¡¥Ì¹•¹•µ¥•Ì¤¥˜€ …•¹•µä¹‘•…¤Ñ¡¥Ì¹­¥±°¡•¹•µä°ìÍ½ÕÉ”è€‘•‰Õœœ°é½¹”è€‰½‘äœô¤ì(€ô((€•Ð…Ñ¥Ù•½Õ¹Ð ¤ì(€€€É•ÑÕÉ¸Ñ¡¥Ì¹•¹•µ¥•Ì¹É•‘Õ” ¡½Õ¹Ð°•¹•µä¤€ôø½Õ¹Ð€¬9Õµ‰•È …•¹•µä¹‘•…¤°€À¤ì(€ô((€•Ð•±¥Ñ•±¥Ù” ¤ì(€€€É•ÑÕÉ¸Ñ¡¥Ì¹•¹•µ¥•Ì¹Í½µ” ¡•¹•µä¤€ôø€…•¹•µä¹‘•…€˜˜•¹•µä¹ÑåÁ”€ôôô€Ý…É‘•¸œ¤ì(€ô((€•Ñ9•…É•ÍÑ%MÑ…Ñ” ¤ì(€€€É•ÑÕÉ¸Ñ¡¥Ì¹•¹•µ¥•Ì(€€€€€€¹™¥±Ñ•È ¡•¹•µä¤€ôø€…•¹•µä¹‘•…¤(€€€€€€¹Í½ÉÐ ¡„°ˆ¤€ôø„¹É½½Ð¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤€´ˆ¹É½½Ð¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤¥lÁtü¹ÍÑ…Ñ”€üü€ŸŠPœì(€ô((€•Ñ•‰Õ…Ñ„ ¤ì(€€€É•ÑÕÉ¸Ñ¡¥Ì¹•¹•µ¥•Ì¹™¥±Ñ•È ¡•¹•µä¤€ôø€…•¹•µä¹‘•…¤¹µ…À ¡•¹•µä¤€ôø€¡ì(€€€€€¥è•¹•µä¹¥°(€€€€€ÑåÁ”è•¹•µä¹ÑåÁ”°(€€€€€ÍÑ…Ñ”è•¹•µä¹ÍÑ…Ñ”°(€€€€€Á½Í¥Ñ¥½¸è•¹•µä¹É½½Ð¹Á½Í¥Ñ¥½¸¹±½¹” ¤°(€€€€€Ñ…É•Ðè•¹•µä¹Ñ…É•Ð¹±½¹” ¤°(€€€€€±…ÍÑ-¹½Ý¸è•¹•µä¹±…ÍÑ-¹½Ý¸¹±½¹” ¤°(€€€€€…ÑÑ…­Q½­•¸è•¹•µä¹¡…ÍÑÑ…­Q½­•¸°(€€€ô¤¤ì(€ô((€É•Í•Ð ¤ì(€€€™½È€¡½¹ÍÐ•¹•µä½˜Ñ¡¥Ì¹•¹•µ¥•Ì¤ì(€€€€€Ñ¡¥Ì¹É½ÕÀ¹É•µ½Ù”¡•¹•µä¹É½½Ð¤ì(€€€€€•¹•µä¹É½½Ð¹ÑÉ…Ù•ÉÍ” ¡½‰©•Ð¤€ôø½‰©•Ð¹•½µ•ÑÉäü¹‘¥ÍÁ½Í”ü¸ ¤¤ì(€€€€€™½È€¡½¹ÍÐµ…Ñ•É¥…°½˜•¹•µä¹É½½Ð¹ÕÍ•É…Ñ„¹µ…Ñ•É¥…±Ì€üümt¤µ…Ñ•É¥…°¹‘¥ÍÁ½Í”ü¸ ¤ì(€€€ô(€€€Ñ¡¥Ì¹•¹•µ¥•Ì¹±•¹Ñ €ô€Àì(€€€Ñ¡¥Ì¹¡¥Ñ5•Í¡•Ì¹±•¹Ñ €ô€Àì(€€€Ñ¡¥Ì¹‰å%¹±•…È ¤ì(€€€™½È€¡½¹ÍÐÁÉ½©•Ñ¥±”½˜Ñ¡¥Ì¹ÁÉ½©•Ñ¥±•Ì¹¥Ñ•µÌ¤Ñ¡¥Ì¹‘•…Ñ¥Ù…Ñ•AÉ½©•Ñ¥±”¡ÁÉ½©•Ñ¥±”¤ì(€€€™½È€¡½¹ÍÐ¡…é…É½˜Ñ¡¥Ì¹¡…é…É‘Ì¹¥Ñ•µÌ¤ì(€€€€€¡…é…É¹…Ñ¥Ù”€ô™…±Í”ì(€€€€€¡…é…É¹µ•Í ¹Ù¥Í¥‰±”€ô™…±Í”ì(€€€ô(€€€™½È€¡½¹ÍÐÁ¥­ÕÀ½˜Ñ¡¥Ì¹Á¥­ÕÁÌ¹¥Ñ•µÌ¤ì(€€€€€Á¥­ÕÀ¹…Ñ¥Ù”€ô™…±Í”ì(€€€€€Á¥­ÕÀ¹µ•Í ¹Ù¥Í¥‰±”€ô™…±Í”ì(€€€ô(€€€Ñ¡¥Ì¹…¥É½é•¸€ô™…±Í”ì(€ô((€‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹É•Í•Ð ¤ì(€€€Ñ¡¥Ì¹Í•¹”¹É•µ½Ù”¡Ñ¡¥Ì¹É½ÕÀ¤ì(€€€™½È€¡½¹ÍÐÕ¹ÍÕ‰ÍÉ¥‰”½˜Ñ¡¥Ì¹Õ¹ÍÕ‰ÍÉ¥‰•ÉÌ¤Õ¹ÍÕ‰ÍÉ¥‰”ü¸ ¤ì(€€€™½È€¡½¹ÍÐÁÉ½©•Ñ¥±”½˜Ñ¡¥Ì¹ÁÉ½©•Ñ¥±•Ì¹¥Ñ•µÌ¤ì(€€€€€Ñ¡¥Ì¹Í•¹”¹É•µ½Ù”¡ÁÉ½©•Ñ¥±”¹µ•Í ¤ì(€€€€€ÁÉ½©•Ñ¥±”¹µ•Í ¹µ…Ñ•É¥…°¹‘¥ÍÁ½Í” ¤ì(€€€ô(€€€Ñ¡¥Ì¹ÁÉ½©•Ñ¥±•Ì¹•½µ•ÑÉä¹‘¥ÍÁ½Í” ¤ì(€€€™½È€¡½¹ÍÐ¡…é…É½˜Ñ¡¥Ì¹¡…é…É‘Ì¹¥Ñ•µÌ¤ì(€€€€€Ñ¡¥Ì¹Í•¹”¹É•µ½Ù”¡¡…é…É¹µ•Í ¤ì(€€€€€¡…é…É¹µ•Í ¹µ…Ñ•É¥…°¹‘¥ÍÁ½Í” ¤ì(€€€ô(€€€Ñ¡¥Ì¹¡…é…É‘Ì¹•½µ•ÑÉä¹‘¥ÍÁ½Í” ¤ì(€€€™½È€¡½¹ÍÐÁ¥­ÕÀ½˜Ñ¡¥Ì¹Á¥­ÕÁÌ¹¥Ñ•µÌ¤ì(€€€€€Ñ¡¥Ì¹Í•¹”¹É•µ½Ù”¡Á¥­ÕÀ¹µ•Í ¤ì(€€€€€Á¥­ÕÀ¹µ•Í ¹µ…Ñ•É¥…°¹‘¥ÍÁ½Í” ¤ì(€€€ô(€€€Ñ¡¥Ì¹Á¥­ÕÁÌ¹•½µ•ÑÉä¹‘¥ÍÁ½Í” ¤ì(€ô)ô()•áÁ½ÉÐ‘•™…Õ±Ð¹•µåMåÍÑ•´ì(
+      const target = this.player.position.clone();
+      if (distance < 7) {
+        const toPlayer = target.clone().sub(enemy.root.position).normalize();
+        target.add(new THREE.Vector3(-toPlayer.z, 0, toPlayer.x).multiplyScalar(enemy.flankSign * 1.8));
+      }
+      enemy.target.copy(this.navigate(enemy, target, 'hunter'));
+    } else {
+      enemy.target.copy(enemy.root.position);
+      if (enemy.hasAttackToken && enemy.attackCooldown <= 0 && enemy.pendingAttack == null) this.beginAttack(enemy, 'melee', 0.38);
+    }
+  }
+
+  thinkWarden(enemy, distance, visible) {
+    const healthRatio = enemy.health / enemy.maxHealth;
+    const nextPhase = healthRatio < 0.34 ? 3 : healthRatio < 0.67 ? 2 : 1;
+    if (nextPhase !== enemy.elitePhase) {
+      enemy.elitePhase = nextPhase;
+      enemy.shield = Math.min(enemy.maxShield * 0.55, enemy.shield + enemy.maxShield * 0.38);
+      if (enemy.root.userData.shield) enemy.root.userData.shield.visible = true;
+      this.effects.spawnShiftPulse(enemy.root.position, 9);
+      this.eventBus?.emit?.('enemy:elite-phase', { phase: nextPhase, health: enemy.health, maxHealth: enemy.maxHealth });
+    }
+    if (!visible && enemy.lastSeenAge > 4) {
+      enemy.target.copy(this.navigate(enemy, this.player.position, 'hunt'));
+      return;
+    }
+    if (distance > 9) enemy.target.copy(this.navigate(enemy, this.player.position, 'hunt'));
+    else if (distance < 5) enemy.target.copy(enemy.root.position).add(enemy.root.position.clone().sub(this.player.position).normalize().multiplyScalar(5));
+    else enemy.target.copy(enemy.root.position);
+    if (enemy.attackCooldown <= 0 && enemy.pendingAttack == null) {
+      const attack = enemy.elitePhase >= 2 && this.random() < 0.5 ? 'hazard' : 'orbVolley';
+      this.beginAttack(enemy, attack, attack === 'hazard' ? 1.1 : 0.55);
+      if (attack === 'hazard') this.eventBus?.emit?.('enemy:warden-block', { position: this.player.position.clone(), duration: 5 });
+    }
+  }
+
+  navigate(enemy, destination, mode) {
+    const result = this.arena?.getNavigationTarget?.(enemy.root.position, destination, mode);
+    return result?.position ?? result ?? destination;
+  }
+
+  moveEnemy(enemy, dt) {
+    if (enemy.pendingAttack?.lockMovement) {
+      enemy.velocity.multiplyScalar(Math.max(0, 1 - dt * 10));
+      return;
+    }
+    const direction = this.tempMove.subVectors(enemy.target, enemy.root.position).setY(0);
+    const distance = direction.length();
+    if (distance < 0.1) {
+      enemy.velocity.multiplyScalar(Math.max(0, 1 - dt * 9));
+      return;
+    }
+    direction.normalize();
+    const obstacle = this.arena?.raycastWorld?.(
+      this.tempFrom.copy(enemy.root.position).add(new THREE.Vector3(0, 0.7, 0)),
+      direction,
+      1.2,
+    );
+    if (obstacle?.distance < 0.9) {
+      const sign = enemy.flankSign;
+      direction.set(-direction.z * sign, 0, direction.x * sign);
+    }
+    const baseSpeed = enemy.config.speed ?? (enemy.type === 'hunter' ? 7.4 : enemy.type === 'warden' ? 3.4 : 4.2);
+    const stateMultiplier = enemy.state === 'retreat' ? 1.12 : enemy.state === 'flank' ? 1.15 : 1;
+    const targetVelocity = direction.multiplyScalar(baseSpeed * stateMultiplier);
+    enemy.velocity.lerp(targetVelocity, 1 - Math.exp(-dt * 7));
+    enemy.root.position.addScaledVector(enemy.velocity, dt);
+    enemy.root.position.x = THREE.MathUtils.clamp(enemy.root.position.x, -34, 34);
+    enemy.root.position.z = THREE.MathUtils.clamp(enemy.root.position.z, -34, 34);
+    enemy.forward.lerp(enemy.velocity.clone().setY(0).normalize(), 1 - Math.exp(-dt * 10)).normalize();
+    enemy.root.rotation.y = Math.atan2(enemy.forward.x, enemy.forward.z);
+    enemy.root.position.y = Math.sin(enemy.stateTime * 4 + enemy.bobOffset) * (enemy.type === 'hunter' ? 0.035 : 0.012);
+
+    const moved = enemy.root.position.distanceToSquared(enemy.lastPosition);
+    enemy.stuckTime = moved < 0.0004 ? enemy.stuckTime + dt : 0;
+    if (enemy.stuckTime > 1) {
+      enemy.flankSign *= -1;
+      enemy.target.add(new THREE.Vector3(enemy.flankSign * 4, 0, -enemy.flankSign * 3));
+      enemy.stuckTime = 0;
+    }
+    enemy.lastPosition.copy(enemy.root.position);
+  }
+
+  beginAttack(enemy, kind, telegraph) {
+    enemy.pendingAttack = { kind, remaining: telegraph, lockMovement: kind === 'hazard' || kind === 'melee' };
+    enemy.telegraph = telegraph;
+    const head = enemy.hitMeshes.find((mesh) => mesh.userData.hitZone === 'head');
+    if (head?.material?.emissive) head.material.emissiveIntensity = 4;
+    this.audio?.playEffect?.('enemyTelegraph', { position: enemy.root.position, pitch: kind === 'hazard' ? 0.58 : 1.05 });
+    this.eventBus?.emit?.('enemy:telegraph', { id: enemy.id, type: enemy.type, attack: kind, duration: telegraph });
+  }
+
+  updateAttack(enemy, dt) {
+    if (!enemy.pendingAttack) return;
+    enemy.pendingAttack.remaining -= dt;
+    enemy.telegraph = Math.max(0, enemy.pendingAttack.remaining);
+    if (enemy.pendingAttack.remaining > 0) return;
+    const kind = enemy.pendingAttack.kind;
+    enemy.pendingAttack = null;
+    const head = enemy.hitMeshes.find((mesh) => mesh.userData.hitZone === 'head');
+    if (head?.material?.emissive) head.material.emissiveIntensity = 1.65;
+    if (kind === 'melee') this.executeMelee(enemy);
+    else if (kind === 'burst') this.executeBurst(enemy);
+    else if (kind === 'orbVolley') this.executeOrbVolley(enemy);
+    else if (kind === 'hazard') this.executeHazard(enemy);
+  }
+
+  executeMelee(enemy) {
+    const distance = enemy.root.position.distanceTo(this.player.position);
+    if (distance <= 2.55 && (this.arena?.hasLineOfSight?.(enemy.root.position, this.player.position) ?? true)) {
+      this.player.damage?.(enemy.config.damage ?? 18, { source: enemy.type, position: enemy.root.position, cause: 'ÐšÐ»Ð¸Ð½ÐºÐ¸ Ð¾Ñ…Ð¾Ñ‚Ð½Ð¸ÐºÐ°' });
+      this.eventBus?.emit?.('combat:player-hit', { damage: enemy.config.damage ?? 18, source: enemy.root.position.clone(), cause: 'ÐšÐ»Ð¸Ð½ÐºÐ¸ Ð¾Ñ…Ð¾Ñ‚Ð½Ð¸ÐºÐ°' });
+    }
+    enemy.attackCooldown = this.difficulty === 'hard' ? 0.85 : 1.15;
+  }
+
+  executeBurst(enemy) {
+    const origin = enemy.root.position.clone().add(new THREE.Vector3(0, 1.35, 0));
+    const target = this.player.position.clone().add(new THREE.Vector3(0, 1, 0));
+    const accuracy = (enemy.config.accuracy ?? 0.78) * (this.difficulty === 'easy' ? 0.72 : this.difficulty === 'hard' ? 1.08 : 1);
+    for (let shot = 0; shot < 3; shot += 1) {
+      const direction = target.clone().sub(origin).normalize();
+      direction.x += (this.random() - 0.5) * (1 - accuracy) * 0.24;
+      direction.y += (this.random() - 0.5) * (1 - accuracy) * 0.18;
+      direction.z += (this.random() - 0.5) * (1 - accuracy) * 0.24;
+      this.spawnProjectile(origin, direction.normalize(), 19 + shot * 1.2, enemy.config.damage ?? 8, 0xffa43a, 0.16);
+    }
+    enemy.attackCooldown = this.difficulty === 'hard' ? 1.15 : 1.65;
+  }
+
+  executeOrbVolley(enemy) {
+    const origin = enemy.root.position.clone().add(new THREE.Vector3(0, 1.65, 0));
+    const base = this.player.position.clone().add(new THREE.Vector3(0, 0.9, 0)).sub(origin).normalize();
+    const count = enemy.elitePhase >= 3 ? 7 : 5;
+    for (let index = 0; index < count; index += 1) {
+      const angle = (index - (count - 1) / 2) * 0.075;
+      const direction = base.clone().applyAxisAngle(UP, angle);
+      this.spawnProjectile(origin, direction, enemy.elitePhase >= 3 ? 13 : 10.5, enemy.config.damage ?? 13, 0xb56cff, 0.25);
+    }
+    enemy.attackCooldown = enemy.elitePhase >= 3 ? 1.05 : 1.55;
+  }
+
+  executeHazard(enemy) {
+    const target = this.player.position.clone().add(this.player.velocity?.clone?.().multiplyScalar(0.45) ?? new THREE.Vector3());
+    const hazard = this.hazards.next();
+    hazard.mesh.position.set(target.x, 0.055, target.z);
+    hazard.radius = enemy.elitePhase >= 3 ? 3.8 : 3.1;
+    hazard.mesh.scale.setScalar(hazard.radius);
+    hazard.mesh.material.color.set(0xb56cff);
+    hazard.telegraph = 1.25;
+    hazard.duration = 4.2;
+    hazard.tick = 0;
+    hazard.damage = enemy.config.hazardDamage ?? 13;
+    enemy.attackCooldown = 2.4;
+  }
+
+  spawnProjectile(origin, direction, speed, damage, color, radius) {
+    const projectile = this.projectiles.next();
+    projectile.mesh.position.copy(origin);
+    projectile.previous.copy(origin);
+    projectile.velocity.copy(direction).multiplyScalar(speed);
+    projectile.damage = damage;
+    projectile.radius = radius;
+    projectile.life = 4;
+    projectile.color = color;
+    projectile.mesh.material.color.set(color);
+    projectile.mesh.scale.setScalar(radius / 0.12);
+    this.audio?.playEffect?.('enemyShot', { position: origin, pitch: 0.9 + this.random() * 0.2 });
+  }
+
+  updateProjectiles(dt) {
+    for (const projectile of this.projectiles.items) {
+      if (!projectile.active) continue;
+      projectile.life -= dt;
+      projectile.previous.copy(projectile.mesh.position);
+      projectile.mesh.position.addScaledVector(projectile.velocity, dt);
+      projectile.mesh.rotation.x += dt * 7;
+      projectile.mesh.rotation.y += dt * 9;
+      const delta = this.tempDirection.subVectors(projectile.mesh.position, projectile.previous);
+      const distance = delta.length();
+      const direction = distance > 0 ? delta.multiplyScalar(1 / distance) : delta;
+      const worldHit = distance > 0 ? this.arena?.raycastWorld?.(projectile.previous, direction, distance + projectile.radius) : null;
+      const playerPoint = this.tempPlayer.copy(this.player.position);
+      playerPoint.y += 0.9;
+      const playerAlongSegment = distance > 0
+        ? THREE.MathUtils.clamp(this.tempProjectileToPlayer.subVectors(playerPoint, projectile.previous).dot(direction), 0, distance)
+        : 0;
+      const closestToPlayer = this.tempProjectileClosest.copy(direction).multiplyScalar(playerAlongSegment).add(projectile.previous);
+      const playerHit = closestToPlayer.distanceToSquared(playerPoint) <= (projectile.radius + 0.55) ** 2;
+      const playerHitDistance = playerHit ? Math.max(0, playerAlongSegment - projectile.radius) : Infinity;
+      const worldHitDistance = worldHit?.distance ?? Infinity;
+
+      if (worldHitDistance <= playerHitDistance && worldHitDistance <= distance + projectile.radius) {
+        this.effects.spawnImpact(worldHit.point ?? projectile.mesh.position, worldHit.normal ?? UP, projectile.color, 6);
+        this.deactivateProjectile(projectile);
+        continue;
+      }
+      if (playerHit) {
+        this.player.damage?.(projectile.damage, { source: 'enemyProjectile', position: projectile.previous, cause: 'Ð˜Ð¼Ð¿ÑƒÐ»ÑŒÑ Ð¿Ñ€Ð¾Ñ‚Ð¸Ð²Ð½Ð¸ÐºÐ°' });
+        this.eventBus?.emit?.('combat:player-hit', { damage: projectile.damage, source: projectile.previous.clone(), cause: 'Ð˜Ð¼Ð¿ÑƒÐ»ÑŒÑ Ð¿Ñ€Ð¾Ñ‚Ð¸Ð²Ð½Ð¸ÐºÐ°' });
+        this.effects.spawnImpact(closestToPlayer, projectile.velocity.clone().negate().normalize(), 0xff617c, 9);
+        this.deactivateProjectile(projectile);
+        continue;
+      }
+      if (projectile.life <= 0) this.deactivateProjectile(projectile);
+    }
+  }
+
+  deactivateProjectile(projectile) {
+    projectile.active = false;
+    projectile.mesh.visible = false;
+  }
+
+  updateHazards(dt) {
+    for (const hazard of this.hazards.items) {
+      if (!hazard.active) continue;
+      hazard.mesh.rotation.z += dt * 0.35;
+      if (hazard.telegraph > 0) {
+        hazard.telegraph -= dt;
+        hazard.mesh.material.opacity = 0.18 + Math.sin(hazard.telegraph * 18) * 0.12;
+        if (hazard.telegraph <= 0) {
+          hazard.mesh.material.color.set(0xff446f);
+          hazard.mesh.material.opacity = 0.55;
+          this.effects.spawnExplosion(hazard.mesh.position, hazard.radius, 0xb56cff);
+        }
+        continue;
+      }
+      hazard.duration -= dt;
+      hazard.tick -= dt;
+      hazard.mesh.material.opacity = 0.32 + Math.sin(hazard.duration * 9) * 0.11;
+      const dx = this.player.position.x - hazard.mesh.position.x;
+      const dz = this.player.position.z - hazard.mesh.position.z;
+      if (dx * dx + dz * dz <= hazard.radius * hazard.radius && hazard.tick <= 0) {
+        hazard.tick = 0.72;
+        this.player.damage?.(hazard.damage, { source: 'wardenHazard', position: hazard.mesh.position, cause: 'Ð¤Ð°Ð·Ð¾Ð²Ñ‹Ð¹ Ñ€Ð°Ð·Ð»Ð¾Ð¼' });
+        this.eventBus?.emit?.('combat:player-hit', { damage: hazard.damage, source: hazard.mesh.position.clone(), cause: 'Ð¤Ð°Ð·Ð¾Ð²Ñ‹Ð¹ Ñ€Ð°Ð·Ð»Ð¾Ð¼' });
+      }
+      if (hazard.duration <= 0) {
+        hazard.active = false;
+        hazard.mesh.visible = false;
+      }
+    }
+  }
+
+  updatePickups(dt) {
+    for (const pickup of this.pickups.items) {
+      if (!pickup.active) continue;
+      pickup.age += dt;
+      pickup.mesh.rotation.y += dt * 1.8;
+      pickup.mesh.position.y = pickup.mesh.userData.baseY + Math.sin(pickup.age * 3) * 0.12;
+      if (pickup.mesh.position.distanceToSquared(this.player.position) < 1.75) {
+        pickup.active = false;
+        pickup.mesh.visible = false;
+        this.audio?.playUI?.('pickup', { pitch: pickup.type === 'health' ? 1.15 : 0.92 });
+        this.eventBus?.emit?.('pickup:collected', { type: pickup.type, value: pickup.value });
+      } else if (pickup.age > 20) {
+        pickup.active = false;
+        pickup.mesh.visible = false;
+      }
+    }
+  }
+
+  spawnPickup(position, guaranteed = false) {
+    if (!guaranteed && this.random() > 0.34) return;
+    const pickup = this.pickups.next();
+    const needsHealth = (this.player.health ?? 100) < (this.player.maxHealth ?? 100) * 0.55;
+    pickup.type = needsHealth && this.random() < 0.58 ? 'health' : this.random() < 0.72 ? 'ammo' : 'armor';
+    pickup.value = pickup.type === 'health' ? 24 : pickup.type === 'armor' ? 18 : 28;
+    pickup.mesh.material.color.set(pickup.type === 'health' ? 0x55f29a : pickup.type === 'armor' ? 0x5ee7ff : 0xffd45b);
+    pickup.mesh.material.emissive.set(pickup.mesh.material.color);
+    pickup.mesh.position.copy(position).add(new THREE.Vector3(0, 0.55, 0));
+    pickup.mesh.userData.baseY = pickup.mesh.position.y;
+  }
+
+  onNoise({ origin, loudness = 1 }) {
+    if (!origin) return;
+    const radiusSq = (24 * loudness) ** 2;
+    for (const enemy of this.enemies) {
+      if (enemy.dead || enemy.root.position.distanceToSquared(origin) > radiusSq) continue;
+      enemy.lastKnown.copy(origin);
+      enemy.lastHeardAge = 0;
+      if (enemy.state === 'patrol' || enemy.state === 'search') this.setState(enemy, 'suspicious');
+    }
+  }
+
+  assignAttackTokens() {
+    const candidates = this.enemies
+      .filter((enemy) => !enemy.dead && enemy.type !== 'warden' && ['combat', 'flank', 'takeCover'].includes(enemy.state))
+      .sort((a, b) => a.root.position.distanceToSquared(this.player.position) - b.root.position.distanceToSquared(this.player.position));
+    candidates.forEach((enemy, index) => { enemy.hasAttackToken = index < this.maxAttackers; });
+    for (const enemy of this.enemies) if (enemy.type === 'warden' && !enemy.dead) enemy.hasAttackToken = true;
+  }
+
+  setState(enemy, state) {
+    if (enemy.state === state) return;
+    const previous = enemy.state;
+    enemy.state = state;
+    enemy.stateTime = 0;
+    this.eventBus?.emit?.('enemy:state', { id: enemy.id, type: enemy.type, previous, state });
+  }
+
+  raycast(origin, direction, maxDistance = Infinity) {
+    // Raycaster uses matrixWorld rather than local transforms. Enemies are moved
+    // during fixed updates, so multiple simulation steps can happen before the
+    // renderer gets a chance to refresh those matrices.
+    this.group.updateMatrixWorld(true);
+    this.raycaster.set(origin, direction);
+    this.raycaster.far = maxDistance;
+    const intersections = this.raycaster.intersectObjects(this.hitMeshes, false);
+    for (const intersection of intersections) {
+      const enemy = this.byId.get(intersection.object.userData.enemyId);
+      if (!enemy || enemy.dead || !enemy.root.visible) continue;
+      return {
+        enemy,
+        point: intersection.point,
+        distance: intersection.distance,
+        zone: intersection.object.userData.hitZone ?? 'body',
+        normal: intersection.face?.normal?.clone?.(),
+      };
+    }
+    return null;
+  }
+
+  damage(enemyOrId, amount, context = {}) {
+    const enemy = typeof enemyOrId === 'string' ? this.byId.get(enemyOrId) : enemyOrId;
+    if (!enemy || enemy.dead || !Number.isFinite(amount) || amount <= 0) return { applied: 0, killed: false };
+    let remaining = amount;
+    if (enemy.shield > 0) {
+      const absorbed = Math.min(enemy.shield, remaining);
+      enemy.shield -= absorbed;
+      remaining -= absorbed;
+      if (enemy.root.userData.shield) {
+        enemy.root.userData.shield.material.opacity = 0.15 + (enemy.shield / enemy.maxShield) * 0.22;
+        enemy.root.userData.shield.visible = enemy.shield > 0;
+      }
+      this.effects.spawnImpact(context.point ?? enemy.root.position, context.direction?.clone?.().negate?.() ?? UP, 0xb56cff, 7);
+    }
+    if (remaining > 0) enemy.health -= remaining;
+    this.setState(enemy, 'combat');
+    enemy.lastKnown.copy(this.player.position);
+    const killed = enemy.health <= 0;
+    if (killed) this.kill(enemy, context);
+    else this.eventBus?.emit?.('enemy:damaged', { id: enemy.id, type: enemy.type, amount, health: enemy.health, maxHealth: enemy.maxHealth, shield: enemy.shield });
+    return { applied: amount, killed, health: Math.max(0, enemy.health), shield: enemy.shield };
+  }
+
+  kill(enemy, context = {}) {
+    enemy.dead = true;
+    enemy.state = 'dead';
+    enemy.health = 0;
+    enemy.pendingAttack = null;
+    enemy.hasAttackToken = false;
+    for (const mesh of enemy.hitMeshes) {
+      const index = this.hitMeshes.indexOf(mesh);
+      if (index >= 0) this.hitMeshes.splice(index, 1);
+    }
+    const position = enemy.root.position.clone().add(new THREE.Vector3(0, 1, 0));
+    this.effects.spawnEnemyDeath(position, enemy.config.color ?? ENEMY_COLORS[enemy.type], enemy.type === 'warden' ? 1.8 : 1);
+    this.audio?.playEffect?.('enemyDeath', { position, pitch: enemy.type === 'warden' ? 0.48 : 0.85 + this.random() * 0.3 });
+    this.spawnPickup(enemy.root.position, enemy.type === 'warden');
+    this.eventBus?.emit?.('enemy:killed', {
+      id: enemy.id,
+      type: enemy.type,
+      elite: enemy.type === 'warden',
+      headshot: context.zone === 'head',
+      weapon: context.weapon,
+      position: enemy.root.position.clone(),
+      score: enemy.config.score ?? (enemy.type === 'warden' ? 2500 : enemy.type === 'hunter' ? 250 : 180),
+    });
+  }
+
+  damageInRadius(position, radius, damage, context = {}) {
+    const radiusSq = radius * radius;
+    let hits = 0;
+    for (const enemy of this.enemies) {
+      if (enemy.dead || enemy.root.position.distanceToSquared(position) > radiusSq) continue;
+      if (!(this.arena?.hasLineOfSight?.(position, enemy.root.position) ?? true)) continue;
+      const distance = Math.sqrt(enemy.root.position.distanceToSquared(position));
+      const amount = damage * (1 - THREE.MathUtils.clamp(distance / radius, 0, 1) * 0.72);
+      this.damage(enemy, amount, { ...context, point: enemy.root.position.clone(), zone: 'body' });
+      hits += 1;
+    }
+    return hits;
+  }
+
+  killAll() {
+    for (const enemy of this.enemies) if (!enemy.dead) this.kill(enemy, { source: 'debug', zone: 'body' });
+  }
+
+  get activeCount() {
+    return this.enemies.reduce((count, enemy) => count + Number(!enemy.dead), 0);
+  }
+
+  get eliteAlive() {
+    return this.enemies.some((enemy) => !enemy.dead && enemy.type === 'warden');
+  }
+
+  getNearestAIState() {
+    return this.enemies
+      .filter((enemy) => !enemy.dead)
+      .sort((a, b) => a.root.position.distanceToSquared(this.player.position) - b.root.position.distanceToSquared(this.player.position))[0]?.state ?? 'â€”';
+  }
+
+  getDebugData() {
+    return this.enemies.filter((enemy) => !enemy.dead).map((enemy) => ({
+      id: enemy.id,
+      type: enemy.type,
+      state: enemy.state,
+      position: enemy.root.position.clone(),
+      target: enemy.target.clone(),
+      lastKnown: enemy.lastKnown.clone(),
+      attackToken: enemy.hasAttackToken,
+    }));
+  }
+
+  reset() {
+    for (const enemy of this.enemies) {
+      this.group.remove(enemy.root);
+      enemy.root.traverse((object) => object.geometry?.dispose?.());
+      for (const material of enemy.root.userData.materials ?? []) material.dispose?.();
+    }
+    this.enemies.length = 0;
+    this.hitMeshes.length = 0;
+    this.byId.clear();
+    for (const projectile of this.projectiles.items) this.deactivateProjectile(projectile);
+    for (const hazard of this.hazards.items) {
+      hazard.active = false;
+      hazard.mesh.visible = false;
+    }
+    for (const pickup of this.pickups.items) {
+      pickup.active = false;
+      pickup.mesh.visible = false;
+    }
+    this.aiFrozen = false;
+  }
+
+  dispose() {
+    this.reset();
+    this.scene.remove(this.group);
+    for (const unsubscribe of this.unsubscribers) unsubscribe?.();
+    for (const projectile of this.projectiles.items) {
+      this.scene.remove(projectile.mesh);
+      projectile.mesh.material.dispose();
+    }
+    this.projectiles.geometry.dispose();
+    for (const hazard of this.hazards.items) {
+      this.scene.remove(hazard.mesh);
+      hazard.mesh.material.dispose();
+    }
+    this.hazards.geometry.dispose();
+    for (const pickup of this.pickups.items) {
+      this.scene.remove(pickup.mesh);
+      pickup.mesh.material.dispose();
+    }
+    this.pickups.geometry.dispose();
+  }
+}
+
+export default EnemySystem;

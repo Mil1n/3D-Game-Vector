@@ -24,6 +24,7 @@ const defaults = {
   },
   graphics: {
     quality: 'medium',
+    exposure: 1.12,
     resolutionScale: 1,
     shadows: true,
     shadowQuality: 'medium',
@@ -96,6 +97,7 @@ export function validateSettings(source = {}) {
     },
     graphics: {
       quality: choice(source.graphics?.quality, ['low', 'medium', 'high'], d.graphics.quality),
+      exposure: clamp(source.graphics?.exposure, 0.7, 1.6, d.graphics.exposure),
       resolutionScale: clamp(source.graphics?.resolutionScale, 0.5, 1.25, d.graphics.resolutionScale),
       shadows: bool(source.graphics?.shadows, d.graphics.shadows),
       shadowQuality: choice(source.graphics?.shadowQuality, ['off', 'low', 'medium', 'high'], d.graphics.shadowQuality),
