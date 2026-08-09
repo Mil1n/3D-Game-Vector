@@ -468,7 +468,9 @@ export class PlayerController {
     const roll = Math.sin(this._bobTime * 0.5) * 0.007 * this._bobAmount
       + (this.isSliding ? -0.035 : 0);
 
-    const source = this.body.interpolatedPosition ?? this.body.position;
+    // Game owns the fixed-step accumulator and calls world.step(dt) in simple
+    // mode, where cannon-es does not refresh interpolatedPosition.
+    const source = this.body.position;
     camera.position.set(source.x, source.y + this._cameraHeight + bobY, source.z);
     TEMP_RIGHT.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     camera.position.addScaledVector(TEMP_RIGHT, bobX);

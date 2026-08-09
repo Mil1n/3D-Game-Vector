@@ -23,15 +23,20 @@ test('held forward movement is not cancelled by arena contact friction', () => {
     world.defaultContactMaterial.restitution = 0;
 
     const arena = new Arena({ scene, mapId }).build(world);
+    const camera = new THREE.PerspectiveCamera();
     const player = new PlayerController({
       world,
+      camera,
       spawn: arena.getSafePlayerSpawn(),
     });
     const startZ = player.body.position.z;
+    player.update(camera, FIXED_STEP);
+    const startCameraZ = camera.position.z;
 
     for (let step = 0; step < 120; step += 1) {
       player.fixedUpdate(HELD_FORWARD_INPUT, FIXED_STEP);
       world.step(FIXED_STEP);
+      player.update(camera, FIXED_STEP);
     }
 
     assert.ok(
@@ -39,6 +44,14 @@ test('held forward movement is not cancelled by arena contact friction', () => {
       `${mapId}: held W should move the player across the arena`,
     );
     assert.ok(player.horizontalSpeed > 5, `${mapId}: walking speed should survive the physics step`);
+    assert.ok(
+      startCameraZ - camera.position.z > 8,
+      `${mapId}: the first-person camera should follow the moving physics body`,
+    );
+    assert.ok(
+      Math.abs(camera.position.z - player.body.position.z) < 0.001,
+      `${mapId}: camera and physics body should agree on forward position`,
+    );
     assert.ok(player.body.position.y > -8, `${mapId}: the player should remain on arena geometry`);
 
     player.dispose();
