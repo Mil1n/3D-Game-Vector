@@ -20,6 +20,8 @@ export const DEFAULT_BINDINGS = freezeBindings({
   weapon1: ['Digit1'],
   weapon2: ['Digit2'],
   weapon3: ['Digit3'],
+  weapon4: ['Digit4'],
+  weapon5: ['Digit5'],
   pause: ['Escape'],
   debug: ['F3'],
 });
@@ -35,6 +37,12 @@ export class InputManager {
   #lookX = 0;
   #lookY = 0;
   #wheel = 0;
+  #dragging = false;
+  #fallbackActive = false;
+  #lastPointerX = 0;
+  #lastPointerY = 0;
+  #lastLockAttemptAt = 0;
+  #lastPointerLockOptions = {};
   #attached = false;
   #handlers;
 
@@ -50,6 +58,7 @@ export class InputManager {
     this.mouseSensitivity = this.#finite(options.mouseSensitivity, 1);
     this.invertY = options.invertY === true;
     this.captureUnlockedMouse = options.captureUnlockedMouse === true;
+    this.allowUnlockedFallback = options.allowUnlockedFallback !== false;
     this.preventDefaults = options.preventDefaults !== false;
     this.bindings = cloneBindings(DEFAULT_BINDINGS);
     if (options.bindings) this.setBindings(options.bindings, { replace: false, silent: true });
@@ -73,6 +82,7 @@ export class InputManager {
   attach(element = this.element) {
     if (this.#attached || !this.document) return false;
     this.element = element ?? this.document.body;
+    this.#makeElementFocusable();
     this.document.addEventListener('keydown', this.#handlers.keydown);
     this.document.addEventListener('keyup', this.#handlers.keyup);
     this.document.addEventListener('mousedown', this.#handlers.mousedown);
@@ -105,11 +115,21 @@ export class InputManager {
   }
 
   async requestPointerLock(element = this.element, options = {}) {
+    this.element = element ?? this.element;
+    this.#lastPointerLockOptions = { ...options };
+    this.#lastLockAttemptAt = Date.now();
+    this.#makeElementFocusable();
+    this.focusElement();
+
     if (!element?.requestPointerLock) {
+      this.#enableFallback('unavailable');
       this.eventBus.emit('input:pointer-lock-error', new Error('Pointer Lock API is unavailable'));
       return false;
     }
-    this.element = element;
+
+    // Keep controls usable while permission is pending. A successful
+    // pointerlockchange switches this off before any unlocked movement leaks in.
+    this.#enableFallback('pending');
     try {
       const result = element.requestPointerLock({ unadjustedMovement: options.rawInput !== false });
       if (result?.then) await result;
@@ -120,6 +140,7 @@ export class InputManager {
         if (fallback?.then) await fallback;
         return true;
       } catch (error) {
+        this.#enableFallback('rejected');
         this.eventBus.emit('input:pointer-lock-error', error ?? firstError);
         return false;
       }
@@ -135,6 +156,26 @@ export class InputManager {
 
   get isPointerLocked() {
     return Boolean(this.document && this.element && this.document.pointerLockElement === this.element);
+  }
+
+  get isFallbackActive() {
+    return this.allowUnlockedFallback && this.#fallbackActive && !this.isPointerLocked;
+  }
+
+  get inputMode() {
+    if (this.isPointerLocked) return 'pointer-lock';
+    if (this.isFallbackActive) return 'drag';
+    return 'keyboard';
+  }
+
+  focusElement() {
+    if (!this.element?.focus) return false;
+    try {
+      this.element.focus({ preventScroll: true });
+    } catch {
+      this.element.focus();
+    }
+    return this.document?.activeElement === this.element;
   }
 
   isDown(action) {
@@ -265,6 +306,7 @@ export class InputManager {
     this.#lookX = 0;
     this.#lookY = 0;
     this.#wheel = 0;
+    this.#dragging = false;
   }
 
   dispose() {
@@ -287,25 +329,60 @@ export class InputManager {
   }
 
   #onMouseDown(event) {
+    const onElement = this.#targetsElement(event.target);
+    if (!this.isPointerLocked && !onElement) return;
+    if (onElement) this.focusElement();
+    if (
+      !this.isPointerLocked
+      && onElement
+      && this.isFallbackActive
+      && typeof this.element?.requestPointerLock === 'function'
+      && Date.now() - this.#lastLockAttemptAt > 750
+    ) {
+      // A canvas press is a fresh user gesture, so browsers that rejected the
+      // menu-button request get another standards-compliant chance to lock.
+      void this.requestPointerLock(this.element, this.#lastPointerLockOptions);
+    }
+    if (!this.isPointerLocked && this.allowUnlockedFallback) {
+      this.#enableFallback('canvas-interaction');
+      this.#dragging = true;
+      this.#lastPointerX = Number(event.clientX) || 0;
+      this.#lastPointerY = Number(event.clientY) || 0;
+    }
     const input = `Mouse${event.button}`;
     if (!this.#down.has(input)) this.#pressed.add(input);
     this.#down.add(input);
-    if (this.preventDefaults && (this.isPointerLocked || this.#isBoundInput(input))) event.preventDefault();
+    if (this.preventDefaults && (this.isPointerLocked || onElement) && this.#isBoundInput(input)) event.preventDefault();
   }
 
   #onMouseUp(event) {
+    if (!this.isPointerLocked && !this.#dragging && !this.#targetsElement(event.target)) return;
     const input = `Mouse${event.button}`;
     if (this.#down.delete(input)) this.#released.add(input);
-    if (this.preventDefaults && (this.isPointerLocked || this.#isBoundInput(input))) event.preventDefault();
+    if (!this.isPointerLocked) this.#dragging = false;
+    if (this.preventDefaults && (this.isPointerLocked || this.#targetsElement(event.target)) && this.#isBoundInput(input)) event.preventDefault();
   }
 
   #onMouseMove(event) {
-    if (!this.isPointerLocked && !this.captureUnlockedMouse) return;
-    this.#lookX += (Number(event.movementX) || 0) * this.mouseSensitivity;
-    this.#lookY += (Number(event.movementY) || 0) * this.mouseSensitivity;
+    const unlockedCapture = this.captureUnlockedMouse || (this.isFallbackActive && this.#dragging);
+    if (!this.isPointerLocked && !unlockedCapture) return;
+    let movementX = Number(event.movementX) || 0;
+    let movementY = Number(event.movementY) || 0;
+    if (!this.isPointerLocked && this.#dragging) {
+      const clientX = Number(event.clientX);
+      const clientY = Number(event.clientY);
+      if (!movementX && Number.isFinite(clientX)) movementX = clientX - this.#lastPointerX;
+      if (!movementY && Number.isFinite(clientY)) movementY = clientY - this.#lastPointerY;
+      if (Number.isFinite(clientX)) this.#lastPointerX = clientX;
+      if (Number.isFinite(clientY)) this.#lastPointerY = clientY;
+    }
+    this.#lookX += movementX * this.mouseSensitivity;
+    this.#lookY += movementY * this.mouseSensitivity;
+    if (!this.isPointerLocked && this.preventDefaults) event.preventDefault();
   }
 
   #onWheel(event) {
+    if (!this.isPointerLocked && !this.#targetsElement(event.target)) return;
     const input = event.deltaY < 0 ? 'WheelUp' : 'WheelDown';
     this.#wheel += Math.sign(Number(event.deltaY) || 0);
     this.#down.add(input);
@@ -314,14 +391,32 @@ export class InputManager {
   }
 
   #onContextMenu(event) {
-    if (this.isPointerLocked || this.#isBoundInput('Mouse2')) event.preventDefault();
+    if (this.isPointerLocked || (this.#targetsElement(event.target) && this.#isBoundInput('Mouse2'))) event.preventDefault();
   }
 
   #onPointerLockChange() {
     const locked = this.isPointerLocked;
-    if (!locked) this.clear();
-    this.eventBus.emit('input:pointer-lock', { locked, element: this.document?.pointerLockElement ?? null });
-    this.eventBus.emit(locked ? 'input:pointer-lock-acquired' : 'input:pointer-lock-lost');
+    if (locked) {
+      this.#disableFallback('pointer-lock-acquired');
+      this.#dragging = false;
+      this.focusElement();
+    } else {
+      // Do not clear held keyboard keys here: sandboxed/embedded browsers can
+      // revoke pointer lock without a blur. Preserve movement and switch to the
+      // explicit drag-to-look fallback instead.
+      this.#releaseMouseInputs();
+      this.#lookX = 0;
+      this.#lookY = 0;
+      this.#enableFallback('pointer-lock-lost');
+    }
+    const payload = {
+      locked,
+      fallbackActive: this.isFallbackActive,
+      mode: this.inputMode,
+      element: this.document?.pointerLockElement ?? null,
+    };
+    this.eventBus.emit('input:pointer-lock', payload);
+    this.eventBus.emit(locked ? 'input:pointer-lock-acquired' : 'input:pointer-lock-lost', payload);
   }
 
   #onBlur() {
@@ -348,6 +443,42 @@ export class InputManager {
 
   #isBoundInput(input) {
     return Object.values(this.bindings).some((inputs) => inputs.includes(input));
+  }
+
+  #targetsElement(target) {
+    if (!target || !this.element) return false;
+    return target === this.element || Boolean(this.element.contains?.(target));
+  }
+
+  #makeElementFocusable() {
+    if (!this.element) return;
+    if (typeof this.element.tabIndex === 'number' && this.element.tabIndex < 0) this.element.tabIndex = 0;
+    else if (!this.element.hasAttribute?.('tabindex')) this.element.setAttribute?.('tabindex', '0');
+  }
+
+  #enableFallback(reason) {
+    if (!this.allowUnlockedFallback || this.isPointerLocked) return false;
+    const changed = !this.#fallbackActive;
+    this.#fallbackActive = true;
+    if (changed) this.eventBus.emit('input:fallback-enabled', { reason, mode: 'drag' });
+    return changed;
+  }
+
+  #disableFallback(reason) {
+    const changed = this.#fallbackActive;
+    this.#fallbackActive = false;
+    this.#dragging = false;
+    if (changed) this.eventBus.emit('input:fallback-disabled', { reason, mode: this.inputMode });
+    return changed;
+  }
+
+  #releaseMouseInputs() {
+    for (const input of [...this.#down]) {
+      if (!input.startsWith('Mouse')) continue;
+      this.#down.delete(input);
+      this.#released.add(input);
+    }
+    this.#dragging = false;
   }
 
   #finite(value, fallback) {

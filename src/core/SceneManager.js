@@ -9,10 +9,10 @@ const DEFAULT_SETTINGS = Object.freeze({
   fov: 76,
   near: 0.06,
   far: 180,
-  exposure: 1.05,
-  fogNear: 34,
-  fogFar: 126,
-  clearColor: 0x05070c,
+  exposure: 1.12,
+  fogNear: 54,
+  fogFar: 142,
+  clearColor: 0x172536,
 });
 
 function clamp(value, min, max) {
@@ -129,13 +129,16 @@ export class SceneManager {
   }
 
   _createLighting() {
-    const hemisphere = new THREE.HemisphereLight(0x7799bb, 0x080b12, 1.35);
-    hemisphere.name = 'COLD_AMBIENCE';
+    // Broad cool daylight is the arena's readability layer.  The brighter
+    // ground colour deliberately fills ramp undersides and cover faces that
+    // the directional key cannot reach, without adding another shadow pass.
+    const hemisphere = new THREE.HemisphereLight(0xc9e8ff, 0x46566b, 2.25);
+    hemisphere.name = 'LATTICE_SKYLIGHT';
     this.environment.add(hemisphere);
 
-    const key = new THREE.DirectionalLight(0xc5e8ff, 2.75);
+    const key = new THREE.DirectionalLight(0xf4f8ff, 3.1);
     key.name = 'LATTICE_KEY';
-    key.position.set(-24, 42, 18);
+    key.position.set(-28, 46, 22);
     key.target.position.set(0, 0, 0);
     key.castShadow = Boolean(this.settings.shadows);
     const shadowSize = clamp(Number(this.settings.shadowMapSize) || 1024, 256, 2048);
@@ -150,17 +153,27 @@ export class SceneManager {
     key.shadow.normalBias = 0.025;
     this.environment.add(key, key.target);
 
-    const cyan = new THREE.PointLight(0x20dce5, 34, 66, 2);
+    // A shadowless counter-key separates silhouettes on the far side of the
+    // spire.  Directional fill is cheaper and more even than a field of lamps.
+    const fill = new THREE.DirectionalLight(0x78b8dd, 1.05);
+    fill.name = 'LATTICE_FILL';
+    fill.position.set(31, 19, -28);
+    fill.target.position.set(0, 2, 0);
+    this.environment.add(fill, fill.target);
+
+    // Phase lights remain accents rather than the arena's primary exposure.
+    // Their lower energy prevents cyan/magenta VFX from clipping into white.
+    const cyan = new THREE.PointLight(0x20dce5, 18, 58, 2);
     cyan.name = 'PHASE_CYAN';
     cyan.position.set(16, 11, -17);
     this.environment.add(cyan);
 
-    const magenta = new THREE.PointLight(0xa83cff, 28, 54, 2);
+    const magenta = new THREE.PointLight(0xa83cff, 14, 50, 2);
     magenta.name = 'PHASE_MAGENTA';
     magenta.position.set(-20, 8, 14);
     this.environment.add(magenta);
 
-    this.lights = { hemisphere, key, cyan, magenta };
+    this.lights = { hemisphere, key, fill, cyan, magenta };
   }
 
   resize(width, height, pixelRatio) {
@@ -244,8 +257,8 @@ export class SceneManager {
     this._elapsed += dt;
 
     // A nearly imperceptible phase-light drift keeps the procedural scene alive.
-    this.lights.cyan.intensity = 32 + Math.sin(this._elapsed * 1.7) * 4;
-    this.lights.magenta.intensity = 26 + Math.sin(this._elapsed * 1.17 + 1.8) * 3;
+    this.lights.cyan.intensity = 18 + Math.sin(this._elapsed * 1.7) * 2.5;
+    this.lights.magenta.intensity = 14 + Math.sin(this._elapsed * 1.17 + 1.8) * 2;
 
     const started = typeof performance !== 'undefined' ? performance.now() : 0;
     this.renderer.render(this.scene, this.camera);

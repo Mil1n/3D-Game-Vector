@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { DEFAULT_MAP_ID, MAP_CONFIGS, resolveMapConfig } from '../configs/mapConfigs.js';
 
 export const ARENA_COLLISION_GROUP = 2;
 
@@ -45,6 +46,8 @@ export class Arena {
     // RunDirector normally owns the exact apply moment; opt in only for standalone demos.
     this.autoApplyShifts = options.autoApplyShifts ?? false;
     this.getPlayerPosition = options.getPlayerPosition ?? null;
+    this.mapConfig = resolveMapConfig(options.mapId ?? options.map ?? DEFAULT_MAP_ID);
+    this.mapId = this.mapConfig.id;
     this.world = null;
     this._built = false;
     this._disposed = false;
@@ -54,7 +57,7 @@ export class Arena {
     this._shiftVersion = 0;
 
     this.root = new THREE.Group();
-    this.root.name = 'NULL_LATTICE_ARENA';
+    this.root.name = `${this.mapId.toUpperCase().replace(/-/g, '_')}_ARENA`;
     this.scene?.add(this.root);
 
     this.staticBodies = [];
@@ -72,6 +75,7 @@ export class Arena {
       lowCylinder: new THREE.CylinderGeometry(1, 1, 1, 12, 1, false),
     };
     this.materials = this._createMaterials();
+    this._applyMapPalette();
     this._animated = {};
   }
 
@@ -87,25 +91,116 @@ export class Arena {
       side: options.side ?? THREE.FrontSide,
     });
     return {
-      foundation: standard(0x090d14, { roughness: 0.9, metalness: 0.35 }),
-      floor: standard(0x19232c, { roughness: 0.8, metalness: 0.58 }),
-      elevated: standard(0x222a36, { roughness: 0.68, metalness: 0.72 }),
-      trim: standard(0x0a7380, { emissive: 0x12c9d6, emissiveIntensity: 2.2 }),
-      structure: standard(0x111822, { roughness: 0.55, metalness: 0.82 }),
-      cover: standard(0x1b2630, { emissive: 0x8d27b7, emissiveIntensity: 0.18 }),
-      bridge: standard(0x14343a, { emissive: 0x16e3ed, emissiveIntensity: 0.65 }),
-      door: standard(0x382b13, { emissive: 0xff9b21, emissiveIntensity: 0.6 }),
-      spire: standard(0x171020, { emissive: 0x842ee5, emissiveIntensity: 1.35 }),
-      objective: standard(0x543b0e, { emissive: 0xffbd32, emissiveIntensity: 2.3 }),
-      hologram: standard(0x19d8e2, {
+      // Mid-value albedos keep traversal readable under every camera angle.
+      // Low-to-medium metalness is intentional: this procedural scene has no
+      // reflection probe, so heavily metallic surfaces would render near-black.
+      foundation: standard(0x283747, { roughness: 0.92, metalness: 0.16 }),
+      floor: standard(0x526a7b, { roughness: 0.84, metalness: 0.2 }),
+      elevated: standard(0x718196, { roughness: 0.72, metalness: 0.28 }),
+      trim: standard(0x3d9ba5, { emissive: 0x087984, emissiveIntensity: 0.9, metalness: 0.32 }),
+      structure: standard(0x455469, { roughness: 0.68, metalness: 0.34 }),
+      cover: standard(0x6c637c, {
+        roughness: 0.76,
+        metalness: 0.22,
+        emissive: 0x5f176f,
+        emissiveIntensity: 0.07,
+      }),
+      bridge: standard(0x4f858b, {
+        roughness: 0.66,
+        metalness: 0.3,
+        emissive: 0x0d9097,
+        emissiveIntensity: 0.34,
+      }),
+      door: standard(0x896c43, {
+        roughness: 0.72,
+        metalness: 0.24,
+        emissive: 0xb45c10,
+        emissiveIntensity: 0.3,
+      }),
+      spire: standard(0x5c526f, {
+        roughness: 0.58,
+        metalness: 0.36,
+        emissive: 0x5d20a0,
+        emissiveIntensity: 0.48,
+      }),
+      objective: standard(0x987b3e, {
+        roughness: 0.62,
+        metalness: 0.26,
+        emissive: 0xd98112,
+        emissiveIntensity: 1.25,
+      }),
+      hologram: standard(0x43e7ed, {
         emissive: 0x19d8e2,
-        emissiveIntensity: 3,
+        emissiveIntensity: 1.85,
         transparent: true,
-        opacity: 0.36,
+        opacity: 0.3,
         side: THREE.DoubleSide,
         roughness: 0.25,
+        metalness: 0.1,
       }),
     };
+  }
+
+  _applyMapPalette() {
+    const palette = this.mapConfig.palette;
+    const set = (key, color, emissive = null) => {
+      if (color != null) this.materials[key].color.setHex(color);
+      if (emissive != null) this.materials[key].emissive.setHex(emissive);
+    };
+    set('foundation', palette.foundation);
+    set('floor', palette.floor);
+    set('elevated', palette.elevated);
+    set('trim', palette.trim, palette.trimEmissive);
+    set('structure', palette.structure);
+    set('cover', palette.cover, palette.coverEmissive);
+    set('bridge', palette.bridge, palette.bridgeEmissive);
+    set('door', palette.door, palette.doorEmissive);
+    set('spire', palette.spire, palette.spireEmissive);
+    set('objective', palette.objective, palette.objectiveEmissive);
+    set('hologram', palette.hologram, palette.hologramEmissive);
+  }
+
+  /**
+   * Selects a data-driven arena variant. A built arena is rebuilt in-place by
+   * default, preserving the THREE.Scene, cannon-es World and Arena instance.
+   * Call this only between runs, after enemies/projectiles have been cleared.
+   */
+  setMap(map = DEFAULT_MAP_ID, options = {}) {
+    if (this._disposed) throw new Error('[Arena] Cannot change a disposed arena.');
+    const next = resolveMapConfig(map);
+    if (!MAP_CONFIGS[next.id]) throw new Error(`[Arena] Unknown map: ${String(map)}`);
+    if (next.id === this.mapId) {
+      if (options.reset !== false) this.reset();
+      return this;
+    }
+    const previousId = this.mapId;
+    const shouldRebuild = options.rebuild ?? this._built;
+    const activeWorld = this.world;
+    if (this._built && !shouldRebuild) {
+      throw new Error('[Arena] A built arena requires { rebuild: true } when changing maps.');
+    }
+    if (this._built) {
+      this._removePhysicsBodies();
+      this._clearVisualChildren(true);
+      this._resetCollections();
+      this._built = false;
+    }
+    this.mapConfig = next;
+    this.mapId = next.id;
+    this.root.name = `${this.mapId.toUpperCase().replace(/-/g, '_')}_ARENA`;
+    this._applyMapPalette();
+    if (shouldRebuild && activeWorld) this.build(activeWorld);
+    this._emit('arena:mapChanged', {
+      previousId,
+      map: this.getMapInfo(),
+      rebuilt: Boolean(shouldRebuild && activeWorld),
+    });
+    return this;
+  }
+
+  getMapInfo() {
+    const { id, name, shortName, description } = this.mapConfig;
+    return { id, name, shortName, description };
   }
 
   build(world) {
@@ -133,6 +228,7 @@ export class Arena {
     this._built = true;
     this.reset();
     this._emit('arena:built', {
+      map: this.getMapInfo(),
       spawnCount: this.enemySpawnPoints.length,
       waypointCount: this.waypoints.length,
       colliderCount: this.staticBodies.length,
@@ -148,41 +244,57 @@ export class Arena {
     this.objectivePoints.length = 0;
     this.sectors.length = 0;
     this.navigationEdges.length = 0;
+    this.ringDefinitions = [];
     this.shiftElements = { bridge: [], doors: [], cover: [] };
     this._animated = {};
   }
 
-  _clearVisualChildren() {
+  _clearVisualChildren(disposeGeometry = false) {
+    if (disposeGeometry) {
+      const sharedGeometry = new Set(Object.values(this.geometries));
+      const disposedGeometry = new Set();
+      this.root.traverse((child) => {
+        if (!child.geometry || sharedGeometry.has(child.geometry) || disposedGeometry.has(child.geometry)) return;
+        disposedGeometry.add(child.geometry);
+        child.geometry.dispose();
+      });
+    }
     while (this.root.children.length) this.root.remove(this.root.children[0]);
   }
 
   _buildFoundation() {
-    const foundation = new THREE.Mesh(
-      new THREE.CylinderGeometry(47, 47, 1.2, 48),
-      this.materials.foundation,
-    );
+    const config = this.mapConfig.foundation;
+    const foundationGeometry = config.shape === 'box'
+      ? this.geometries.box
+      : new THREE.CylinderGeometry(config.radius, config.radius, config.depth, 48);
+    const foundation = new THREE.Mesh(foundationGeometry, this.materials.foundation);
     foundation.name = 'FOUNDATION_DISC';
-    foundation.position.y = -1.7;
+    if (config.shape === 'box') foundation.scale.fromArray(config.size);
+    foundation.position.y = config.y;
     foundation.receiveShadow = true;
     this.root.add(foundation);
-    this._addStaticBox('foundation-collider', new THREE.Vector3(92, 1.2, 92), new THREE.Vector3(0, -1.7, 0));
+    const colliderSize = config.shape === 'box'
+      ? new THREE.Vector3().fromArray(config.size)
+      : new THREE.Vector3(config.radius * 2 - 2, config.depth, config.radius * 2 - 2);
+    this._addStaticBox('foundation-collider', colliderSize, new THREE.Vector3(0, config.y, 0));
 
-    const trenchGlow = new THREE.Mesh(
-      new THREE.TorusGeometry(43.5, 0.09, 5, 96),
-      this.materials.trim,
-    );
-    trenchGlow.name = 'BOUNDARY_GLOW';
-    trenchGlow.rotation.x = Math.PI / 2;
-    trenchGlow.position.y = -1.03;
-    this.root.add(trenchGlow);
+    if (config.glowRadius > 0) {
+      const trenchGlow = new THREE.Mesh(
+        new THREE.TorusGeometry(config.glowRadius, 0.09, 5, 96),
+        this.materials.trim,
+      );
+      trenchGlow.name = 'BOUNDARY_GLOW';
+      trenchGlow.rotation.x = Math.PI / 2;
+      trenchGlow.position.y = config.y + config.depth * 0.5 + 0.07;
+      this.root.add(trenchGlow);
+    }
   }
 
   _buildRingRoutes() {
-    const ringDefinitions = [
-      { radius: 10, width: 5, segments: 16, top: 0.05, material: this.materials.floor },
-      { radius: 21, width: 5.5, segments: 24, top: 2.55, material: this.materials.elevated },
-      { radius: 35, width: 6.5, segments: 32, top: 0.05, material: this.materials.floor },
-    ];
+    const ringDefinitions = this.mapConfig.rings.map((ring) => ({
+      ...ring,
+      material: this.materials[ring.material] ?? this.materials.floor,
+    }));
     this.ringDefinitions = ringDefinitions;
 
     for (let ringIndex = 0; ringIndex < ringDefinitions.length; ringIndex += 1) {
@@ -190,7 +302,7 @@ export class Arena {
       const segmentLength = (TAU * ring.radius / ring.segments) * 1.06;
       const transforms = [];
       for (let index = 0; index < ring.segments; index += 1) {
-        const angle = index / ring.segments * TAU;
+        const angle = index / ring.segments * TAU + (ring.angleOffset ?? 0);
         transforms.push({
           name: `ring-${ringIndex}-${index}`,
           size: new THREE.Vector3(ring.width, 0.9, segmentLength),
@@ -217,86 +329,78 @@ export class Arena {
   }
 
   _buildVerticalConnections() {
-    const rampTransforms = [];
-    for (let sector = 0; sector < 6; sector += 1) {
-      const angle = sector / 6 * TAU;
-      const length = 7.2;
-      const rise = 2.5;
-      const slope = -Math.atan2(rise, length);
-      const radius = 15.5;
-      rampTransforms.push({
-        name: `inner-ramp-${sector}`,
-        size: new THREE.Vector3(3.6, 0.65, Math.hypot(length, rise)),
-        position: new THREE.Vector3(Math.cos(angle) * radius, 1.25, Math.sin(angle) * radius),
-        rotation: new THREE.Euler(slope, Math.PI / 2 - angle, 0, 'YXZ'),
-        userData: { arenaSurface: true, ramp: true },
-      });
+    for (const connection of this.mapConfig.connections) {
+      const transforms = [];
+      for (let index = 0; index < connection.count; index += 1) {
+        const angle = (index + (connection.angleOffset ?? 0)) / connection.count * TAU;
+        const slope = -Math.atan2(connection.rise, connection.length);
+        transforms.push({
+          name: `${connection.id}-${index}`,
+          size: new THREE.Vector3(connection.width, connection.depth, Math.hypot(connection.length, connection.rise)),
+          position: new THREE.Vector3(
+            Math.cos(angle) * connection.radius,
+            connection.y,
+            Math.sin(angle) * connection.radius,
+          ),
+          rotation: new THREE.Euler(slope, Math.PI / 2 - angle, 0, 'YXZ'),
+          userData: { arenaSurface: true, ramp: true },
+        });
+      }
+      if (transforms.length) {
+        this._addInstancedBoxes(
+          `${connection.id.toUpperCase()}_ROUTES`,
+          transforms,
+          this.materials[connection.material] ?? this.materials.elevated,
+        );
+      }
     }
-    this._addInstancedBoxes('ASCENT_RAMPS', rampTransforms, this.materials.elevated);
-
-    const bridgeTransforms = [];
-    for (let sector = 0; sector < 6; sector += 1) {
-      const angle = (sector + 0.5) / 6 * TAU;
-      const length = 9;
-      const rise = -2.5;
-      const slope = -Math.atan2(rise, length);
-      const radius = 28;
-      bridgeTransforms.push({
-        name: `outer-ramp-${sector}`,
-        size: new THREE.Vector3(3.8, 0.65, Math.hypot(length, rise)),
-        position: new THREE.Vector3(Math.cos(angle) * radius, 1.25, Math.sin(angle) * radius),
-        rotation: new THREE.Euler(slope, Math.PI / 2 - angle, 0, 'YXZ'),
-        userData: { arenaSurface: true, ramp: true },
-      });
-    }
-    this._addInstancedBoxes('DESCENT_RAMPS', bridgeTransforms, this.materials.floor);
   }
 
   _buildSectorArchitecture() {
+    const config = this.mapConfig.sectors;
+    const boundary = this.mapConfig.foundation.boundary;
     const outerPanels = [];
     const pillars = [];
     const staticCover = [];
-    for (let index = 0; index < 40; index += 1) {
-      const angle = index / 40 * TAU;
+    for (let index = 0; index < boundary.count; index += 1) {
+      const angle = index / boundary.count * TAU;
       outerPanels.push({
         name: `boundary-${index}`,
-        size: new THREE.Vector3(7.2, 5.5, 0.8),
-        position: new THREE.Vector3(Math.cos(angle) * 45.2, 1.7, Math.sin(angle) * 45.2),
+        size: new THREE.Vector3().fromArray(boundary.size),
+        position: new THREE.Vector3(Math.cos(angle) * boundary.radius, boundary.y, Math.sin(angle) * boundary.radius),
         rotation: new THREE.Euler(0, -angle - Math.PI / 2, 0),
         userData: { arenaWall: true },
       });
     }
-    this._addInstancedBoxes('BOUNDARY_PANELS', outerPanels, this.materials.structure);
+    if (outerPanels.length) this._addInstancedBoxes('BOUNDARY_PANELS', outerPanels, this.materials.structure);
 
-    for (let sector = 0; sector < 6; sector += 1) {
-      const centerAngle = sector / 6 * TAU;
+    for (let sector = 0; sector < config.count; sector += 1) {
+      const centerAngle = sector / config.count * TAU;
       this.sectors.push({
         id: `sector-${sector}`,
         index: sector,
-        name: ['INGRESS', 'RELAY', 'FRACTURE', 'FOUNDRY', 'ARCHIVE', 'NULL'][sector],
-        center: new THREE.Vector3(Math.cos(centerAngle) * 27, 0.5, Math.sin(centerAngle) * 27),
+        name: config.names[sector],
+        center: new THREE.Vector3(Math.cos(centerAngle) * config.radius, 0.5, Math.sin(centerAngle) * config.radius),
         angle: centerAngle,
       });
 
-      for (const radius of [16.5, 30.5, 40.5]) {
-        const offset = (radius + sector) % 2 ? 0.08 : -0.08;
-        const angle = centerAngle + offset;
+      for (const [bandIndex, band] of config.pillarBands.entries()) {
+        const angle = centerAngle + (band.angleOffset ?? (((bandIndex + sector) % 2) ? 0.08 : -0.08));
         pillars.push({
-          name: `pillar-${sector}-${radius}`,
-          size: new THREE.Vector3(1.4, radius === 40.5 ? 7.5 : 5.4, 1.4),
-          position: new THREE.Vector3(Math.cos(angle) * radius, radius === 40.5 ? 2.75 : 2, Math.sin(angle) * radius),
+          name: `pillar-${sector}-${bandIndex}`,
+          size: new THREE.Vector3().fromArray(band.size),
+          position: new THREE.Vector3(Math.cos(angle) * band.radius, band.y, Math.sin(angle) * band.radius),
           rotation: new THREE.Euler(0, -angle, 0),
           userData: { arenaWall: true, sector },
         });
       }
 
-      for (let coverIndex = 0; coverIndex < 3; coverIndex += 1) {
-        const angle = centerAngle + (coverIndex - 1) * 0.22;
-        const radius = coverIndex === 1 ? 12.3 : 37;
+      for (const [coverIndex, band] of config.coverBands.entries()) {
+        const angle = centerAngle + (band.angleOffset ?? 0);
         staticCover.push({
           name: `static-cover-${sector}-${coverIndex}`,
-          size: new THREE.Vector3(3.4, coverIndex === 1 ? 1.6 : 2.2, 1.05),
-          position: new THREE.Vector3(Math.cos(angle) * radius, coverIndex === 1 ? 0.8 : 1.1, Math.sin(angle) * radius),
+          size: new THREE.Vector3().fromArray(band.size),
+          position: new THREE.Vector3(Math.cos(angle) * band.radius, band.y, Math.sin(angle) * band.radius),
           rotation: new THREE.Euler(0, -angle - Math.PI / 2, 0),
           userData: { arenaWall: true, cover: true, sector },
         });
@@ -304,54 +408,88 @@ export class Arena {
 
       const beacon = new THREE.Mesh(this.geometries.cylinder, this.materials.objective);
       beacon.name = `SECTOR_BEACON_${sector}`;
-      beacon.scale.set(0.14, 2.7, 0.14);
-      beacon.position.set(Math.cos(centerAngle) * 42.4, 2.2, Math.sin(centerAngle) * 42.4);
+      beacon.scale.fromArray(config.beacon.scale);
+      beacon.position.set(
+        Math.cos(centerAngle) * config.beacon.radius,
+        config.beacon.y,
+        Math.sin(centerAngle) * config.beacon.radius,
+      );
       this.root.add(beacon);
     }
-    this._addInstancedBoxes('BOUNDARY_PILLARS', pillars, this.materials.structure);
-    this._addInstancedBoxes('STATIC_COVER', staticCover, this.materials.cover);
+    if (pillars.length) this._addInstancedBoxes('BOUNDARY_PILLARS', pillars, this.materials.structure);
+    if (staticCover.length) this._addInstancedBoxes('STATIC_COVER', staticCover, this.materials.cover);
+    this._buildConfiguredBoxes();
+  }
+
+  _buildConfiguredBoxes() {
+    for (const box of this.mapConfig.geometryBoxes) {
+      const size = new THREE.Vector3().fromArray(box.size);
+      const position = new THREE.Vector3().fromArray(box.position);
+      const rotation = new THREE.Euler(0, box.rotationY ?? 0, 0);
+      const mesh = new THREE.Mesh(this.geometries.box, this.materials[box.material] ?? this.materials.structure);
+      mesh.name = box.name;
+      mesh.scale.copy(size);
+      mesh.position.copy(position);
+      mesh.rotation.copy(rotation);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this.root.add(mesh);
+      this._addStaticBox(box.name.toLowerCase(), size, position, mesh.quaternion, {
+        arenaWall: box.wall ?? false,
+        arenaSurface: box.surface ?? false,
+        cover: box.material === 'cover',
+      });
+    }
   }
 
   _buildCentralSpire() {
+    const config = this.mapConfig.central;
+    const center = new THREE.Vector3(config.position[0], 0, config.position[1]);
     const dais = new THREE.Mesh(
-      new THREE.CylinderGeometry(5.1, 5.6, 1.1, 12),
+      new THREE.CylinderGeometry(config.dais.radius, config.dais.bottomRadius, config.dais.height, 12),
       this.materials.structure,
     );
     dais.name = 'PHASE_DAIS';
-    dais.position.y = 0.15;
+    dais.position.set(center.x, config.dais.y, center.z);
     dais.receiveShadow = true;
     dais.castShadow = true;
     this.root.add(dais);
-    this._addStaticCylinder('phase-dais', 5.1, 1.1, new THREE.Vector3(0, 0.15, 0));
+    this._addStaticCylinder('phase-dais', config.dais.radius, config.dais.height, dais.position);
 
     const core = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.25, 2.2, 14, 10, 1, false),
+      new THREE.CylinderGeometry(config.core.topRadius, config.core.bottomRadius, config.core.height, 10, 1, false),
       this.materials.spire,
     );
     core.name = 'PHASE_SPIRE';
-    core.position.y = 7.65;
+    core.position.set(center.x, config.core.y, center.z);
     core.castShadow = true;
     this.root.add(core);
-    this._addStaticCylinder('phase-spire', 1.65, 14, new THREE.Vector3(0, 7.65, 0));
+    this._addStaticCylinder('phase-spire', config.core.colliderRadius, config.core.height, core.position);
 
     const haloGroup = new THREE.Group();
     haloGroup.name = 'PHASE_HALOS';
-    for (let index = 0; index < 4; index += 1) {
+    for (let index = 0; index < config.halos.count; index += 1) {
       const halo = new THREE.Mesh(
-        new THREE.TorusGeometry(2.4 + index * 0.55, 0.055, 5, 48),
+        new THREE.TorusGeometry(config.halos.startRadius + index * config.halos.radiusStep, 0.055, 5, 48),
         index % 2 ? this.materials.hologram : this.materials.trim,
       );
-      halo.rotation.x = Math.PI / 2 + (index - 1.5) * 0.14;
-      halo.position.y = 3.5 + index * 2.15;
+      halo.rotation.x = Math.PI / 2 + (index - (config.halos.count - 1) * 0.5) * 0.14;
+      halo.position.y = config.halos.startY + index * config.halos.yStep;
       haloGroup.add(halo);
     }
+    haloGroup.position.set(center.x, 0, center.z);
     this.root.add(haloGroup);
     this._animated.spire = core;
     this._animated.halos = haloGroup;
 
-    for (let index = 0; index < 3; index += 1) {
-      const angle = index / 3 * TAU + Math.PI / 6;
-      const point = new THREE.Vector3(Math.cos(angle) * 7.7, 0.65, Math.sin(angle) * 7.7);
+    for (const [index, objective] of config.objectives.entries()) {
+      const point = objective.position
+        ? new THREE.Vector3().fromArray(objective.position)
+        : new THREE.Vector3(
+          center.x + Math.cos(objective.angle) * objective.radius,
+          objective.y,
+          center.z + Math.sin(objective.angle) * objective.radius,
+        );
       this.objectivePoints.push({
         id: `phase-node-${index}`,
         type: 'phase-node',
@@ -374,23 +512,646 @@ export class Arena {
   }
 
   _buildShiftBridges() {
-    for (let index = 0; index < 2; index += 1) {
-      const angle = index * Math.PI;
-      const activePosition = new THREE.Vector3(Math.cos(angle) * 15.5, 1.28, Math.sin(angle) * 15.5);
+    const entries = this.mapConfig.shifts.bridges.entries;
+    for (const [index, entry] of entries.entries()) {
+      const angle = entry.angle ?? 0;
+      const activePosition = entry.position
+        ? new THREE.Vector3().fromArray(entry.position)
+        : new THREE.Vector3(Math.cos(angle) * entry.radius, entry.activeY, Math.sin(angle) * entry.radius);
+      activePosition.y = entry.activeY;
       const inactivePosition = activePosition.clone();
-      inactivePosition.y = -4.2;
+      inactivePosition.y = entry.inactiveY;
       const mesh = new THREE.Mesh(this.geometries.box, this.materials.bridge);
       mesh.name = `SHIFT_BRIDGE_${index}`;
-      mesh.scale.set(4.4, 0.62, 6.4);
-      mesh.rotation.y = Math.PI / 2 - angle;
+      mesh.scale.fromArray(entry.size);
+      mesh.rotation.y = entry.rotationY ?? Math.PI / 2 - angle;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.root.add(mesh);
 
-      const states = index === 0
+      const states = entry.startActive
         ? [{ position: activePosition }, { position: inactivePosition }]
         : [{ position: inactivePosition }, { position: activePosition }];
       const body = this._createBoxBody(
         `shift-bridge-${index}`,
-        new THREE.Vector3(4.4, 0.62, 6.4),
-        stÛ½{¶‰žËkºwµç@€€€Ñ¡¥Ì¹}…¹¥µ…Ñ•¹¡…±½Ì¹É½Ñ…Ñ¥½¸¹ä€´ô‘Ð€¨€À¸Ðì(€€€€€Ñ¡¥Ì¹}…¹¥µ…Ñ•¹¡…±½Ì¹¡¥±‘É•¸¹™½É…  ¡¡…±¼°¥¹‘•à¤€ôøì(€€€€€€€¡…±¼¹É½Ñ…Ñ¥½¸¹è€¬ô‘Ð€¨€¡¥¹‘•à€”€È€ü€´À¸ÈÜ€è€À¸ÌÄ¤ì(€€€€€ô¤ì(€€€ô(€€€Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¹¡½±½É…´¹½Á…¥Ñä€ô€À¸Èà€¬Íµ½½Ñ¡AÕ±Í”¡Ñ¡¥Ì¹}•±…ÁÍ•€¨€À¸ÌÔ¤€¨€À¸ÄØì((€€€½¹ÍÐÁ•¹‘¥¹œ€ôÑ¡¥Ì¹}Á•¹‘¥¹M¡¥™Ðì(€€€¥˜€ …Á•¹‘¥¹œ¤É•ÑÕÉ¸ì(€€€Á•¹‘¥¹œ¹•±…ÁÍ•€ô5…Ñ ¹µ¥¸¡Á•¹‘¥¹œ¹‘ÕÉ…Ñ¥½¸°Á•¹‘¥¹œ¹•±…ÁÍ•€¬‘Ð¤ì(€€€½¹ÍÐÁÉ½É•ÍÌ€ôÁ•¹‘¥¹œ¹‘ÕÉ…Ñ¥½¸€ø€À€üÁ•¹‘¥¹œ¹•±…ÁÍ•€¼Á•¹‘¥¹œ¹‘ÕÉ…Ñ¥½¸€è€Äì(€€€½¹ÍÐÁÕ±Í”€ô€À¸Ô€¬Íµ½½Ñ¡AÕ±Í”¡Ñ¡¥Ì¹}•±…ÁÍ•¤€¨€ Ä€¬ÁÉ½É•ÍÌ€¨€È¸È¤ì(€€€Ñ¡¥Ì¹}Í•ÑQ•±•É…Á¡%¹Ñ•¹Í¥Ñä¡Á•¹‘¥¹œ¹ÑåÁ”°ÁÕ±Í”¤ì((€€€¥˜€¡Á•¹‘¥¹œ¹•±…ÁÍ•€øôÁ•¹‘¥¹œ¹‘ÕÉ…Ñ¥½¸€˜˜€…Á•¹‘¥¹œ¹É•…‘ä¤ì(€€€€€Á•¹‘¥¹œ¹É•…‘ä€ôÑÉÕ”ì(€€€€€Ñ¡¥Ì¹}•µ¥Ð …É•¹„éÍ¡¥™ÑI•…‘äœ°ìÑåÁ”èÁ•¹‘¥¹œ¹ÑåÁ”ô¤ì(€€€ô(€€€¥˜€¡Á•¹‘¥¹œ¹É•…‘ä€˜˜Ñ¡¥Ì¹…ÕÑ½ÁÁ±åM¡¥™ÑÌ¤ì(€€€€€½¹ÍÐÑÉ…­•‘A½Í¥Ñ¥½¸€ôÁ±…å•ÉA½Í¥Ñ¥½¸€üüÑ¡¥Ì¹•ÑA±…å•ÉA½Í¥Ñ¥½¸ü¸ ¤€üü¹Õ±°ì(€€€€€Ñ¡¥Ì¹…ÁÁ±åM¡¥™Ð¡Á•¹‘¥¹œ¹ÑåÁ”°ÑÉ…­•‘A½Í¥Ñ¥½¸¤ì(€€€ô(€ô((€…ÁÁ±åM¡¥™Ð¡ÑåÁ”€ôÑ¡¥Ì¹}Á•¹‘¥¹M¡¥™Ðü¹ÑåÁ”€üü€…±°œ°Á±…å•ÉA½Í¥Ñ¥½¸€ô¹Õ±°¤ì(€€€¥˜€ …Ñ¡¥Ì¹}‰Õ¥±Ð¤É•ÑÕÉ¸™…±Í”ì(€€€½¹ÍÐ¹½Éµ…±¥é•€ô¹½Éµ…±¥é•M¡¥™ÑQåÁ”¡ÑåÁ”¤ì(€€€½¹ÍÐÉ•½É‘Ì€ôÑ¡¥Ì¹}…™™•Ñ•‘M¡¥™ÑI•½É‘Ì¡¹½Éµ…±¥é•¤ì(€€€¥˜€ …É•½É‘Ì¹±•¹Ñ ¤É•ÑÕÉ¸™…±Í”ì(€€€½¹ÍÐÁ±…å•È€ôÁ±…å•ÉA½Í¥Ñ¥½¸€ü…ÍQ¡É••Y•Ñ½È¡Á±…å•ÉA½Í¥Ñ¥½¸¤€è¹Õ±°ì(€€€½¹ÍÐÍ­¥ÁÁ•€ômtì(€€€±•Ð…ÁÁ±¥•€ô€Àì(€€€™½È€¡½¹ÍÐÉ•½É½˜É•½É‘Ì¤ì(€€€€€¥˜€¡Á±…å•È€˜˜Ñ¡¥Ì¹}Ý½Õ±‘¹‘…¹•ÉA±…å•È¡É•½É°Á±…å•È¤¤ì(€€€€€€€Í­¥ÁÁ•¹ÁÕÍ ¡É•½É¹¥¤ì(€€€€€€€½¹Ñ¥¹Õ”ì(€€€€€ô(€€€€€Ñ¡¥Ì¹}Í•ÑM¡¥™ÑI•½É‘MÑ…Ñ”¡É•½É°É•½É¹ÍÑ…Ñ”€ü€À€è€Ä¤ì(€€€€€…ÁÁ±¥•€¬ô€Äì(€€€ô(€€€¥˜€¡Í­¥ÁÁ•¹±•¹Ñ ¤ì(€€€€€Ñ¡¥Ì¹}•µ¥Ð …É•¹„éÍ¡¥™Ñ	±½­•œ°ì(€€€€€€€ÑåÁ”è¹½Éµ…±¥é•°(€€€€€€€É•…Í½¸è€Á±…å•Èµ½Ù•É±…Àœ°(€€€€€€€Í­¥ÁÁ•°(€€€€€€€Á…ÉÑ¥…°è…ÁÁ±¥•€ø€À°(€€€€€ô¤ì(€€€ô(€€€¥˜€ ……ÁÁ±¥•¤ì(€€€€€Ñ¡¥Ì¹}Á•¹‘¥¹M¡¥™Ð€ô¹Õ±°ì(€€€€€Ñ¡¥Ì¹}Í•ÑQ•±•É…Á¡%¹Ñ•¹Í¥Ñä …±°œ°€À¤ì(€€€€€É•ÑÕÉ¸™…±Í”ì(€€€ô(€€€Ñ¡¥Ì¹}Íå¹9…Ù¥…Ñ¥½¹MÑ…Ñ” ¤ì(€€€Ñ¡¥Ì¹}Í¡¥™ÑY•ÉÍ¥½¸€¬ô€Äì(€€€Ñ¡¥Ì¹}Á•¹‘¥¹M¡¥™Ð€ô¹Õ±°ì(€€€Ñ¡¥Ì¹}Í•ÑQ•±•É…Á¡%¹Ñ•¹Í¥Ñä …±°œ°€À¤ì(€€€Ñ¡¥Ì¹Ý½É±¹‰É½…‘Á¡…Í”¹‘¥ÉÑä€ôÑÉÕ”ì(€€€Ñ¡¥Ì¹}•µ¥Ð …É•¹„éÍ¡¥™ÑÁÁ±¥•œ°ì(€€€€€ÑåÁ”è¹½Éµ…±¥é•°(€€€€€Ù•ÉÍ¥½¸èÑ¡¥Ì¹}Í¡¥™ÑY•ÉÍ¥½¸°(€€€€€…ÁÁ±¥•°(€€€€€Í­¥ÁÁ•°(€€€ô¤ì(€€€É•ÑÕÉ¸ÑÉÕ”ì(€ô((€}…™™•Ñ•‘M¡¥™ÑI•½É‘Ì¡ÑåÁ”¤ì(€€€¥˜€¡ÑåÁ”€ôôô€…±°œ¤É•ÑÕÉ¸=‰©•Ð¹Ù…±Õ•Ì¡Ñ¡¥Ì¹Í¡¥™Ñ±•µ•¹ÑÌ¤¹™±…Ð ¤ì(€€€É•ÑÕÉ¸Ñ¡¥Ì¹Í¡¥™Ñ±•µ•¹ÑÍmÑåÁ•t€üümtì(€ô((€}Ý½Õ±‘¹‘…¹•ÉA±…å•È¡É•½É°Á±…å•È¤ì(€€€½¹ÍÐ¹•áÑMÑ…Ñ”€ôÉ•½É¹ÍÑ…Ñ•ÍmÉ•½É¹ÍÑ…Ñ”€ü€À€è€Åtì(€€€½¹ÍÐÕÉÉ•¹ÑMÑ…Ñ”€ôÉ•½É¹ÍÑ…Ñ•ÍmÉ•½É¹ÍÑ…Ñ•tì(€€€½¹ÍÐÍ¥é”€ô¹•áÑMÑ…Ñ”¹Í…±”ì(€€€½¹ÍÐÑ…É•Ñ!½É¥é½¹Ñ…°€ô¡½É¥é½¹Ñ…±¥ÍÑ…¹•MÅÕ…É•¡¹•áÑMÑ…Ñ”¹Á½Í¥Ñ¥½¸°Á±…å•È¤ì(€€€½¹ÍÐÑ…É•ÑI…‘¥ÕÌ€ô5…Ñ ¹µ…à¡Í¥é”¹à°Í¥é”¹è¤€¨€À¸Ôà€¬€À¸ØÔì(€€€½¹ÍÐÑ…É•ÑY•ÉÑ¥…°€ô5…Ñ ¹…‰Ì¡¹•áÑMÑ…Ñ”¹Á½Í¥Ñ¥½¸¹ä€´Á±…å•È¹ä¤€ðÍ¥é”¹ä€¨€À¸Ô€¬€Ä¸Äì(€€€¥˜€¡Ñ…É•Ñ!½É¥é½¹Ñ…°€ðÑ…É•ÑI…‘¥ÕÌ€¨Ñ…É•ÑI…‘¥ÕÌ€˜˜Ñ…É•ÑY•ÉÑ¥…°¤É•ÑÕÉ¸ÑÉÕ”ì((€€€€¼¼9•Ù•ÈÉ•ÑÉ…Ð„‰É¥‘”™É½´‘¥É•Ñ±ä‰•¹•…Ñ Ñ¡”…ÁÍÕ±”¸(€€€¥˜€¡É•½É¹­¥¹€ôôô€‰É¥‘”œ€˜˜¹•áÑMÑ…Ñ”¹Á½Í¥Ñ¥½¸¹ä€ð€´È¤ì(€€€€€½¹ÍÐÕÉÉ•¹ÑI…‘¥ÕÌ€ô5…Ñ ¹µ…à¡ÕÉÉ•¹ÑMÑ…Ñ”¹Í…±”¹à°ÕÉÉ•¹ÑMÑ…Ñ”¹Í…±”¹è¤€¨€À¸ÔÔì(€€€€€¥˜€¡¡½É¥é½¹Ñ…±¥ÍÑ…¹•MÅÕ…É•¡ÕÉÉ•¹ÑMÑ…Ñ”¹Á½Í¥Ñ¥½¸°Á±…å•È¤€ðÕÉÉ•¹ÑI…‘¥ÕÌ€¨ÕÉÉ•¹ÑI…‘¥ÕÌ(€€€€€€€€˜˜Á±…å•È¹ä€øÕÉÉ•¹ÑMÑ…Ñ”¹Á½Í¥Ñ¥½¸¹ä(€€€€€€€€˜˜Á±…å•È¹ä€ðÕÉÉ•¹ÑMÑ…Ñ”¹Á½Í¥Ñ¥½¸¹ä€¬€È¸È¤É•ÑÕÉ¸ÑÉÕ”ì(€€€ô(€€€É•ÑÕÉ¸™…±Í”ì(€ô((€}Í•ÑM¡¥™ÑI•½É‘MÑ…Ñ”¡É•½É°ÍÑ…Ñ•%¹‘•à¤ì(€€€½¹ÍÐÍÑ…Ñ”€ôÉ•½É¹ÍÑ…Ñ•ÍmÍÑ…Ñ•%¹‘•átì(€€€É•½É¹ÍÑ…Ñ”€ôÍÑ…Ñ•%¹‘•àì(€€€¥˜€¡É•½É¹¥¹ÍÑ…¹•%¹‘•à€ôô¹Õ±°¤ì(€€€€€É•½É¹µ•Í ¹Á½Í¥Ñ¥½¸¹½Áä¡ÍÑ…Ñ”¹Á½Í¥Ñ¥½¸¤ì(€€€€€É•½É¹µ•Í ¹ÅÕ…Ñ•É¹¥½¸¹½Áä¡ÍÑ…Ñ”¹ÅÕ…Ñ•É¹¥½¸¤ì(€€€€€É•½É¹µ•Í ¹Í…±”¹½Áä¡ÍÑ…Ñ”¹Í…±”¤ì(€€€€€É•½É¹µ•Í ¹ÕÁ‘…Ñ•5…ÑÉ¥á]½É± ¤ì(€€€ô•±Í”ì(€€€€€½¹ÍÐµ…ÑÉ¥à€ô¹•ÜQ!I¹5…ÑÉ¥àÐ ¤¹½µÁ½Í”¡ÍÑ…Ñ”¹Á½Í¥Ñ¥½¸°ÍÑ…Ñ”¹ÅÕ…Ñ•É¹¥½¸°ÍÑ…Ñ”¹Í…±”¤ì(€€€€€É•½É¹µ•Í ¹Í•Ñ5…ÑÉ¥áÐ¡É•½É¹¥¹ÍÑ…¹•%¹‘•à°µ…ÑÉ¥à¤ì(€€€€€É•½É¹µ•Í ¹¥¹ÍÑ…¹•5…ÑÉ¥à¹¹••‘ÍUÁ‘…Ñ”€ôÑÉÕ”ì(€€€ô(€€€É•½É¹‰½‘ä¹Á½Í¥Ñ¥½¸¹Í•Ð¡ÍÑ…Ñ”¹Á½Í¥Ñ¥½¸¹à°ÍÑ…Ñ”¹Á½Í¥Ñ¥½¸¹ä°ÍÑ…Ñ”¹Á½Í¥Ñ¥½¸¹è¤ì(€€€É•½É¹‰½‘ä¹ÅÕ…Ñ•É¹¥½¸¹Í•Ð (€€€€€ÍÑ…Ñ”¹ÅÕ…Ñ•É¹¥½¸¹à°(€€€€€ÍÑ…Ñ”¹ÅÕ…Ñ•É¹¥½¸¹ä°(€€€€€ÍÑ…Ñ”¹ÅÕ…Ñ•É¹¥½¸¹è°(€€€€€ÍÑ…Ñ”¹ÅÕ…Ñ•É¹¥½¸¹Ü°(€€€€¤ì(€€€É•½É¹‰½‘ä¹……‰‰9••‘ÍUÁ‘…Ñ”€ôÑÉÕ”ì(€€€É•½É¹‰½‘ä¹ÕÁ‘…Ñ•	 ¤ì(€ô((€}Í•ÑQ•±•É…Á¡%¹Ñ•¹Í¥Ñä¡ÑåÁ”°¥¹Ñ•¹Í¥Ñä¤ì(€€€½¹ÍÐ­¥¹‘Ì€ôÑåÁ”€ôôô€…±°œ€ül‰É¥‘”œ°€‘½½ÉÌœ°€½Ù•Èt€èmÑåÁ•tì(€€€¥˜€¡­¥¹‘Ì¹¥¹±Õ‘•Ì ‰É¥‘”œ¤¤Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¹‰É¥‘”¹•µ¥ÍÍ¥Ù•%¹Ñ•¹Í¥Ñä€ô€À¸ØÔ€¬¥¹Ñ•¹Í¥Ñä€¨€Ä¸Øì(€€€¥˜€¡­¥¹‘Ì¹¥¹±Õ‘•Ì ‘½½ÉÌœ¤¤Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¹‘½½È¹•µ¥ÍÍ¥Ù•%¹Ñ•¹Í¥Ñä€ô€À¸Ø€¬¥¹Ñ•¹Í¥Ñä€¨€Ä¸àì(€€€¥˜€¡­¥¹‘Ì¹¥¹±Õ‘•Ì ½Ù•Èœ¤¤Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¹½Ù•È¹•µ¥ÍÍ¥Ù•%¹Ñ•¹Í¥Ñä€ô€À¸Äà€¬¥¹Ñ•¹Í¥Ñä€¨€Ä¸Èì(€€€¥˜€¡¥¹Ñ•¹Í¥Ñä€ôôô€À¤ì(€€€€€Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¹‰É¥‘”¹•µ¥ÍÍ¥Ù•%¹Ñ•¹Í¥Ñä€ô€À¸ØÔì(€€€€€Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¹‘½½È¹•µ¥ÍÍ¥Ù•%¹Ñ•¹Í¥Ñä€ô€À¸Øì(€€€€€Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¹½Ù•È¹•µ¥ÍÍ¥Ù•%¹Ñ•¹Í¥Ñä€ô€À¸Äàì(€€€ô(€ô((€}Íå¹9…Ù¥…Ñ¥½¹MÑ…Ñ” ¤ì(€€€½¹ÍÐ•…ÍÑ¹…‰±•€ôÑ¡¥Ì¹Í¡¥™Ñ±•µ•¹ÑÌ¹‰É¥‘•lÁtü¹ÍÑ…Ñ”€ôôô€Àì(€€€½¹ÍÐÝ•ÍÑ¹…‰±•€ôÑ¡¥Ì¹Í¡¥™Ñ±•µ•¹ÑÌ¹‰É¥‘•lÅtü¹ÍÑ…Ñ”€ôôô€Äì(€€€™½È€¡½¹ÍÐ•‘”½˜Ñ¡¥Ì¹¹…Ù¥…Ñ¥½¹‘•Ì¤ì(€€€€€¥˜€¡•‘”¹­¥¹€ôôô€‰É¥‘”µ•…ÍÐœ¤•‘”¹•¹…‰±•€ô•…ÍÑ¹…‰±•ì(€€€€€¥˜€¡•‘”¹­¥¹€ôôô€‰É¥‘”µÝ•ÍÐœ¤•‘”¹•¹…‰±•€ôÝ•ÍÑ¹…‰±•ì(€€€ô(€ô((€•ÑM…™•A±…å•ÉMÁ…Ý¸ ¤ì(€€€¥˜€ …Ñ¡¥Ì¹ÍÁ…Ý¹A½¥¹ÑÌ¹±•¹Ñ ¤É•ÑÕÉ¸¹•ÜQ!I¹Y•Ñ½ÈÌ À°€Ä¸ÀÔ°€ÌÔ¤ì(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÁ…Ý¹A½¥¹ÑÍlÁt¹±½¹” ¤ì(€ô((€•Ñ¹•µåMÁ…Ý¸¡Á±…å•ÉA½Í¥Ñ¥½¸°…µ•É…½ÉÝ…É¤ì(€€€¥˜€ …Ñ¡¥Ì¹•¹•µåMÁ…Ý¹A½¥¹ÑÌ¹±•¹Ñ ¤É•ÑÕÉ¸¹•ÜQ!I¹Y•Ñ½ÈÌ À°€À¸ÀÔ°€´ÌÔ¤ì(€€€½¹ÍÐÁ±…å•È€ô…ÍQ¡É••Y•Ñ½È¡Á±…å•ÉA½Í¥Ñ¥½¸¤ì(€€€½¹ÍÐ™½ÉÝ…É€ô…ÍQ¡É••Y•Ñ½È¡…µ•É…½ÉÝ…É°¹•ÜQ!I¹Y•Ñ½ÈÌ À°€À°€´Ä¤¤¹Í•Ñd À¤¹¹½Éµ…±¥é” ¤ì(€€€½¹ÍÐ…¹‘¥‘…Ñ•Ì€ôÑ¡¥Ì¹•¹•µåMÁ…Ý¹A½¥¹ÑÌ¹µ…À ¡Á½Í¥Ñ¥½¸°¥¹‘•à¤€ôøì(€€€€€½¹ÍÐÑ½MÁ…Ý¸€ôÁ½Í¥Ñ¥½¸¹±½¹” ¤¹ÍÕˆ¡Á±…å•È¤ì(€€€€€½¹ÍÐ‘¥ÍÑ…¹•MÄ€ôÑ½MÁ…Ý¸¹±•¹Ñ¡MÄ ¤ì(€€€€€½¹ÍÐÙ¥•Ý½Ð€ôÑ½MÁ…Ý¸¹Í•Ñd À¤¹¹½Éµ…±¥é” ¤¹‘½Ð¡™½ÉÝ…É¤ì(€€€€€½¹ÍÐÙ¥Í¥‰±”€ô‘¥ÍÑ…¹•MÄ€ð€Ðà€¨€Ðà€˜˜Ñ¡¥Ì¹¡…Í1¥¹•=™M¥¡Ð (€€€€€€€Á±…å•È¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€À¸ÐÔ°€À¤¤°(€€€€€€€Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€À¸ØÔ°€À¤¤°(€€€€€€¤ì(€€€€€É•ÑÕÉ¸ìÁ½Í¥Ñ¥½¸°¥¹‘•à°‘¥ÍÑ…¹•MÄ°Ù¥•Ý½Ð°Ù¥Í¥‰±”ôì(€€€ô¤¹™¥±Ñ•È ¡…¹‘¥‘…Ñ”¤€ôø…¹‘¥‘…Ñ”¹‘¥ÍÑ…¹•MÄ€ø€ÄÔ€¨€ÄÔ¤ì((€€€…¹‘¥‘…Ñ•Ì¹Í½ÉÐ ¡„°ˆ¤€ôøì(€€€€€½¹ÍÐÍ½É•€ô€¡„¹Ù¥Í¥‰±”€ü€´ÄÀÀÀ€è€À¤€´„¹Ù¥•Ý½Ð€¨€ÄÐÀ€¬5…Ñ ¹µ¥¸¡„¹‘¥ÍÑ…¹•MÄ°€ÌØÀÀ¤€¨€À¸Ààì(€€€€€½¹ÍÐÍ½É•€ô€¡ˆ¹Ù¥Í¥‰±”€ü€´ÄÀÀÀ€è€À¤€´ˆ¹Ù¥•Ý½Ð€¨€ÄÐÀ€¬5…Ñ ¹µ¥¸¡ˆ¹‘¥ÍÑ…¹•MÄ°€ÌØÀÀ¤€¨€À¸Ààì(€€€€€É•ÑÕÉ¸Í½É•€´Í½É•ì(€€€ô¤ì(€€€½¹ÍÐÑ½Á½Õ¹Ð€ô5…Ñ ¹µ¥¸ Ð°…¹‘¥‘…Ñ•Ì¹±•¹Ñ ¤ì(€€€½¹ÍÐ¡½Í•¸€ô…¹‘¥‘…Ñ•ÍmÑ¡¥Ì¹}ÍÁ…Ý¹ÕÉÍ½È€”5…Ñ ¹µ…à Ä°Ñ½Á½Õ¹Ð¥t€üüìÁ½Í¥Ñ¥½¸èÑ¡¥Ì¹•¹•µåMÁ…Ý¹A½¥¹ÑÍlÁtôì(€€€Ñ¡¥Ì¹}ÍÁ…Ý¹ÕÉÍ½È€¬ô€Äì(€€€É•ÑÕÉ¸¡½Í•¸¹Á½Í¥Ñ¥½¸¹±½¹” ¤ì(€ô((€É…å…ÍÑ]½É±¡½É¥¥¸°‘¥É•Ñ¥½¸°µ…á¥ÍÑ…¹”€ô€ÄÈÀ°½ÁÑ¥½¹Ì€ôíô¤ì(€€€¥˜€ …Ñ¡¥Ì¹Ý½É±¤É•ÑÕÉ¸ì¡¥Ðè™…±Í”°¡…Í!¥Ðè™…±Í”ôì(€€€¥˜€¡ÑåÁ•½˜µ…á¥ÍÑ…¹”€ôôô€½‰©•Ðœ¤ì(€€€€€½ÁÑ¥½¹Ì€ôµ…á¥ÍÑ…¹”ì(€€€€€µ…á¥ÍÑ…¹”€ô½ÁÑ¥½¹Ì¹µ…á¥ÍÑ…¹”€üü€ÄÈÀì(€€€ô(€€€½¹ÍÐÍÑ…ÉÐ€ô…ÍQ¡É••Y•Ñ½È¡½É¥¥¸¤ì(€€€½¹ÍÐÉ…å¥É•Ñ¥½¸€ô…ÍQ¡É••Y•Ñ½È¡‘¥É•Ñ¥½¸°¹•ÜQ!I¹Y•Ñ½ÈÌ À°€À°€´Ä¤¤ì(€€€¥˜€¡É…å¥É•Ñ¥½¸¹±•¹Ñ¡MÄ ¤€ð€Å”´à¤É•ÑÕÉ¸ì¡¥Ðè™…±Í”°¡…Í!¥Ðè™…±Í”ôì(€€€É…å¥É•Ñ¥½¸¹¹½Éµ…±¥é” ¤ì(€€€½¹ÍÐ•¹€ôÍÑ…ÉÐ¹±½¹” ¤¹…‘‘M…±•‘Y•Ñ½È¡É…å¥É•Ñ¥½¸°5…Ñ ¹µ…à À°µ…á¥ÍÑ…¹”¤¤ì(€€€½¹ÍÐÉ•ÍÕ±Ð€ô¹•Ü99=8¹I…å…ÍÑI•ÍÕ±Ð ¤ì(€€€½¹ÍÐ¡¥Ð€ôÑ¡¥Ì¹Ý½É±¹É…å…ÍÑ±½Í•ÍÐ (€€€€€¹•Ü99=8¹Y•ŒÌ¡ÍÑ…ÉÐ¹à°ÍÑ…ÉÐ¹ä°ÍÑ…ÉÐ¹è¤°(€€€€€¹•Ü99=8¹Y•ŒÌ¡•¹¹à°•¹¹ä°•¹¹è¤°(€€€€€ì(€€€€€€€Í­¥Á	…­™…•Ìè½ÁÑ¥½¹Ì¹Í­¥Á	…­™…•Ì€üüÑÉÕ”°(€€€€€€€½±±¥Í¥½¹¥±Ñ•É5…Í¬è½ÁÑ¥½¹Ì¹½±±¥Í¥½¹¥±Ñ•É5…Í¬€üüI9}=11%M%=9}I=U@°(€€€€€€€½±±¥Í¥½¹¥±Ñ•ÉÉ½ÕÀè½ÁÑ¥½¹Ì¹½±±¥Í¥½¹¥±Ñ•ÉÉ½ÕÀ€üü€´Ä°(€€€€€€€¡•­½±±¥Í¥½¹I•ÍÁ½¹Í”è½ÁÑ¥½¹Ì¹¡•­½±±¥Í¥½¹I•ÍÁ½¹Í”€üüÑÉÕ”°(€€€€€ô°(€€€€€É•ÍÕ±Ð°(€€€€¤ì(€€€¥˜€ …¡¥Ðñð€…É•ÍÕ±Ð¹¡…Í!¥Ð¤É•ÑÕÉ¸ì¡¥Ðè™…±Í”°¡…Í!¥Ðè™…±Í”°‘¥ÍÑ…¹”è%¹™¥¹¥Ñäôì(€€€É•ÑÕÉ¸ì(€€€€€¡¥ÐèÑÉÕ”°(€€€€€¡…Í!¥ÐèÑÉÕ”°(€€€€€‘¥ÍÑ…¹”èÉ•ÍÕ±Ð¹‘¥ÍÑ…¹”°(€€€€€Á½¥¹Ðè¹•ÜQ!I¹Y•Ñ½ÈÌ¡É•ÍÕ±Ð¹¡¥ÑA½¥¹Ñ]½É±¹à°É•ÍÕ±Ð¹¡¥ÑA½¥¹Ñ]½É±¹ä°É•ÍÕ±Ð¹¡¥ÑA½¥¹Ñ]½É±¹è¤°(€€€€€¹½Éµ…°è¹•ÜQ!I¹Y•Ñ½ÈÌ¡É•ÍÕ±Ð¹¡¥Ñ9½Éµ…±]½É±¹à°É•ÍÕ±Ð¹¡¥Ñ9½Éµ…±]½É±¹ä°É•ÍÕ±Ð¹¡¥Ñ9½Éµ…±]½É±¹è¤°(€€€€€‰½‘äèÉ•ÍÕ±Ð¹‰½‘ä°(€€€€€Í¡…Á”èÉ•ÍÕ±Ð¹Í¡…Á”°(€€€ôì(€ô((€¡…Í1¥¹•=™M¥¡Ð¡™É½´°Ñ¼¤ì(€€€½¹ÍÐ½É¥¥¸€ô…ÍQ¡É••Y•Ñ½È¡™É½´¤ì(€€€½¹ÍÐ‘•ÍÑ¥¹…Ñ¥½¸€ô…ÍQ¡É••Y•Ñ½È¡Ñ¼¤ì(€€€½¹ÍÐ½™™Í•Ð€ô‘•ÍÑ¥¹…Ñ¥½¸¹±½¹” ¤¹ÍÕˆ¡½É¥¥¸¤ì(€€€½¹ÍÐ‘¥ÍÑ…¹”€ô½™™Í•Ð¹±•¹Ñ  ¤ì(€€€¥˜€¡‘¥ÍÑ…¹”€ð€À¸ÀÄ¤É•ÑÕÉ¸ÑÉÕ”ì(€€€½¹ÍÐ¡¥Ð€ôÑ¡¥Ì¹É…å…ÍÑ]½É±¡½É¥¥¸°½™™Í•Ð°5…Ñ ¹µ…à À°‘¥ÍÑ…¹”€´€À¸ÄÈ¤¤ì(€€€É•ÑÕÉ¸€…¡¥Ð¹¡¥Ðì(€ô((€•Ñ9…Ù¥…Ñ¥½¹Q…É•Ð¡™É½´°Ñ¼°µ½‘”€ô€¡…Í”œ¤ì(€€€½¹ÍÐ½É¥¥¸€ô…ÍQ¡É••Y•Ñ½È¡™É½´¤ì(€€€½¹ÍÐ¹½Éµ…±¥é•‘5½‘”€ôMÑÉ¥¹œ¡µ½‘”¤¹Ñ½1½Ý•É…Í” ¤ì(€€€±•Ð‘•ÍÑ¥¹…Ñ¥½¸€ô…ÍQ¡É••Y•Ñ½È¡Ñ¼¤ì(€€€¥˜€ …Ñ¼€˜˜¹½Éµ…±¥é•‘5½‘”€ôôô€Á…ÑÉ½°œ€˜˜Ñ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹±•¹Ñ ¤ì(€€€€€½¹ÍÐÍÑ…ÉÑ%¹‘•à€ôÑ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹É•‘Õ” ¡‰•ÍÑ%¹‘•à°¹½‘”°¥¹‘•à¤€ôø€ (€€€€€€€¹½‘”¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡½É¥¥¸¤€ðÑ¡¥Ì¹Ý…åÁ½¥¹ÑÍm‰•ÍÑ%¹‘•át¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡½É¥¥¸¤(€€€€€€€€€€ü¥¹‘•à(€€€€€€€€€€è‰•ÍÑ%¹‘•à(€€€€€€¤°€À¤ì(€€€€€‘•ÍÑ¥¹…Ñ¥½¸€ôÑ¡¥Ì¹Ý…åÁ½¥¹ÑÍl¡ÍÑ…ÉÑ%¹‘•à€¬€Ð€¬€¡Ñ¡¥Ì¹}ÍÁ…Ý¹ÕÉÍ½È¬¬€”€Ô¤¤€”Ñ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹±•¹Ñ¡t¹Á½Í¥Ñ¥½¸¹±½¹” ¤ì(€€€ô(€€€¥˜€¡¹½Éµ…±¥é•‘5½‘”€„ôô€™±…¹¬œ€˜˜¹½Éµ…±¥é•‘5½‘”€„ôô€É•ÑÉ•…Ðœ(€€€€€€˜˜Ñ¡¥Ì¹¡…Í1¥¹•=™M¥¡Ð¡½É¥¥¸¹±½¹” ¤¹…‘¡U@¤°‘•ÍÑ¥¹…Ñ¥½¸¹±½¹” ¤¹…‘¡U@¤¤¤ì(€€€€€É•ÑÕÉ¸‘•ÍÑ¥¹…Ñ¥½¸ì(€€€ô((€€€½¹ÍÐ•¹…‰±•‘9½‘•Ì€ôÑ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹™¥±Ñ•È ¡¹½‘”¤€ôø¹½‘”¹•¹…‰±•¤ì(€€€¥˜€ …•¹…‰±•‘9½‘•Ì¹±•¹Ñ ¤É•ÑÕÉ¸‘•ÍÑ¥¹…Ñ¥½¸ì(€€€½¹ÍÐ¹•…É•ÍÐ€ô€¡Á½¥¹Ð¤€ôø•¹…‰±•‘9½‘•Ì¹É•‘Õ” ¡‰•ÍÐ°¹½‘”¤€ôø€ (€€€€€¹½‘”¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Á½¥¹Ð¤€ð‰•ÍÐ¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡Á½¥¹Ð¤€ü¹½‘”€è‰•ÍÐ(€€€€¤°•¹…‰±•‘9½‘•ÍlÁt¤ì(€€€½¹ÍÐÍÑ…ÉÐ€ô¹•…É•ÍÐ¡½É¥¥¸¤ì(€€€±•Ð½…°€ô¹•…É•ÍÐ¡‘•ÍÑ¥¹…Ñ¥½¸¤ì((€€€¥˜€¡¹½Éµ…±¥é•‘5½‘”€ôôô€™±…¹¬œ¤ì(€€€€€½¹ÍÐ…ÁÁÉ½… €ô½É¥¥¸¹±½¹” ¤¹ÍÕˆ¡‘•ÍÑ¥¹…Ñ¥½¸¤¹Í•Ñd À¤¹¹½Éµ…±¥é” ¤ì(€€€€€½¹ÍÐÍ¥‘”€ô¹•ÜQ!I¹Y•Ñ½ÈÌ µ…ÁÁÉ½… ¹è°€À°…ÁÁÉ½… ¹à¤ì(€€€€€½…°€ô•¹…‰±•‘9½‘•Ì(€€€€€€€€¹™¥±Ñ•È ¡¹½‘”¤€ôø¹½‘”¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q¼¡‘•ÍÑ¥¹…Ñ¥½¸¤€ø€Ü€˜˜¹½‘”¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q¼¡‘•ÍÑ¥¹…Ñ¥½¸¤€ð€ÈÈ¤(€€€€€€€€¹Í½ÉÐ ¡„°ˆ¤€ôøˆ¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹ÍÕˆ¡‘•ÍÑ¥¹…Ñ¥½¸¤¹¹½Éµ…±¥é” ¤¹‘½Ð¡Í¥‘”¤(€€€€€€€€€€´„¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹ÍÕˆ¡‘•ÍÑ¥¹…Ñ¥½¸¤¹¹½Éµ…±¥é” ¤¹‘½Ð¡Í¥‘”¤¥lÁt€üü½…°ì(€€€ô•±Í”¥˜€¡¹½Éµ…±¥é•‘5½‘”€ôôô€É•ÑÉ•…Ðœ¤ì(€€€€€½…°€ô•¹…‰±•‘9½‘•Ì(€€€€€€€€¹™¥±Ñ•È ¡¹½‘”¤€ôø¹½‘”¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q¼¡½É¥¥¸¤€ð€ÈÐ¤(€€€€€€€€¹Í½ÉÐ ¡„°ˆ¤€ôøˆ¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡‘•ÍÑ¥¹…Ñ¥½¸¤€´„¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q½MÅÕ…É•¡‘•ÍÑ¥¹…Ñ¥½¸¤¥lÁt€üü½…°ì(€€€ô((€€€½¹ÍÐÁ…Ñ €ôÑ¡¥Ì¹}™¥¹‘A…Ñ ¡ÍÑ…ÉÐ¹¥°½…°¹¥¤ì(€€€¥˜€¡Á…Ñ ¹±•¹Ñ €ð€È¤É•ÑÕÉ¸½…°¹Á½Í¥Ñ¥½¸¹±½¹” ¤ì(€€€½¹ÍÐ¹•áÐ€ôÑ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹™¥¹ ¡¹½‘”¤€ôø¹½‘”¹¥€ôôôÁ…Ñ¡lÅt¤ì(€€€É•ÑÕÉ¸¹•áÐü¹Á½Í¥Ñ¥½¸¹±½¹” ¤€üü½…°¹Á½Í¥Ñ¥½¸¹±½¹” ¤ì(€ô((€}™¥¹‘A…Ñ ¡ÍÑ…ÉÑ%°½…±%¤ì(€€€¥˜€¡ÍÑ…ÉÑ%€ôôô½…±%¤É•ÑÕÉ¸mÍÑ…ÉÑ%‘tì(€€€½¹ÍÐ¹½‘•5…À€ô¹•Ü5…À¡Ñ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹µ…À ¡¹½‘”¤€ôøm¹½‘”¹¥°¹½‘•t¤¤ì(€€€½¹ÍÐ…‘©…•¹ä€ô¹•Ü5…À¡Ñ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹µ…À ¡¹½‘”¤€ôøm¹½‘”¹¥°mut¤¤ì(€€€™½È€¡½¹ÍÐ•‘”½˜Ñ¡¥Ì¹¹…Ù¥…Ñ¥½¹‘•Ì¤ì(€€€€€¥˜€ …•‘”¹•¹…‰±•ñð€…¹½‘•5…À¹•Ð¡•‘”¹„¤ü¹•¹…‰±•ñð€…¹½‘•5…À¹•Ð¡•‘”¹ˆ¤ü¹•¹…‰±•¤½¹Ñ¥¹Õ”ì(€€€€€…‘©…•¹ä¹•Ð¡•‘”¹„¤ü¹ÁÕÍ ¡•‘”¹ˆ¤ì(€€€€€…‘©…•¹ä¹•Ð¡•‘”¹ˆ¤ü¹ÁÕÍ ¡•‘”¹„¤ì(€€€ô((€€€½¹ÍÐ½Á•¸€ô¹•ÜM•Ð¡mÍÑ…ÉÑ%‘t¤ì(€€€½¹ÍÐ…µ•É½´€ô¹•Ü5…À ¤ì(€€€½¹ÍÐœ€ô¹•Ü5…À¡mmÍÑ…ÉÑ%°€Áut¤ì(€€€½¹ÍÐ˜€ô¹•Ü5…À¡mmÍÑ…ÉÑ%°¹½‘•5…À¹•Ð¡ÍÑ…ÉÑ%¤¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q¼¡¹½‘•5…À¹•Ð¡½…±%¤¹Á½Í¥Ñ¥½¸¥ut¤ì(€€€Ý¡¥±”€¡½Á•¸¹Í¥é”¤ì(€€€€€±•ÐÕÉÉ•¹Ð€ô¹Õ±°ì(€€€€€™½È€¡½¹ÍÐ¥½˜½Á•¸¤¥˜€¡ÕÉÉ•¹Ð€ôô¹Õ±°ñð€¡˜¹•Ð¡¥¤€üü%¹™¥¹¥Ñä¤€ð€¡˜¹•Ð¡ÕÉÉ•¹Ð¤€üü%¹™¥¹¥Ñä¤¤ÕÉÉ•¹Ð€ô¥ì(€€€€€¥˜€¡ÕÉÉ•¹Ð€ôôô½…±%¤ì(€€€€€€€½¹ÍÐÁ…Ñ €ômÕÉÉ•¹Ñtì(€€€€€€€Ý¡¥±”€¡…µ•É½´¹¡…Ì¡ÕÉÉ•¹Ð¤¤ì(€€€€€€€€€ÕÉÉ•¹Ð€ô…µ•É½´¹•Ð¡ÕÉÉ•¹Ð¤ì(€€€€€€€€€Á…Ñ ¹Õ¹Í¡¥™Ð¡ÕÉÉ•¹Ð¤ì(€€€€€€€ô(€€€€€€€É•ÑÕÉ¸Á…Ñ ì(€€€€€ô(€€€€€½Á•¸¹‘•±•Ñ”¡ÕÉÉ•¹Ð¤ì(€€€€€™½È€¡½¹ÍÐ¹•¥¡‰½È½˜…‘©…•¹ä¹•Ð¡ÕÉÉ•¹Ð¤€üümt¤ì(€€€€€€€½¹ÍÐÑ•¹Ñ…Ñ¥Ù”€ô€¡œ¹•Ð¡ÕÉÉ•¹Ð¤€üü%¹™¥¹¥Ñä¤(€€€€€€€€€€¬¹½‘•5…À¹•Ð¡ÕÉÉ•¹Ð¤¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q¼¡¹½‘•5…À¹•Ð¡¹•¥¡‰½È¤¹Á½Í¥Ñ¥½¸¤ì(€€€€€€€¥˜€¡Ñ•¹Ñ…Ñ¥Ù”€øô€¡œ¹•Ð¡¹•¥¡‰½È¤€üü%¹™¥¹¥Ñä¤¤½¹Ñ¥¹Õ”ì(€€€€€€€…µ•É½´¹Í•Ð¡¹•¥¡‰½È°ÕÉÉ•¹Ð¤ì(€€€€€€€œ¹Í•Ð¡¹•¥¡‰½È°Ñ•¹Ñ…Ñ¥Ù”¤ì(€€€€€€€˜¹Í•Ð¡¹•¥¡‰½È°Ñ•¹Ñ…Ñ¥Ù”€¬¹½‘•5…À¹•Ð¡¹•¥¡‰½È¤¹Á½Í¥Ñ¥½¸¹‘¥ÍÑ…¹•Q¼¡¹½‘•5…À¹•Ð¡½…±%¤¹Á½Í¥Ñ¥½¸¤¤ì(€€€€€€€½Á•¸¹…‘¡¹•¥¡‰½È¤ì(€€€€€ô(€€€ô(€€€É•ÑÕÉ¸mÍÑ…ÉÑ%‘tì(€ô((€•Ñ•‰Õ…Ñ„ ¤ì(€€€É•ÑÕÉ¸ì(€€€€€‰½Õ¹‘ÌèìÉ…‘¥ÕÌè€ÐØ°µ¥¹dè€´Ä¸Ä°µ…ádè€ÄÔô°(€€€€€É¥¹ÌèÑ¡¥Ì¹É¥¹•™¥¹¥Ñ¥½¹Ìü¹µ…À ¡É¥¹œ¤€ôø€¡ì€¸¸¹É¥¹œ°µ…Ñ•É¥…°èÕ¹‘•™¥¹•ô¤¤€üümt°(€€€€€½±±¥‘•É½Õ¹ÐèÑ¡¥Ì¹ÍÑ…Ñ¥	½‘¥•Ì¹±•¹Ñ °(€€€€€½±±¥‘•ÉÌèÑ¡¥Ì¹ÍÑ…Ñ¥	½‘¥•Ì¹µ…À ¡‰½‘ä¤€ôø€¡ì(€€€€€€€¹…µ”è‰½‘ä¹¹…µ”°(€€€€€€€Á½Í¥Ñ¥½¸è¹•ÜQ!I¹Y•Ñ½ÈÌ¡‰½‘ä¹Á½Í¥Ñ¥½¸¹à°‰½‘ä¹Á½Í¥Ñ¥½¸¹ä°‰½‘ä¹Á½Í¥Ñ¥½¸¹è¤°(€€€€€€€ÕÍ•É…Ñ„èì€¸¸¹‰½‘ä¹ÕÍ•É…Ñ„ô°(€€€€€ô¤¤°(€€€€€Á±…å•ÉMÁ…Ý¹ÌèÑ¡¥Ì¹ÍÁ…Ý¹A½¥¹ÑÌ¹µ…À ¡Á½¥¹Ð¤€ôøÁ½¥¹Ð¹±½¹” ¤¤°(€€€€€•¹•µåMÁ…Ý¹ÌèÑ¡¥Ì¹•¹•µåMÁ…Ý¹A½¥¹ÑÌ¹µ…À ¡Á½¥¹Ð¤€ôøÁ½¥¹Ð¹±½¹” ¤¤°(€€€€€½‰©•Ñ¥Ù•ÌèÑ¡¥Ì¹½‰©•Ñ¥Ù•A½¥¹ÑÌ¹µ…À ¡Á½¥¹Ð¤€ôø€¡ì€¸¸¹Á½¥¹Ð°Á½Í¥Ñ¥½¸èÁ½¥¹Ð¹Á½Í¥Ñ¥½¸¹±½¹” ¤ô¤¤°(€€€€€Ý…åÁ½¥¹ÑÌèÑ¡¥Ì¹Ý…åÁ½¥¹ÑÌ¹µ…À ¡¹½‘”¤€ôø€¡ì€¸¸¹¹½‘”°Á½Í¥Ñ¥½¸è¹½‘”¹Á½Í¥Ñ¥½¸¹±½¹” ¤ô¤¤°(€€€€€•‘•ÌèÑ¡¥Ì¹¹…Ù¥…Ñ¥½¹‘•Ì¹µ…À ¡•‘”¤€ôø€¡ì€¸¸¹•‘”ô¤¤°(€€€€€Á•¹‘¥¹M¡¥™ÐèÑ¡¥Ì¹}Á•¹‘¥¹M¡¥™Ð€üì€¸¸¹Ñ¡¥Ì¹}Á•¹‘¥¹M¡¥™Ðô€è¹Õ±°°(€€€€€Í¡¥™ÑY•ÉÍ¥½¸èÑ¡¥Ì¹}Í¡¥™ÑY•ÉÍ¥½¸°(€€€ôì(€ô((€É•Í•Ð ¤ì(€€€¥˜€ …Ñ¡¥Ì¹}‰Õ¥±Ð¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹}Á•¹‘¥¹M¡¥™Ð€ô¹Õ±°ì(€€€Ñ¡¥Ì¹}•±…ÁÍ•€ô€Àì(€€€Ñ¡¥Ì¹}ÍÁ…Ý¹ÕÉÍ½È€ô€Àì(€€€Ñ¡¥Ì¹}Í¡¥™ÑY•ÉÍ¥½¸€ô€Àì(€€€™½È€¡½¹ÍÐÉ•½É‘Ì½˜=‰©•Ð¹Ù…±Õ•Ì¡Ñ¡¥Ì¹Í¡¥™Ñ±•µ•¹ÑÌ¤¤ì(€€€€€™½È€¡½¹ÍÐÉ•½É½˜É•½É‘Ì¤Ñ¡¥Ì¹}Í•ÑM¡¥™ÑI•½É‘MÑ…Ñ”¡É•½É°€À¤ì(€€€ô(€€€Ñ¡¥Ì¹}Íå¹9…Ù¥…Ñ¥½¹MÑ…Ñ” ¤ì(€€€Ñ¡¥Ì¹}Í•ÑQ•±•É…Á¡%¹Ñ•¹Í¥Ñä …±°œ°€À¤ì(€€€¥˜€¡Ñ¡¥Ì¹Ý½É±¤Ñ¡¥Ì¹Ý½É±¹‰É½…‘Á¡…Í”¹‘¥ÉÑä€ôÑÉÕ”ì(€ô((€}É•µ½Ù•A¡åÍ¥Í	½‘¥•Ì ¤ì(€€€¥˜€ …Ñ¡¥Ì¹Ý½É±¤É•ÑÕÉ¸ì(€€€™½È€¡½¹ÍÐ‰½‘ä½˜Ñ¡¥Ì¹ÍÑ…Ñ¥	½‘¥•Ì¤Ñ¡¥Ì¹Ý½É±¹É•µ½Ù•	½‘ä¡‰½‘ä¤ì(€€€Ñ¡¥Ì¹ÍÑ…Ñ¥	½‘¥•Ì¹±•¹Ñ €ô€Àì(€ô((€}•µ¥Ð¡ÑåÁ”°Á…å±½…¤ì(€€€¥˜€¡ÑåÁ•½˜Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹•µ¥Ð€ôôô€™Õ¹Ñ¥½¸œ¤Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌ¹•µ¥Ð¡ÑåÁ”°Á…å±½…¤ì(€€€•±Í”¥˜€¡ÑåÁ•½˜Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌü¹‘¥ÍÁ…Ñ¡Ù•¹Ð€ôôô€™Õ¹Ñ¥½¸œ¤ì(€€€€€Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌ¹‘¥ÍÁ…Ñ¡Ù•¹Ð¡ìÑåÁ”°€¸¸¹Á…å±½…ô¤ì(€€€ô(€ô((€‘¥ÍÁ½Í” ¤ì(€€€¥˜€¡Ñ¡¥Ì¹}‘¥ÍÁ½Í•¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹}‘¥ÍÁ½Í•€ôÑÉÕ”ì(€€€Ñ¡¥Ì¹}É•µ½Ù•A¡åÍ¥Í	½‘¥•Ì ¤ì(€€€Ñ¡¥Ì¹É½½Ð¹É•µ½Ù•É½µA…É•¹Ð ¤ì(€€€½¹ÍÐÍ¡…É•‘•½µ•ÑÉä€ô¹•ÜM•Ð¡=‰©•Ð¹Ù…±Õ•Ì¡Ñ¡¥Ì¹•½µ•ÑÉ¥•Ì¤¤ì(€€€½¹ÍÐ‘¥ÍÁ½Í•‘•½µ•ÑÉä€ô¹•ÜM•Ð ¤ì(€€€Ñ¡¥Ì¹É½½Ð¹ÑÉ…Ù•ÉÍ” ¡¡¥±¤€ôøì(€€€€€¥˜€ …¡¥±¹•½µ•ÑÉäñðÍ¡…É•‘•½µ•ÑÉä¹¡…Ì¡¡¥±¹•½µ•ÑÉä¤ñð‘¥ÍÁ½Í•‘•½µ•ÑÉä¹¡…Ì¡¡¥±¹•½µ•ÑÉä¤¤É•ÑÕÉ¸ì(€€€€€‘¥ÍÁ½Í•‘•½µ•ÑÉä¹…‘¡¡¥±¹•½µ•ÑÉä¤ì(€€€€€¡¥±¹•½µ•ÑÉä¹‘¥ÍÁ½Í” ¤ì(€€€ô¤ì(€€€=‰©•Ð¹Ù…±Õ•Ì¡Ñ¡¥Ì¹•½µ•ÑÉ¥•Ì¤¹™½É…  ¡•½µ•ÑÉä¤€ôø•½µ•ÑÉä¹‘¥ÍÁ½Í” ¤¤ì(€€€=‰©•Ð¹Ù…±Õ•Ì¡Ñ¡¥Ì¹µ…Ñ•É¥…±Ì¤¹™½É…  ¡µ…Ñ•É¥…°¤€ôøµ…Ñ•É¥…°¹‘¥ÍÁ½Í” ¤¤ì(€€€Ñ¡¥Ì¹}±•…ÉY¥ÍÕ…±¡¥±‘É•¸ ¤ì(€€€Ñ¡¥Ì¹}É•Í•Ñ½±±•Ñ¥½¹Ì ¤ì(€€€Ñ¡¥Ì¹Ý½É±€ô¹Õ±°ì(€€€Ñ¡¥Ì¹Í•¹”€ô¹Õ±°ì(€ô)ô()•áÁ½ÉÐ‘•™…Õ±ÐÉ•¹„ì(
+        new THREE.Vector3().fromArray(entry.size),
+        states[0].position,
+        mesh.quaternion,
+        { shiftKind: 'bridge', arenaSurface: true },
+      );
+      this.shiftElements.bridge.push(this._createShiftRecord('bridge', mesh, body, states, index));
+    }
+  }
+
+  _buildShiftDoors() {
+    const config = this.mapConfig.shifts.doors;
+    for (let index = 0; index < config.count; index += 1) {
+      const angle = (index + (config.angleOffset ?? 0)) / config.count * TAU;
+      const closed = new THREE.Vector3(Math.cos(angle) * config.radius, config.closedY, Math.sin(angle) * config.radius);
+      const open = closed.clone();
+      open.y = config.openY;
+      const mesh = new THREE.Mesh(this.geometries.box, this.materials.door);
+      mesh.name = `SHIFT_GATE_${index}`;
+      mesh.scale.fromArray(config.size);
+      mesh.rotation.y = -angle - Math.PI / 2;
+      mesh.castShadow = true;
+      this.root.add(mesh);
+      const states = index % 2
+        ? [{ position: closed }, { position: open }]
+        : [{ position: open }, { position: closed }];
+      const body = this._createBoxBody(
+        `shift-door-${index}`,
+        new THREE.Vector3().fromArray(config.size),
+        states[0].position,
+        mesh.quaternion,
+        { shiftKind: 'doors', arenaWall: true },
+      );
+      this.shiftElements.doors.push(this._createShiftRecord('doors', mesh, body, states, index));
+    }
+  }
+
+  _buildShiftCover() {
+    const config = this.mapConfig.shifts.cover;
+    const count = config.count;
+    const mesh = new THREE.InstancedMesh(this.geometries.box, this.materials.cover, count);
+    mesh.name = 'SHIFTING_COVER_BANK';
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.root.add(mesh);
+
+    for (let index = 0; index < count; index += 1) {
+      const angle = index / count * TAU + config.angleOffset;
+      const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+      const tangent = new THREE.Vector3(-radial.z, 0, radial.x);
+      const origin = radial.clone().multiplyScalar(config.radii[index % config.radii.length]);
+      origin.y = index % config.elevatedEvery === 0 ? config.elevatedY : config.baseY;
+      const alternate = origin.clone().addScaledVector(tangent, index % 2 ? config.tangentDistance : -config.tangentDistance);
+      const quaternion = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -angle - Math.PI / 2, 0));
+      const scale = new THREE.Vector3().fromArray(config.size);
+      const states = [{ position: origin, quaternion, scale }, { position: alternate, quaternion, scale }];
+      const body = this._createBoxBody(
+        `shift-cover-${index}`,
+        scale,
+        origin,
+        quaternion,
+        { shiftKind: 'cover', arenaWall: true, cover: true },
+      );
+      const record = this._createShiftRecord('cover', mesh, body, states, index);
+      record.instanceIndex = index;
+      this.shiftElements.cover.push(record);
+      this._setShiftRecordState(record, 0);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  _createShiftRecord(kind, mesh, body, states, index) {
+    return {
+      id: `${kind}-${index}`,
+      kind,
+      mesh,
+      body,
+      states: states.map((state) => ({
+        position: state.position.clone(),
+        quaternion: state.quaternion?.clone() ?? mesh.quaternion.clone(),
+        scale: state.scale?.clone() ?? mesh.scale.clone(),
+      })),
+      state: 0,
+      instanceIndex: null,
+    };
+  }
+
+  _buildSpawnsAndNavigation() {
+    const spawnConfig = this.mapConfig.spawns;
+    // Player spawn values are body-centre positions for the PlayerController capsule.
+    for (const point of spawnConfig.player) this.spawnPoints.push(new THREE.Vector3().fromArray(point));
+    for (const band of spawnConfig.enemyBands) {
+      for (let index = 0; index < band.count; index += 1) {
+        const angle = index / band.count * TAU + (band.angleOffset ?? 0);
+        this.enemySpawnPoints.push(new THREE.Vector3(
+          Math.cos(angle) * band.radius,
+          band.y,
+          Math.sin(angle) * band.radius,
+        ));
+      }
+    }
+
+    const navigation = this.mapConfig.navigation;
+    if (navigation.nodes) {
+      for (const [index, node] of navigation.nodes.entries()) {
+        this.waypoints.push({
+          id: node.id,
+          ring: node.ring ?? null,
+          sector: node.sector ?? index % this.mapConfig.sectors.count,
+          position: new THREE.Vector3().fromArray(node.position),
+          enabled: true,
+        });
+      }
+      for (const [a, b, kind = 'route'] of navigation.edges) {
+        this.navigationEdges.push({
+          a,
+          b,
+          kind,
+          enabled: kind !== 'bridge-west',
+        });
+      }
+      return;
+    }
+
+    const ringNodes = navigation.rings;
+    const perRing = navigation.perRing;
+    for (let ring = 0; ring < ringNodes.length; ring += 1) {
+      for (let index = 0; index < perRing; index += 1) {
+        const angle = index / perRing * TAU;
+        this.waypoints.push({
+          id: `r${ring}-${index}`,
+          ring,
+          sector: Math.floor(index / Math.max(1, perRing / this.mapConfig.sectors.count)),
+          position: new THREE.Vector3(
+            Math.cos(angle) * ringNodes[ring].radius,
+            ringNodes[ring].y,
+            Math.sin(angle) * ringNodes[ring].radius,
+          ),
+          enabled: true,
+        });
+        this.navigationEdges.push({
+          a: `r${ring}-${index}`,
+          b: `r${ring}-${(index + 1) % perRing}`,
+          kind: 'ring',
+          enabled: true,
+        });
+      }
+    }
+    for (let ring = 0; ring < ringNodes.length - 1; ring += 1) {
+      for (let index = 0; index < perRing; index += navigation.connectionStep) {
+        const isOuterConnection = ring === ringNodes.length - 2;
+        const kind = isOuterConnection && index === navigation.bridgeIndices[0]
+          ? 'bridge-east'
+          : isOuterConnection && index === navigation.bridgeIndices[1]
+            ? 'bridge-west'
+            : 'ramp';
+        this.navigationEdges.push({
+          a: `r${ring}-${index}`,
+          b: `r${ring + 1}-${index}`,
+          kind,
+          enabled: kind !== 'bridge-west',
+        });
+      }
+    }
+  }
+
+  _addInstancedBoxes(name, transforms, material) {
+    const mesh = new THREE.InstancedMesh(this.geometries.box, material, transforms.length);
+    mesh.name = name;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const dummy = new THREE.Object3D();
+    transforms.forEach((transform, index) => {
+      dummy.position.copy(transform.position);
+      dummy.rotation.copy(transform.rotation ?? new THREE.Euler());
+      dummy.scale.copy(transform.size);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+      this._createBoxBody(
+        transform.name,
+        transform.size,
+        transform.position,
+        dummy.quaternion,
+        transform.userData,
+      );
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    this.root.add(mesh);
+    return mesh;
+  }
+
+  _addStaticBox(name, size, position, quaternion = new THREE.Quaternion(), userData = {}) {
+    return this._createBoxBody(name, size, position, quaternion, userData);
+  }
+
+  _createBoxBody(name, size, position, quaternion = new THREE.Quaternion(), userData = {}) {
+    const body = new CANNON.Body({
+      mass: 0,
+      type: CANNON.Body.STATIC,
+      shape: new CANNON.Box(new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2)),
+      position: new CANNON.Vec3(position.x, position.y, position.z),
+      quaternion: new CANNON.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w),
+      collisionFilterGroup: ARENA_COLLISION_GROUP,
+      collisionFilterMask: -1,
+    });
+    body.name = name;
+    body.userData = { arena: true, blocksLineOfSight: true, ...userData };
+    this.world.addBody(body);
+    this.staticBodies.push(body);
+    return body;
+  }
+
+  _addStaticCylinder(name, radius, height, position) {
+    const upright = new CANNON.Quaternion();
+    upright.setFromEuler(-Math.PI / 2, 0, 0);
+    const body = new CANNON.Body({
+      mass: 0,
+      type: CANNON.Body.STATIC,
+      shape: new CANNON.Cylinder(radius, radius, height, 16),
+      position: new CANNON.Vec3(position.x, position.y, position.z),
+      quaternion: upright,
+      collisionFilterGroup: ARENA_COLLISION_GROUP,
+      collisionFilterMask: -1,
+    });
+    body.name = name;
+    body.userData = { arena: true, blocksLineOfSight: true };
+    this.world.addBody(body);
+    this.staticBodies.push(body);
+    return body;
+  }
+
+  beginShift(type = 'all') {
+    if (!this._built || this._pendingShift) return false;
+    const normalized = normalizeShiftType(type);
+    if (normalized !== 'all' && !this.shiftElements[normalized]?.length) return false;
+    this._pendingShift = {
+      type: normalized,
+      elapsed: 0,
+      duration: this.telegraphDuration,
+      ready: false,
+      blocked: false,
+    };
+    this._emit('arena:shiftTelegraph', {
+      type: normalized,
+      duration: this.telegraphDuration,
+      affected: this._affectedShiftRecords(normalized).map((record) => record.id),
+    });
+    return { ...this._pendingShift };
+  }
+
+  update(deltaSeconds = 0, playerPosition = null) {
+    if (!this._built || this._disposed) return;
+    const dt = Math.min(0.25, Math.max(0, Number(deltaSeconds) || 0));
+    this._elapsed += dt;
+    if (this._animated.spire) this._animated.spire.rotation.y += dt * 0.22;
+    if (this._animated.halos) {
+      this._animated.halos.rotation.y -= dt * 0.4;
+      this._animated.halos.children.forEach((halo, index) => {
+        halo.rotation.z += dt * (index % 2 ? -0.27 : 0.31);
+      });
+    }
+    this.materials.hologram.opacity = 0.28 + smoothPulse(this._elapsed * 0.35) * 0.16;
+
+    const pending = this._pendingShift;
+    if (!pending) return;
+    pending.elapsed = Math.min(pending.duration, pending.elapsed + dt);
+    const progress = pending.duration > 0 ? pending.elapsed / pending.duration : 1;
+    const pulse = 0.5 + smoothPulse(this._elapsed) * (1 + progress * 2.2);
+    this._setTelegraphIntensity(pending.type, pulse);
+
+    if (pending.elapsed >= pending.duration && !pending.ready) {
+      pending.ready = true;
+      this._emit('arena:shiftReady', { type: pending.type });
+    }
+    if (pending.ready && this.autoApplyShifts) {
+      const trackedPosition = playerPosition ?? this.getPlayerPosition?.() ?? null;
+      this.applyShift(pending.type, trackedPosition);
+    }
+  }
+
+  applyShift(type = this._pendingShift?.type ?? 'all', playerPosition = null) {
+    if (!this._built) return false;
+    const normalized = normalizeShiftType(type);
+    const records = this._affectedShiftRecords(normalized);
+    if (!records.length) return false;
+    const player = playerPosition ? asThreeVector(playerPosition) : null;
+    const skipped = [];
+    let applied = 0;
+    for (const record of records) {
+      if (player && this._wouldEndangerPlayer(record, player)) {
+        skipped.push(record.id);
+        continue;
+      }
+      this._setShiftRecordState(record, record.state ? 0 : 1);
+      applied += 1;
+    }
+    if (skipped.length) {
+      this._emit('arena:shiftBlocked', {
+        type: normalized,
+        reason: 'player-overlap',
+        skipped,
+        partial: applied > 0,
+      });
+    }
+    if (!applied) {
+      this._pendingShift = null;
+      this._setTelegraphIntensity('all', 0);
+      return false;
+    }
+    this._syncNavigationState();
+    this._shiftVersion += 1;
+    this._pendingShift = null;
+    this._setTelegraphIntensity('all', 0);
+    this.world.broadphase.dirty = true;
+    this._emit('arena:shiftApplied', {
+      type: normalized,
+      version: this._shiftVersion,
+      applied,
+      skipped,
+    });
+    return true;
+  }
+
+  _affectedShiftRecords(type) {
+    if (type === 'all') return Object.values(this.shiftElements).flat();
+    return this.shiftElements[type] ?? [];
+  }
+
+  _wouldEndangerPlayer(record, player) {
+    const nextState = record.states[record.state ? 0 : 1];
+    const currentState = record.states[record.state];
+    const size = nextState.scale;
+    const targetHorizontal = horizontalDistanceSquared(nextState.position, player);
+    const targetRadius = Math.max(size.x, size.z) * 0.58 + 0.65;
+    const targetVertical = Math.abs(nextState.position.y - player.y) < size.y * 0.5 + 1.1;
+    if (targetHorizontal < targetRadius * targetRadius && targetVertical) return true;
+
+    // Never retract a bridge from directly beneath the capsule.
+    if (record.kind === 'bridge' && nextState.position.y < -2) {
+      const currentRadius = Math.max(currentState.scale.x, currentState.scale.z) * 0.55;
+      if (horizontalDistanceSquared(currentState.position, player) < currentRadius * currentRadius
+        && player.y > currentState.position.y
+        && player.y < currentState.position.y + 2.2) return true;
+    }
+    return false;
+  }
+
+  _setShiftRecordState(record, stateIndex) {
+    const state = record.states[stateIndex];
+    record.state = stateIndex;
+    if (record.instanceIndex == null) {
+      record.mesh.position.copy(state.position);
+      record.mesh.quaternion.copy(state.quaternion);
+      record.mesh.scale.copy(state.scale);
+      record.mesh.updateMatrixWorld();
+    } else {
+      const matrix = new THREE.Matrix4().compose(state.position, state.quaternion, state.scale);
+      record.mesh.setMatrixAt(record.instanceIndex, matrix);
+      record.mesh.instanceMatrix.needsUpdate = true;
+    }
+    record.body.position.set(state.position.x, state.position.y, state.position.z);
+    record.body.quaternion.set(
+      state.quaternion.x,
+      state.quaternion.y,
+      state.quaternion.z,
+      state.quaternion.w,
+    );
+    record.body.aabbNeedsUpdate = true;
+    record.body.updateAABB();
+  }
+
+  _setTelegraphIntensity(type, intensity) {
+    const kinds = type === 'all' ? ['bridge', 'doors', 'cover'] : [type];
+    if (kinds.includes('bridge')) this.materials.bridge.emissiveIntensity = 0.34 + intensity * 0.9;
+    if (kinds.includes('doors')) this.materials.door.emissiveIntensity = 0.3 + intensity * 1.05;
+    if (kinds.includes('cover')) this.materials.cover.emissiveIntensity = 0.07 + intensity * 0.7;
+    if (intensity === 0) {
+      this.materials.bridge.emissiveIntensity = 0.34;
+      this.materials.door.emissiveIntensity = 0.3;
+      this.materials.cover.emissiveIntensity = 0.07;
+    }
+  }
+
+  _syncNavigationState() {
+    const eastEnabled = this.shiftElements.bridge[0]?.state === 0;
+    const westEnabled = this.shiftElements.bridge[1]?.state === 1;
+    for (const edge of this.navigationEdges) {
+      if (edge.kind === 'bridge-east') edge.enabled = eastEnabled;
+      if (edge.kind === 'bridge-west') edge.enabled = westEnabled;
+    }
+  }
+
+  getSafePlayerSpawn() {
+    if (!this.spawnPoints.length) return new THREE.Vector3(0, 1.05, 35);
+    return this.spawnPoints[0].clone();
+  }
+
+  getEnemySpawn(playerPosition, cameraForward) {
+    if (!this.enemySpawnPoints.length) return new THREE.Vector3(0, 0.05, -35);
+    const player = asThreeVector(playerPosition);
+    const forward = asThreeVector(cameraForward, new THREE.Vector3(0, 0, -1)).setY(0).normalize();
+    const candidates = this.enemySpawnPoints.map((position, index) => {
+      const toSpawn = position.clone().sub(player);
+      const distanceSq = toSpawn.lengthSq();
+      const viewDot = toSpawn.setY(0).normalize().dot(forward);
+      const visible = distanceSq < 48 * 48 && this.hasLineOfSight(
+        player.clone().add(new THREE.Vector3(0, 0.45, 0)),
+        position.clone().add(new THREE.Vector3(0, 0.65, 0)),
+      );
+      return { position, index, distanceSq, viewDot, visible };
+    }).filter((candidate) => candidate.distanceSq > 15 * 15);
+
+    candidates.sort((a, b) => {
+      const scoreA = (a.visible ? -1000 : 0) - a.viewDot * 140 + Math.min(a.distanceSq, 3600) * 0.08;
+      const scoreB = (b.visible ? -1000 : 0) - b.viewDot * 140 + Math.min(b.distanceSq, 3600) * 0.08;
+      return scoreB - scoreA;
+    });
+    const topCount = Math.min(4, candidates.length);
+    const chosen = candidates[this._spawnCursor % Math.max(1, topCount)] ?? { position: this.enemySpawnPoints[0] };
+    this._spawnCursor += 1;
+    return chosen.position.clone();
+  }
+
+  raycastWorld(origin, direction, maxDistance = 120, options = {}) {
+    if (!this.world) return { hit: false, hasHit: false };
+    if (typeof maxDistance === 'object') {
+      options = maxDistance;
+      maxDistance = options.maxDistance ?? 120;
+    }
+    const start = asThreeVector(origin);
+    const rayDirection = asThreeVector(direction, new THREE.Vector3(0, 0, -1));
+    if (rayDirection.lengthSq() < 1e-8) return { hit: false, hasHit: false };
+    rayDirection.normalize();
+    const end = start.clone().addScaledVector(rayDirection, Math.max(0, maxDistance));
+    const result = new CANNON.RaycastResult();
+    const hit = this.world.raycastClosest(
+      new CANNON.Vec3(start.x, start.y, start.z),
+      new CANNON.Vec3(end.x, end.y, end.z),
+      {
+        skipBackfaces: options.skipBackfaces ?? true,
+        collisionFilterMask: options.collisionFilterMask ?? ARENA_COLLISION_GROUP,
+        collisionFilterGroup: options.collisionFilterGroup ?? -1,
+        checkCollisionResponse: options.checkCollisionResponse ?? true,
+      },
+      result,
+    );
+    if (!hit || !result.hasHit) return { hit: false, hasHit: false, distance: Infinity };
+    return {
+      hit: true,
+      hasHit: true,
+      distance: result.distance,
+      point: new THREE.Vector3(result.hitPointWorld.x, result.hitPointWorld.y, result.hitPointWorld.z),
+      normal: new THREE.Vector3(result.hitNormalWorld.x, result.hitNormalWorld.y, result.hitNormalWorld.z),
+      body: result.body,
+      shape: result.shape,
+    };
+  }
+
+  hasLineOfSight(from, to) {
+    const origin = asThreeVector(from);
+    const destination = asThreeVector(to);
+    const offset = destination.clone().sub(origin);
+    const distance = offset.length();
+    if (distance < 0.01) return true;
+    const hit = this.raycastWorld(origin, offset, Math.max(0, distance - 0.12));
+    return !hit.hit;
+  }
+
+  getNavigationTarget(from, to, mode = 'chase') {
+    const origin = asThreeVector(from);
+    const normalizedMode = String(mode).toLowerCase();
+    let destination = asThreeVector(to);
+    if (!to && normalizedMode === 'patrol' && this.waypoints.length) {
+      const startIndex = this.waypoints.reduce((bestIndex, node, index) => (
+        node.position.distanceToSquared(origin) < this.waypoints[bestIndex].position.distanceToSquared(origin)
+          ? index
+          : bestIndex
+      ), 0);
+      destination = this.waypoints[(startIndex + 4 + (this._spawnCursor++ % 5)) % this.waypoints.length].position.clone();
+    }
+    if (normalizedMode !== 'flank' && normalizedMode !== 'retreat'
+      && this.hasLineOfSight(origin.clone().add(UP), destination.clone().add(UP))) {
+      return destination;
+    }
+
+    const enabledNodes = this.waypoints.filter((node) => node.enabled);
+    if (!enabledNodes.length) return destination;
+    const nearest = (point) => enabledNodes.reduce((best, node) => (
+      node.position.distanceToSquared(point) < best.position.distanceToSquared(point) ? node : best
+    ), enabledNodes[0]);
+    const start = nearest(origin);
+    let goal = nearest(destination);
+
+    if (normalizedMode === 'flank') {
+      const approach = origin.clone().sub(destination).setY(0).normalize();
+      const side = new THREE.Vector3(-approach.z, 0, approach.x);
+      goal = enabledNodes
+        .filter((node) => node.position.distanceTo(destination) > 7 && node.position.distanceTo(destination) < 22)
+        .sort((a, b) => b.position.clone().sub(destination).normalize().dot(side)
+          - a.position.clone().sub(destination).normalize().dot(side))[0] ?? goal;
+    } else if (normalizedMode === 'retreat') {
+      goal = enabledNodes
+        .filter((node) => node.position.distanceTo(origin) < 24)
+        .sort((a, b) => b.position.distanceToSquared(destination) - a.position.distanceToSquared(destination))[0] ?? goal;
+    }
+
+    const path = this._findPath(start.id, goal.id);
+    if (path.length < 2) return goal.position.clone();
+    const next = this.waypoints.find((node) => node.id === path[1]);
+    return next?.position.clone() ?? goal.position.clone();
+  }
+
+  _findPath(startId, goalId) {
+    if (startId === goalId) return [startId];
+    const nodeMap = new Map(this.waypoints.map((node) => [node.id, node]));
+    const adjacency = new Map(this.waypoints.map((node) => [node.id, []]));
+    for (const edge of this.navigationEdges) {
+      if (!edge.enabled || !nodeMap.get(edge.a)?.enabled || !nodeMap.get(edge.b)?.enabled) continue;
+      adjacency.get(edge.a)?.push(edge.b);
+      adjacency.get(edge.b)?.push(edge.a);
+    }
+
+    const open = new Set([startId]);
+    const cameFrom = new Map();
+    const g = new Map([[startId, 0]]);
+    const f = new Map([[startId, nodeMap.get(startId).position.distanceTo(nodeMap.get(goalId).position)]]);
+    while (open.size) {
+      let current = null;
+      for (const id of open) if (current == null || (f.get(id) ?? Infinity) < (f.get(current) ?? Infinity)) current = id;
+      if (current === goalId) {
+        const path = [current];
+        while (cameFrom.has(current)) {
+          current = cameFrom.get(current);
+          path.unshift(current);
+        }
+        return path;
+      }
+      open.delete(current);
+      for (const neighbor of adjacency.get(current) ?? []) {
+        const tentative = (g.get(current) ?? Infinity)
+          + nodeMap.get(current).position.distanceTo(nodeMap.get(neighbor).position);
+        if (tentative >= (g.get(neighbor) ?? Infinity)) continue;
+        cameFrom.set(neighbor, current);
+        g.set(neighbor, tentative);
+        f.set(neighbor, tentative + nodeMap.get(neighbor).position.distanceTo(nodeMap.get(goalId).position));
+        open.add(neighbor);
+      }
+    }
+    return [startId];
+  }
+
+  getDebugData() {
+    return {
+      map: this.getMapInfo(),
+      bounds: { ...this.mapConfig.bounds },
+      rings: this.ringDefinitions?.map((ring) => ({ ...ring, material: undefined })) ?? [],
+      colliderCount: this.staticBodies.length,
+      colliders: this.staticBodies.map((body) => ({
+        name: body.name,
+        position: new THREE.Vector3(body.position.x, body.position.y, body.position.z),
+        userData: { ...body.userData },
+      })),
+      playerSpawns: this.spawnPoints.map((point) => point.clone()),
+      enemySpawns: this.enemySpawnPoints.map((point) => point.clone()),
+      objectives: this.objectivePoints.map((point) => ({ ...point, position: point.position.clone() })),
+      waypoints: this.waypoints.map((node) => ({ ...node, position: node.position.clone() })),
+      edges: this.navigationEdges.map((edge) => ({ ...edge })),
+      pendingShift: this._pendingShift ? { ...this._pendingShift } : null,
+      shiftVersion: this._shiftVersion,
+    };
+  }
+
+  reset() {
+    if (!this._built) return;
+    this._pendingShift = null;
+    this._elapsed = 0;
+    this._spawnCursor = 0;
+    this._shiftVersion = 0;
+    for (const records of Object.values(this.shiftElements)) {
+      for (const record of records) this._setShiftRecordState(record, 0);
+    }
+    this._syncNavigationState();
+    this._setTelegraphIntensity('all', 0);
+    if (this.world) this.world.broadphase.dirty = true;
+  }
+
+  _removePhysicsBodies() {
+    if (!this.world) return;
+    for (const body of this.staticBodies) this.world.removeBody(body);
+    this.staticBodies.length = 0;
+  }
+
+  _emit(type, payload) {
+    if (typeof this.eventBus?.emit === 'function') this.eventBus.emit(type, payload);
+    else if (typeof this.eventBus?.dispatchEvent === 'function') {
+      this.eventBus.dispatchEvent({ type, ...payload });
+    }
+  }
+
+  dispose() {
+    if (this._disposed) return;
+    this._disposed = true;
+    this._removePhysicsBodies();
+    this.root.removeFromParent();
+    const sharedGeometry = new Set(Object.values(this.geometries));
+    const disposedGeometry = new Set();
+    this.root.traverse((child) => {
+      if (!child.geometry || sharedGeometry.has(child.geometry) || disposedGeometry.has(child.geometry)) return;
+      disposedGeometry.add(child.geometry);
+      child.geometry.dispose();
+    });
+    Object.values(this.geometries).forEach((geometry) => geometry.dispose());
+    Object.values(this.materials).forEach((material) => material.dispose());
+    this._clearVisualChildren();
+    this._resetCollections();
+    this.world = null;
+    this.scene = null;
+  }
+}
+
+export default Arena;

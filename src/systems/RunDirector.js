@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GAME_CONFIG } from '../configs/gameConfig.js';
 
 const PHASES = Object.freeze({
   RECON: 'recon',
@@ -17,6 +18,36 @@ const PHASE_LABELS = Object.freeze({
   final: '05 // ЭВАКУАЦИЯ',
   complete: 'ПРОГОН ЗАВЕРШЁН',
 });
+
+const PHASE_CONFIG_IDS = Object.freeze({
+  [PHASES.RECON]: ['recon'],
+  [PHASES.ESCALATION]: ['escalation'],
+  [PHASES.SHIFT]: ['shift'],
+  [PHASES.HUNT]: ['hunt'],
+  [PHASES.FINAL]: ['final', 'finale'],
+});
+
+const INTERLUDE_COPY = Object.freeze({
+  [PHASES.ESCALATION]: {
+    title: 'ВЫЖИТЬ // ПЕРИМЕТР НЕСТАБИЛЕН',
+    countdown: 'Эскалация через',
+  },
+  [PHASES.SHIFT]: {
+    title: 'ВЫЖИТЬ // НАРАСТАНИЕ РАЗЛОМА',
+    countdown: 'Сдвиг реальности через',
+  },
+  [PHASES.HUNT]: {
+    title: 'ВЫЖИТЬ // ЭЛИТНАЯ СИГНАТУРА',
+    countdown: 'Страж материализуется через',
+  },
+  [PHASES.FINAL]: {
+    title: 'ВЫЖИТЬ // КАНАЛ ФОРМИРУЕТСЯ',
+    countdown: 'Эвакуация через',
+  },
+});
+
+const AMBIENT_SHIFT_DELAY = 76;
+const AMBIENT_SHIFT_JITTER = 12;
 
 const ANOMALIES = Object.freeze([
   {
@@ -102,7 +133,19 @@ function makeFragmentVisual() {
 }
 
 export class RunDirector {
-  constructor({ scene, eventBus, arena, player, weaponSystem, enemySystem, effects, audioManager, upgradeSystem, random = Math.random }) {
+  constructor({
+    scene,
+    eventBus,
+    arena,
+    player,
+    weaponSystem,
+    enemySystem,
+    effects,
+    audioManager,
+    upgradeSystem,
+    random = Math.random,
+    runConfig = GAME_CONFIG.run,
+  }) {
     this.scene = scene;
     this.eventBus = eventBus;
     this.arena = arena;
@@ -113,6 +156,10 @@ export class RunDirector {
     this.audio = audioManager;
     this.upgradeSystem = upgradeSystem;
     this.random = random;
+    this.runConfig = runConfig ?? GAME_CONFIG.run;
+    this.maxDurationSeconds = Number.isFinite(this.runConfig.maxDurationSeconds)
+      ? this.runConfig.maxDurationSeconds
+      : (GAME_CONFIG.run.maxDurationSeconds ?? 600);
     this.objectiveVisual = makeObjectiveVisual();
     this.scene.add(this.objectiveVisual);
     this.fragments = Array.from({ length: 3 }, () => {
@@ -139,8 +186,9 @@ export class RunDirector {
     this.matchTime = 0;
     this.spawnTimer = 1.3;
     this.hudTimer = 0;
-    this.nextAmbientShift = 76 + this.random() * 12;
+    this.scheduleNextAmbientShift(0);
     this.shift = null;
+    this.pendingTransition = null;
     this.pendingUpgrade = false;
     this.afterUpgrade = null;
     this.shiftCount = 0;
@@ -185,6 +233,11 @@ export class RunDirector {
     if (!this.running || this.phase === PHASES.COMPLETE || this.pendingUpgrade) return;
     this.matchTime += dt;
     this.phaseTime += dt;
+    if (this.matchTime >= this.maxDurationSeconds) {
+      this.matchTime = this.maxDurationSeconds;
+      this.end(false, 'Окно эвакуации закрыто');
+      return;
+    }
     this.comboTimer -= dt;
     if (this.comboTimer <= 0 && this.combo > 1) this.combo = 1;
     this.updateObjective(dt, input);
@@ -210,6 +263,12 @@ export class RunDirector {
       else objective.progress = Math.max(0, objective.progress - dt * 0.42);
       this.eventBus?.emit?.('director:interact', inRange ? { text: 'УДЕРЖИВАЙТЕ E // СТАБИЛИЗАЦИЯ', active: interacting, progress: objective.progress } : null);
       if (objective.progress >= 1) this.completeObjective();
+    } else if (objective.type === 'survive') {
+      const remaining = Math.max(0, objective.gateTime - this.matchTime);
+      const elapsed = Math.max(0, this.matchTime - objective.startedAt);
+      objective.progress = THREE.MathUtils.clamp(elapsed / objective.duration, 0, 1);
+      objective.detail = `${objective.countdown}: ${Math.ceil(remaining)} с`;
+      if (remaining <= 0) this.executeTransition(objective.nextPhase);
     } else if (objective.type === 'hold') {
       const inside = this.horizontalDistance(this.player.position, objective.position) <= objective.radius
         && Math.abs(this.player.position.y - objective.position.y) <= 3;
@@ -252,7 +311,7 @@ export class RunDirector {
 
   completeObjective() {
     const completed = this.objective;
-    if (!completed) return;
+    if (!completed || completed.type === 'survive') return;
     this.stats.objectives += 1;
     const reward = this.phase === PHASES.RECON ? 400 : this.phase === PHASES.FINAL ? 1800 : 750;
     this.stats.score += reward;
@@ -264,45 +323,120 @@ export class RunDirector {
     this.eventBus?.emit?.('director:objective-complete', { objective: completed, reward });
     this.eventBus?.emit?.('director:announcement', { title: 'ЗАДАЧА ВЫПОЛНЕНА', detail: `+${reward} // ресурсный импульс`, duration: 2.4 });
     this.objectiveVisual.visible = false;
+    this.objective = null;
     this.eventBus?.emit?.('director:interact', null);
 
     if (this.phase === PHASES.RECON) {
-      this.phase = PHASES.ESCALATION;
-      this.phaseTime = 0;
-      const collect = this.random() < 0.5;
-      if (collect) this.beginCollectObjective();
-      else this.setObjective({
-        type: 'hold',
-        title: 'УДЕРЖИВАТЬ РЕЗОНАТОР',
-        detail: 'Стабилизируйте зону под давлением противника',
-        duration: this.difficulty === 'easy' ? 24 : this.difficulty === 'hard' ? 34 : 29,
-        radius: 4.2,
-        position: this.getObjectivePoint(1),
-      });
-      this.eventBus?.emit?.('director:phase', { phase: this.phase, label: PHASE_LABELS[this.phase] });
-      this.requestUpgrade('ПЕРВАЯ АДАПТАЦИЯ');
+      this.requestUpgrade('ПЕРВАЯ АДАПТАЦИЯ', () => this.scheduleTransition(PHASES.ESCALATION));
     } else if (this.phase === PHASES.ESCALATION) {
-      this.phase = PHASES.SHIFT;
-      this.phaseTime = 0;
-      this.objective = null;
-      this.beginRealityShift(true);
-      this.eventBus?.emit?.('director:phase', { phase: this.phase, label: PHASE_LABELS[this.phase] });
+      this.scheduleTransition(PHASES.SHIFT);
     } else if (this.phase === PHASES.HUNT) {
-      this.phase = PHASES.FINAL;
-      this.phaseTime = 0;
-      this.setObjective({
-        type: 'extract',
-        title: 'УДЕРЖИВАТЬ КАНАЛ ЭВАКУАЦИИ',
-        detail: 'Доберитесь до выхода и удерживайте позицию',
-        duration: this.difficulty === 'easy' ? 24 : this.difficulty === 'hard' ? 38 : 31,
-        radius: 4.5,
-        position: this.getObjectivePoint(3),
-      });
-      this.eventBus?.emit?.('director:phase', { phase: this.phase, label: PHASE_LABELS[this.phase] });
-      this.eventBus?.emit?.('director:announcement', { title: 'ЭВАКУАЦИЯ ДОСТУПНА', detail: 'Оранжевый сектор // финальная синхронизация', duration: 3.2 });
+      this.scheduleTransition(PHASES.FINAL);
     } else if (this.phase === PHASES.FINAL) {
       this.end(true);
     }
+  }
+
+  getPhaseStart(phase) {
+    const ids = PHASE_CONFIG_IDS[phase] ?? [phase];
+    const configured = this.runConfig.phases?.find((entry) => ids.includes(entry.id));
+    if (Number.isFinite(configured?.start)) return Math.max(0, configured.start);
+    const fallback = GAME_CONFIG.run.phases.find((entry) => ids.includes(entry.id));
+    return Number.isFinite(fallback?.start) ? Math.max(0, fallback.start) : 0;
+  }
+
+  scheduleTransition(nextPhase) {
+    if (!this.running) return false;
+    const gateTime = this.getPhaseStart(nextPhase);
+    if (this.matchTime >= gateTime) return this.executeTransition(nextPhase);
+    this.beginInterlude(nextPhase, gateTime);
+    return false;
+  }
+
+  beginInterlude(nextPhase, gateTime) {
+    const copy = INTERLUDE_COPY[nextPhase] ?? {
+      title: 'ВЫЖИТЬ // СИНХРОНИЗАЦИЯ',
+      countdown: 'Следующая фаза через',
+    };
+    const remaining = Math.max(0, gateTime - this.matchTime);
+    this.pendingTransition = nextPhase;
+    this.objective = {
+      type: 'survive',
+      title: copy.title,
+      detail: `${copy.countdown}: ${Math.ceil(remaining)} с`,
+      countdown: copy.countdown,
+      progress: 0,
+      position: this.player.position?.clone?.() ?? new THREE.Vector3(),
+      radius: 0,
+      duration: Math.max(remaining, 0.001),
+      startedAt: this.matchTime,
+      gateTime,
+      nextPhase,
+    };
+    this.objectiveVisual.visible = false;
+    this.eventBus?.emit?.('director:interact', null);
+    this.eventBus?.emit?.('director:announcement', {
+      title: copy.title,
+      detail: this.objective.detail,
+      duration: 2.2,
+    });
+    this.pushHUD(true);
+  }
+
+  executeTransition(nextPhase) {
+    if (!this.running) return false;
+    this.pendingTransition = null;
+    this.objective = null;
+    this.objectiveVisual.visible = false;
+    this.eventBus?.emit?.('director:interact', null);
+
+    if (nextPhase === PHASES.ESCALATION) this.beginEscalation();
+    else if (nextPhase === PHASES.SHIFT) this.beginRequiredShift();
+    else if (nextPhase === PHASES.HUNT) this.beginHunt();
+    else if (nextPhase === PHASES.FINAL) this.beginFinal();
+    else return false;
+    return true;
+  }
+
+  beginEscalation() {
+    this.phase = PHASES.ESCALATION;
+    this.phaseTime = 0;
+    const collect = this.random() < 0.5;
+    if (collect) this.beginCollectObjective();
+    else this.setObjective({
+      type: 'hold',
+      title: 'УДЕРЖИВАТЬ РЕЗОНАТОР',
+      detail: 'Стабилизируйте зону под давлением противника',
+      duration: this.difficulty === 'easy' ? 24 : this.difficulty === 'hard' ? 34 : 29,
+      radius: 4.2,
+      position: this.getObjectivePoint(1),
+    });
+    this.eventBus?.emit?.('director:phase', { phase: this.phase, label: PHASE_LABELS[this.phase] });
+  }
+
+  beginRequiredShift() {
+    this.phase = PHASES.SHIFT;
+    this.phaseTime = 0;
+    this.scheduleNextAmbientShift();
+    if (this.shift) this.shift.required = true;
+    else this.beginRealityShift(true);
+    this.eventBus?.emit?.('director:phase', { phase: this.phase, label: PHASE_LABELS[this.phase] });
+  }
+
+  beginFinal() {
+    this.phase = PHASES.FINAL;
+    this.phaseTime = 0;
+    this.scheduleNextAmbientShift();
+    this.setObjective({
+      type: 'extract',
+      title: 'УДЕРЖИВАТЬ КАНАЛ ЭВАКУАЦИИ',
+      detail: 'Доберитесь до выхода и удерживайте позицию',
+      duration: this.difficulty === 'easy' ? 24 : this.difficulty === 'hard' ? 38 : 31,
+      radius: 4.5,
+      position: this.getObjectivePoint(3),
+    });
+    this.eventBus?.emit?.('director:phase', { phase: this.phase, label: PHASE_LABELS[this.phase] });
+    this.eventBus?.emit?.('director:announcement', { title: 'ЭВАКУАЦИЯ ДОСТУПНА', detail: 'Оранжевый сектор // финальная синхронизация', duration: 3.2 });
   }
 
   beginCollectObjective() {
@@ -345,10 +479,25 @@ export class RunDirector {
     this.eventBus?.emit?.('director:shift-warning', { title: 'СДВИГ РЕАЛЬНОСТИ', detail: anomaly.name, seconds: 5, anomaly });
   }
 
+  scheduleNextAmbientShift(anchor = this.matchTime) {
+    const from = Number.isFinite(anchor) ? Math.max(0, anchor) : 0;
+    this.nextAmbientShift = from + AMBIENT_SHIFT_DELAY + this.random() * AMBIENT_SHIFT_JITTER;
+    return this.nextAmbientShift;
+  }
+
   updateShift(dt) {
     if (!this.shift) {
-      if (this.matchTime >= this.nextAmbientShift && ![PHASES.SHIFT, PHASES.HUNT].includes(this.phase)) {
-        this.nextAmbientShift += 76 + this.random() * 12;
+      if ([PHASES.SHIFT, PHASES.HUNT].includes(this.phase)) {
+        if (this.matchTime >= this.nextAmbientShift) this.scheduleNextAmbientShift();
+        return;
+      }
+      if (this.matchTime >= this.nextAmbientShift) {
+        const requiredGate = this.getPhaseStart(PHASES.SHIFT);
+        const gateBuffer = Number.isFinite(this.runConfig.ambientShiftGateBufferSeconds)
+          ? this.runConfig.ambientShiftGateBufferSeconds
+          : 15;
+        if (this.pendingTransition === PHASES.SHIFT && requiredGate - this.matchTime <= gateBuffer) return;
+        this.scheduleNextAmbientShift();
         this.beginRealityShift(false);
       }
       return;
@@ -385,7 +534,7 @@ export class RunDirector {
       const required = this.shift.required;
       this.shift = null;
       this.requestUpgrade('АДАПТАЦИЯ К СДВИГУ', () => {
-        if (required && this.phase === PHASES.SHIFT) this.beginHunt();
+        if (required && this.phase === PHASES.SHIFT) this.scheduleTransition(PHASES.HUNT);
       });
     }
   }
@@ -430,6 +579,7 @@ export class RunDirector {
   beginHunt() {
     this.phase = PHASES.HUNT;
     this.phaseTime = 0;
+    this.scheduleNextAmbientShift();
     const position = this.getObjectivePoint(2);
     this.enemySystem.spawn('warden', position);
     this.enemySystem.spawn('hunter');
@@ -446,11 +596,13 @@ export class RunDirector {
   }
 
   updateSpawning(dt) {
-    if ([PHASES.SHIFT, PHASES.COMPLETE].includes(this.phase) || this.pendingUpgrade) return;
+    if (this.phase === PHASES.COMPLETE || this.pendingUpgrade) return;
+    if (this.phase === PHASES.SHIFT && this.objective?.type !== 'survive') return;
     const healthRatio = (this.player.health ?? 100) / (this.player.maxHealth ?? 100);
     const phaseIntensity = {
       [PHASES.RECON]: 0.32,
       [PHASES.ESCALATION]: 0.62,
+      [PHASES.SHIFT]: 0.66,
       [PHASES.HUNT]: 0.7,
       [PHASES.FINAL]: 0.88,
     }[this.phase] ?? 0.4;
@@ -528,6 +680,15 @@ export class RunDirector {
     return Math.sqrt(dx * dx + dz * dz);
   }
 
+  getShiftCountdown() {
+    if (this.shift) return Math.max(0, this.shift.remaining);
+    if (this.pendingTransition === PHASES.SHIFT) {
+      return Math.max(0, this.getPhaseStart(PHASES.SHIFT) - this.matchTime);
+    }
+    if ([PHASES.SHIFT, PHASES.HUNT].includes(this.phase)) return null;
+    return Math.max(0, this.nextAmbientShift - this.matchTime);
+  }
+
   pushHUD(force = false) {
     if (!force && this.hudTimer > 0) return;
     const weapon = this.weaponSystem.getState();
@@ -538,8 +699,11 @@ export class RunDirector {
       armor: Math.ceil(this.player.armor ?? 0),
       ammo: weapon.ammo,
       reserve: weapon.reserve,
-      weapon: weapon.weapon,
+      magazine: weapon.magazine,
+      weapon: weapon.name ?? weapon.weapon,
+      weaponId: weapon.id,
       reload: weapon.reload,
+      reloadProgress: weapon.reloadProgress,
       objective: this.objective?.title ?? 'ОЖИДАНИЕ ДАННЫХ',
       objectiveDetail: this.objective?.detail ?? '',
       progress: this.objective?.progress ?? 0,
@@ -549,7 +713,7 @@ export class RunDirector {
       score: this.stats.score,
       combo: this.combo,
       phase: PHASE_LABELS[this.phase],
-      shiftCountdown: this.shift ? Math.max(0, this.shift.remaining) : Math.max(0, this.nextAmbientShift - this.matchTime),
+      shiftCountdown: this.getShiftCountdown(),
       matchTime: this.matchTime,
     });
   }
@@ -577,6 +741,7 @@ export class RunDirector {
     if (!this.running) return;
     this.running = false;
     this.phase = PHASES.COMPLETE;
+    this.pendingTransition = null;
     this.objectiveVisual.visible = false;
     for (const fragment of this.fragments) fragment.visible = false;
     this.eventBus?.emit?.('director:interact', null);
@@ -585,6 +750,12 @@ export class RunDirector {
 
   forceCompleteObjective() {
     if (!this.objective) return;
+    if (this.objective.type === 'survive') {
+      this.matchTime = Math.min(this.objective.gateTime, this.maxDurationSeconds);
+      if (this.matchTime >= this.maxDurationSeconds) this.end(false, 'Окно эвакуации закрыто');
+      else this.executeTransition(this.objective.nextPhase);
+      return;
+    }
     this.objective.progress = 1;
     this.completeObjective();
   }
@@ -604,6 +775,8 @@ export class RunDirector {
       anomaly: this.currentAnomaly?.name ?? 'none',
       objective: this.objective?.type ?? 'none',
       objectiveProgress: this.objective?.progress ?? 0,
+      pendingTransition: this.pendingTransition ?? 'none',
+      maxDuration: this.maxDurationSeconds,
       matchTime: this.matchTime,
     };
   }

@@ -13,6 +13,13 @@ test('game timing and difficulty configs are complete and balanced', () => {
   positive(GAME_CONFIG.fixedTimeStep, 'fixedTimeStep');
   assert.ok(GAME_CONFIG.maxFrameDelta >= GAME_CONFIG.fixedTimeStep);
   assert.equal(GAME_CONFIG.run.phases.length, 5);
+  positive(GAME_CONFIG.run.targetDurationSeconds, 'run.targetDurationSeconds');
+  positive(GAME_CONFIG.run.maxDurationSeconds, 'run.maxDurationSeconds');
+  positive(GAME_CONFIG.run.ambientShiftGateBufferSeconds, 'run.ambientShiftGateBufferSeconds');
+  assert.ok(GAME_CONFIG.run.maxDurationSeconds >= GAME_CONFIG.run.targetDurationSeconds);
+  const phaseStarts = GAME_CONFIG.run.phases.map(({ start }) => start);
+  assert.deepEqual(phaseStarts, [...phaseStarts].sort((a, b) => a - b));
+  assert.ok(GAME_CONFIG.run.maxDurationSeconds > phaseStarts.at(-1));
   assert.deepEqual(Object.keys(DIFFICULTY_CONFIGS), ['easy', 'normal', 'hard']);
 
   for (const [id, config] of Object.entries(DIFFICULTY_CONFIGS)) {
@@ -28,8 +35,8 @@ test('game timing and difficulty configs are complete and balanced', () => {
   assert.ok(DIFFICULTY_CONFIGS.hard.resourceMultiplier < DIFFICULTY_CONFIGS.normal.resourceMultiplier);
 });
 
-test('all three weapon configs expose the WeaponSystem contract', () => {
-  assert.deepEqual(WEAPON_ORDER, ['carbine', 'scatter', 'rail']);
+test('all five weapon configs expose the WeaponSystem contract', () => {
+  assert.deepEqual(WEAPON_ORDER, ['carbine', 'scatter', 'rail', 'plasma', 'nova']);
   const required = [
     'id', 'name', 'shortName', 'description', 'type', 'damage', 'fireRate', 'magazine',
     'reserve', 'reloadTime', 'spread', 'moveSpread', 'adsSpread', 'recoil', 'range',
@@ -47,6 +54,10 @@ test('all three weapon configs expose the WeaponSystem contract', () => {
     assert.ok(weapon.falloffStart < weapon.falloffEnd && weapon.falloffEnd <= weapon.range);
     positive(weapon.recoil.recovery, `${id}.recoil.recovery`);
   }
+  assert.equal(WEAPON_CONFIGS.plasma.automatic, true);
+  assert.ok(WEAPON_CONFIGS.plasma.fireRate > WEAPON_CONFIGS.carbine.fireRate);
+  positive(WEAPON_CONFIGS.nova.impactBlast.radius, 'nova.impactBlast.radius');
+  positive(WEAPON_CONFIGS.nova.impactBlast.damage, 'nova.impactBlast.damage');
 });
 
 test('enemy configs cover ranged, flanker and elite roles', () => {

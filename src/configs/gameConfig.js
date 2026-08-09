@@ -68,6 +68,8 @@ export const GAME_CONFIG = deepFreeze({
   targetFps: 60,
   run: {
     targetDurationSeconds: 420,
+    maxDurationSeconds: 600,
+    ambientShiftGateBufferSeconds: 15,
     scorePerSecond: 2,
     scorePerObjective: 1250,
     scorePerShift: 400,

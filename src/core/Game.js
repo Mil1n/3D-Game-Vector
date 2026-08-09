@@ -19,6 +19,7 @@ import { UpgradeSystem } from '../systems/UpgradeSystem.js';
 import { AchievementSystem } from '../systems/AchievementSystem.js';
 import { UIManager } from '../ui/UIManager.js';
 import { GAME_CONFIG } from '../configs/gameConfig.js';
+import { DEFAULT_MAP_ID, resolveMapId } from '../configs/mapConfigs.js';
 
 const PLAYING_STATES = new Set([GAME_STATES.PLAYING, GAME_STATES.TUTORIAL]);
 const FIXED_STEP = GAME_CONFIG.fixedTimeStep ?? 1 / 60;
@@ -30,7 +31,7 @@ const TUTORIAL_STEPS = Object.freeze([
   { title: 'Ğ’Ğ•Ğ Ğ¢Ğ˜ĞšĞĞ›Ğ¬ĞĞ«Ğ™ Ğ˜ĞœĞŸĞ£Ğ›Ğ¬Ğ¡', text: 'ĞŸĞµÑ€ĞµĞ¿Ñ€Ñ‹Ğ³Ğ½Ğ¸Ñ‚Ğµ Ğ¿Ñ€ĞµĞ¿ÑÑ‚ÑÑ‚Ğ²Ğ¸Ğµ. Ğ”Ğ¾ÑÑ‚ÑƒĞ¿Ğ½Ñ‹ coyote time Ğ¸ Ğ±ÑƒÑ„ĞµÑ€ Ğ¿Ñ€Ñ‹Ğ¶ĞºĞ°.', keys: ['SPACE'] },
   { title: 'Ğ£ĞšĞ›ĞĞĞ•ĞĞ˜Ğ•', text: 'Ğ’Ñ‹Ğ¿Ğ¾Ğ»Ğ½Ğ¸Ñ‚Ğµ ÑĞ½ĞµÑ€Ğ³ĞµÑ‚Ğ¸Ñ‡ĞµÑĞºĞ¸Ğ¹ Ñ€Ñ‹Ğ²Ğ¾Ğº Ğ¸Ğ»Ğ¸ Ğ½Ğ°Ñ‡Ğ½Ğ¸Ñ‚Ğµ ÑĞºĞ¾Ğ»ÑŒĞ¶ĞµĞ½Ğ¸Ğµ Ğ¸Ğ· ÑĞ¿Ñ€Ğ¸Ğ½Ñ‚Ğ°.', keys: ['Q', 'SHIFT + CTRL'] },
   { title: 'ĞĞ“ĞĞ•Ğ’ĞĞ™ ĞšĞĞĞ¢ĞĞšĞ¢', text: 'Ğ¡Ñ‚Ñ€ĞµĞ»ÑĞ¹Ñ‚Ğµ Ğ¸ Ğ¸ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞ¹Ñ‚Ğµ Ñ‚Ğ¾Ñ‡Ğ½Ğ¾Ğµ Ğ¿Ñ€Ğ¸Ñ†ĞµĞ»Ğ¸Ğ²Ğ°Ğ½Ğ¸Ğµ.', keys: ['Ğ›ĞšĞœ', 'ĞŸĞšĞœ'] },
-  { title: 'Ğ‘ĞĞ•Ğ’ĞĞ™ Ğ¦Ğ˜ĞšĞ›', text: 'ĞŸĞµÑ€ĞµĞ·Ğ°Ñ€ÑĞ´Ğ¸Ñ‚Ğµ Ğ¾Ñ€ÑƒĞ¶Ğ¸Ğµ. ĞšĞ»Ğ°Ğ²Ğ¸ÑˆĞ¸ 1â€“3 Ğ¼Ğ³Ğ½Ğ¾Ğ²ĞµĞ½Ğ½Ğ¾ Ğ¼ĞµĞ½ÑÑÑ‚ Ğ¿Ğ»Ğ°Ñ‚Ñ„Ğ¾Ñ€Ğ¼Ñƒ.', keys: ['R', '1', '2', '3'] },
+  { title: 'Ğ‘ĞĞ•Ğ’ĞĞ™ Ğ¦Ğ˜ĞšĞ›', text: 'ĞŸĞµÑ€ĞµĞ·Ğ°Ñ€ÑĞ´Ğ¸Ñ‚Ğµ Ğ¾Ñ€ÑƒĞ¶Ğ¸Ğµ. ĞšĞ»Ğ°Ğ²Ğ¸ÑˆĞ¸ 1â€“5 Ğ¼Ğ³Ğ½Ğ¾Ğ²ĞµĞ½Ğ½Ğ¾ Ğ¼ĞµĞ½ÑÑÑ‚ Ğ¿Ğ»Ğ°Ñ‚Ñ„Ğ¾Ñ€Ğ¼Ñƒ.', keys: ['R', '1', '2', '3', '4', '5'] },
   { title: 'Ğ¡Ğ¢ĞĞ‘Ğ˜Ğ›Ğ˜Ğ—ĞĞ¦Ğ˜Ğ¯', text: 'ĞŸĞ¾Ğ´Ğ¾Ğ¹Ğ´Ğ¸Ñ‚Ğµ Ğº ÑĞ½Ñ‚Ğ°Ñ€Ğ½Ğ¾Ğ¹ Ñ†ĞµĞ»Ğ¸ Ğ¸ ÑƒĞ´ĞµÑ€Ğ¶Ğ¸Ğ²Ğ°Ğ¹Ñ‚Ğµ Ğ²Ğ·Ğ°Ğ¸Ğ¼Ğ¾Ğ´ĞµĞ¹ÑÑ‚Ğ²Ğ¸Ğµ.', keys: ['E'] },
   { title: 'ĞĞ”ĞĞŸĞ¢ĞĞ¦Ğ˜Ğ¯', text: 'ĞŸĞ¾ÑĞ»Ğµ Ğ½Ğ°Ğ³Ñ€Ğ°Ğ´Ñ‹ Ğ²Ñ‹Ğ±ĞµÑ€Ğ¸Ñ‚Ğµ Ğ¾Ğ´Ğ¸Ğ½ Ğ²Ñ€ĞµĞ¼ĞµĞ½Ğ½Ñ‹Ğ¹ Ğ¼Ğ¾Ğ´ÑƒĞ»ÑŒ.', keys: ['1', '2', '3'] },
 ]);
@@ -136,6 +137,7 @@ export class Game {
     this.debugLayer = null;
     this.debugRefresh = 0;
     this.matchDifficulty = this.settings.get('gameplay.difficulty', GAME_CONFIG.defaultDifficulty);
+    this.matchMapId = DEFAULT_MAP_ID;
     this.matchTutorial = false;
     this.tutorialStep = 0;
     this.tutorialMovement = 0;
@@ -150,6 +152,7 @@ export class Game {
     this.adaptiveQualityReduced = false;
     this.lastHud = {};
     this.profileSaveTimer = 0;
+    this.fallbackToastTimer = 0;
     this.unsubscribers = [];
     this._frame = (timestamp) => this.frame(timestamp);
   }
@@ -206,6 +209,7 @@ export class Game {
     this.arena = new Arena({
       scene: this.sceneManager.scene,
       eventBus: this.eventBus,
+      mapId: this.matchMapId,
       telegraphDuration: GAME_CONFIG.realityShift?.warningDuration ?? 5,
       autoApplyShifts: false,
     });
@@ -297,11 +301,32 @@ export class Game {
         });
       }, 220);
     });
-    on('input:pointer-lock-lost', () => {
-      if (PLAYING_STATES.has(this.state.state)) this.pause('pointer-lock');
+    on('input:pointer-lock-lost', ({ fallbackActive } = {}) => {
+      if (PLAYING_STATES.has(this.state.state) && !fallbackActive) this.pause('pointer-lock');
+    });
+    on('input:pointer-lock-acquired', () => {
+      window.clearTimeout(this.fallbackToastTimer);
+    });
+    on('input:fallback-enabled', () => {
+      window.clearTimeout(this.fallbackToastTimer);
+      this.fallbackToastTimer = window.setTimeout(() => {
+        if (!this.input.isFallbackActive || !PLAYING_STATES.has(this.state.state)) return;
+        this.ui.showToast({
+          type: 'info',
+          title: 'Ğ ĞµĞ¶Ğ¸Ğ¼ Ğ¼Ñ‹ÑˆĞ¸ Ğ±ĞµĞ· Ğ·Ğ°Ñ…Ğ²Ğ°Ñ‚Ğ°',
+          message: 'WASD Ñ€Ğ°Ğ±Ğ¾Ñ‚Ğ°ĞµÑ‚ Ğ¿Ğ¾ÑĞ»Ğµ ĞºĞ»Ğ¸ĞºĞ° Ğ¿Ğ¾ Ğ¸Ğ³Ñ€Ğµ. Ğ”Ğ»Ñ Ğ¾Ğ±Ğ·Ğ¾Ñ€Ğ° Ğ·Ğ°Ğ¶Ğ¼Ğ¸Ñ‚Ğµ ĞºĞ½Ğ¾Ğ¿ĞºÑƒ Ğ¼Ñ‹ÑˆĞ¸ Ğ¸ Ñ‚ÑĞ½Ğ¸Ñ‚Ğµ ĞºÑƒÑ€ÑĞ¾Ñ€.',
+          duration: 6200,
+        });
+      }, 450);
     });
     on('input:pointer-lock-error', (error) => {
-      this.ui.showToast({ type: 'warning', title: 'Ğ£Ğ¿Ñ€Ğ°Ğ²Ğ»ĞµĞ½Ğ¸Ğµ Ğ¼Ñ‹ÑˆÑŒÑ', message: error?.message ?? 'Pointer Lock Ğ½ĞµĞ´Ğ¾ÑÑ‚ÑƒĞ¿ĞµĞ½.' });
+      window.clearTimeout(this.fallbackToastTimer);
+      this.ui.showToast({
+        type: 'warning',
+        title: 'Ğ’ĞºĞ»ÑÑ‡Ñ‘Ğ½ Ğ·Ğ°Ğ¿Ğ°ÑĞ½Ğ¾Ğ¹ Ñ€ĞµĞ¶Ğ¸Ğ¼ Ğ¼Ñ‹ÑˆĞ¸',
+        message: `${error?.message ?? 'Pointer Lock Ğ½ĞµĞ´Ğ¾ÑÑ‚ÑƒĞ¿ĞµĞ½.'} ĞšĞ»Ğ¸ĞºĞ½Ğ¸Ñ‚Ğµ Ğ¿Ğ¾ Ğ¸Ğ³Ñ€Ğµ: WASD Ğ±ÑƒĞ´ĞµÑ‚ Ñ€Ğ°Ğ±Ğ¾Ñ‚Ğ°Ñ‚ÑŒ, Ğ¾Ğ±Ğ·Ğ¾Ñ€ â€” Ğ¿ĞµÑ€ĞµÑ‚Ğ°ÑĞºĞ¸Ğ²Ğ°Ğ½Ğ¸ĞµĞ¼ Ğ¼Ñ‹ÑˆĞ¸.`,
+        duration: 7200,
+      });
     });
     on('input:blur', () => {
       if (PLAYING_STATES.has(this.state.state)) this.pause('focus-lost');
@@ -344,4 +369,507 @@ export class Game {
       if (this.player.modifiers.dashDamageMultiplier > 1) {
         const damage = 20 * this.player.modifiers.dashDamageMultiplier;
         const hits = this.enemies.damageInRadius(this.player.position, 2.25, damage, { source: 'dash', weapon: 'impact-vector' });
-        if (hits > 0) this.effects.spawnExplosionÛM½¶‰Ëkºwµçh€ÕÁÉ…‘”œô¤ì(€€€Ù½¥Ñ¡¥Ì¹¥¹ÁÕĞ¹•á¥ÑA½¥¹Ñ•É1½¬ ¤ì(€€€Ñ¡¥Ì¹¥¹ÁÕĞ¹±•…È ¤ì(€€€Ñ¡¥Ì¹Õ¤¹Í¡½İUÁÉ…‘”¡½ÁÑ¥½¹Ì¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹Í•ÑY½±Õµ” µ…ÍÑ•Èœ°Ñ¡¥Ì¹Í•ÑÑ¥¹Ì¹•Ğ …Õ‘¥¼¹µ…ÍÑ•Èœ°€À¸à¤€¨€À¸ÔÔ¤ì(€ô((€Í•±•ÑUÁÉ…‘”¡¥¤ì(€€€¥˜€ …Ñ¡¥Ì¹ÍÑ…Ñ”¹¥Ì¡5}MQQL¹UAI}M1Q%=8¤¤É•ÑÕÉ¸™…±Í”ì(€€€½¹ÍĞÍ•±•Ñ•€ôÑ¡¥Ì¹‘¥É•Ñ½È¹Í•±•ÑUÁÉ…‘”¡¥¤ì(€€€¥˜€ …Í•±•Ñ•¤É•ÑÕÉ¸™…±Í”ì(€€€Ù½¥Ñ¡¥Ì¹…Õ‘¥¼¹Õ¹±½¬ ¤ì(€€€Ù½¥Ñ¡¥Ì¹¥¹ÁÕĞ¹É•ÅÕ•ÍÑA½¥¹Ñ•É1½¬¡Ñ¡¥Ì¹…¹Ù…Ì°ìÉ…İ%¹ÁÕĞèÑ¡¥Ì¹Í•ÑÑ¥¹Ì¹•Ğ ½¹ÑÉ½±Ì¹É…İ%¹ÁÕĞœ°ÑÉÕ”¤ô¤ì(€€€Ñ¡¥Ì¹ÍÑ…Ñ”¹ÑÉ…¹Í¥Ñ¥½¸¡5}MQQL¹A1e%9°ìÉ•…Í½¸è€ÕÁÉ…‘”µÍ•±•Ñ•œ°¥ô¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹Í•ÑY½±Õµ” µ…ÍÑ•Èœ°Ñ¡¥Ì¹Í•ÑÑ¥¹Ì¹•Ğ …Õ‘¥¼¹µ…ÍÑ•Èœ°€À¸à¤¤ì(€€€Ñ¡¥Ì¹Õ¤¹Í¡½İ!U ¤ì(€€€¥˜€¡Ñ¡¥Ì¹µ…Ñ¡QÕÑ½É¥…°€˜˜€…Ñ¡¥Ì¹ÑÕÑ½É¥…±½µÁ±•Ñ”¤Ñ¡¥Ì¹Í¡½İQÕÑ½É¥…±MÑ•À ¤ì(€€€É•ÑÕÉ¸ÑÉÕ”ì(€ô((€…Íå¹Œ™¥¹¥Í¡5…Ñ ¡ìÙ¥Ñ½Éä°…ÕÍ”°ÍÑ…ÑÌô¤ì(€€€¥˜€ …m5}MQQL¹A1e%9°5}MQQL¹QUQ=I%0°5}MQQL¹UAI}M1Q%=9t¹¥¹±Õ‘•Ì¡Ñ¡¥Ì¹ÍÑ…Ñ”¹ÍÑ…Ñ”¤¤É•ÑÕÉ¸ì(€€€½¹ÍĞÉ•ÍÕ±ÑMÑ…Ñ”€ôÙ¥Ñ½Éä€ü5}MQQL¹Y%Q=Id€è5}MQQL¹Pì(€€€Ñ¡¥Ì¹ÍÑ…Ñ”¹ÑÉ…¹Í¥Ñ¥½¸¡É•ÍÕ±ÑMÑ…Ñ”°ì…ÕÍ”ô¤ì(€€€Ñ¡¥Ì¹İ•…Á½¹Ì¹Í•Ñ¹…‰±•¡™…±Í”¤ì(€€€Ù½¥Ñ¡¥Ì¹¥¹ÁÕĞ¹•á¥ÑA½¥¹Ñ•É1½¬ ¤ì(€€€Ñ¡¥Ì¹¥¹ÁÕĞ¹±•…È ¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹Á±…ä¡Ù¥Ñ½Éä€ü€Ù¥Ñ½Éäœ€è€‘•™•…Ğœ¤ì(€€€±•ĞÁÉ½É•ÍÌ€ôì¹•İ	•ÍĞè™…±Í”ôì(€€€ÑÉäì(€€€€€ÁÉ½É•ÍÌ€ô…İ…¥ĞÑ¡¥Ì¹…¡¥•Ù•µ•¹ÑÌ¹™¥¹¥Í¡IÕ¸¡Ù¥Ñ½Éä°ÍÑ…ÑÌ¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹İ…É¸ m…µ•t½Õ±¹½ĞÁ•ÉÍ¥ÍĞÉÕ¸É•ÍÕ±ÑÌ¸œ°•ÉÉ½È¤ì(€€€€€Ñ¡¥Ì¹Õ¤¹Í¡½İQ½…ÍĞ¡ìÑåÁ”è€İ…É¹¥¹œœ°Ñ¥Ñ±”è€ŸB‡BûFFBÃB÷B×B÷BãBÔœ°µ•ÍÍ…”è€ŸBƒB×BßFBïF3FBÃFƒBÿBûBëBÃBßBÃBô°ƒB÷BøƒBÿFBûFBãBïF0ƒB÷BÔƒFBÓBÃBïBûFF0ƒBûBÇB÷BûBËBãFF0¸œô¤ì(€€€ô(€€€Ñ¡¥Ì¹Õ¤¹ÁÉ½™¥±”€ôÑ¡¥Ì¹Í…Ù”¹•ÑAÉ½™¥±” ¤ì(€€€Ñ¡¥Ì¹Õ¤¹Í¡½İI•ÍÕ±ÑÌ¡Ù¥Ñ½Éä€ü€Ù¥Ñ½Éäœ€è€‘•™•…Ğœ°ì€¸¸¹ÍÑ…ÑÌ°…ÕÍ”°¹•İ	•ÍĞèÁÉ½É•ÍÌ¹¹•İ	•ÍĞô¤ì(€ô((€É•ÍÑ…ÉÑ5…Ñ  ¤ì(€€€É•ÑÕÉ¸Ñ¡¥Ì¹ÍÑ…ÉÑ5…Ñ ¡ì‘¥™™¥Õ±ÑäèÑ¡¥Ì¹µ…Ñ¡¥™™¥Õ±Ñä°ÑÕÑ½É¥…°è™…±Í”ô¤ì(€ô((€É•ÑÕÉ¹Q½5•¹Ô¡ìÍ¡½Ü€ôÑÉÕ”ô€ôíô¤ì(€€€¥˜€¡Ñ¡¥Ì¹‘¥É•Ñ½È¤Ñ¡¥Ì¹‘¥É•Ñ½È¹ÉÕ¹¹¥¹œ€ô™…±Í”ì(€€€Ñ¡¥Ì¹İ•…Á½¹Ìü¹Í•Ñ¹…‰±•¡™…±Í”¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹ÍÑ½Á±° İ•…Á½¹Ìœ¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹ÍÑ½Á±° •™™•ÑÌœ¤ì(€€€Ñ¡¥Ì¹¥¹ÁÕĞ¹±•…È ¤ì(€€€Ù½¥Ñ¡¥Ì¹¥¹ÁÕĞ¹•á¥ÑA½¥¹Ñ•É1½¬ ¤ì(€€€¥˜€¡Ñ¡¥Ì¹ÍÑ…Ñ”¹ÍÑ…Ñ”€„ôô5}MQQL¹5%9}59T¤ì(€€€€€¥˜€¡Ñ¡¥Ì¹ÍÑ…Ñ”¹…¹QÉ…¹Í¥Ñ¥½¸¡5}MQQL¹5%9}59T¤¤Ñ¡¥Ì¹ÍÑ…Ñ”¹ÑÉ…¹Í¥Ñ¥½¸¡5}MQQL¹5%9}59T°ìÉ•…Í½¸è€µ•¹Ôœô¤ì(€€€€€•±Í”ì(€€€€€€€Ñ¡¥Ì¹ÍÑ…Ñ”¹É•Í•Ğ¡ìÉ•…Í½¸è€µ•¹ÔµÉ•½Ù•Éäœô¤ì(€€€€€€€Ñ¡¥Ì¹ÍÑ…Ñ”¹ÑÉ…¹Í¥Ñ¥½¸¡5}MQQL¹1=%9¤ì(€€€€€€€Ñ¡¥Ì¹ÍÑ…Ñ”¹ÑÉ…¹Í¥Ñ¥½¸¡5}MQQL¹5%9}59T¤ì(€€€€€ô(€€€ô(€€€Ñ¡¥Ì¹±•…É•‰ÕY¥ÍÕ…±Ì ¤ì(€€€Ñ¡¥Ì¹Á½Í¥Ñ¥½¹5•¹Õ…µ•É„ ¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹Í•ÑY½±Õµ” µ…ÍÑ•Èœ°Ñ¡¥Ì¹Í•ÑÑ¥¹Ì¹•Ğ …Õ‘¥¼¹µ…ÍÑ•Èœ°€À¸à¤¤ì(€€€¥˜€¡Í¡½Ü¤Ñ¡¥Ì¹Õ¤¹Í¡½İ5…¥¹5•¹Ô¡Ñ¡¥Ì¹‘•½É…Ñ•AÉ½™¥±”¡Ñ¡¥Ì¹Í…Ù”¹•ÑAÉ½™¥±” ¤¤¤ì(€ô((€Á½Í¥Ñ¥½¹5•¹Õ…µ•É„ ¤ì(€€€¥˜€ …Ñ¡¥Ì¹Í•¹•5…¹…•Èü¹…µ•É„¤É•ÑÕÉ¸ì(€€€½¹ÍĞ…µ•É„€ôÑ¡¥Ì¹Í•¹•5…¹…•È¹…µ•É„ì(€€€…µ•É„¹Á½Í¥Ñ¥½¸¹Í•Ğ ÈÀ°€ÄÄ°€Èä¤ì(€€€…µ•É„¹±½½­Ğ À°€Ğ°€À¤ì(€ô((€Í¡½İQÕÑ½É¥…±MÑ•À ¤ì(€€€¥˜€ …Ñ¡¥Ì¹µ…Ñ¡QÕÑ½É¥…°ñğÑ¡¥Ì¹ÑÕÑ½É¥…±½µÁ±•Ñ”¤É•ÑÕÉ¸ì(€€€½¹ÍĞÍÑ•À€ôQUQ=I%1}MQAMmÑ¡¥Ì¹ÑÕÑ½É¥…±MÑ•Átì(€€€¥˜€ …ÍÑ•À¤ì(€€€€€Ù½¥Ñ¡¥Ì¹™¥¹¥Í¡QÕÑ½É¥…°¡™…±Í”¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô(€€€Ñ¡¥Ì¹Õ¤¹Í¡½İQÕÑ½É¥…°¡ì¥¹‘•àèÑ¡¥Ì¹ÑÕÑ½É¥…±MÑ•À°­¥­•ÈèƒBBƒB{B‹B{BkB{Bl€¼¼€‘íMÑÉ¥¹œ¡Ñ¡¥Ì¹ÑÕÑ½É¥…±MÑ•À€¬€Ä¤¹Á…‘MÑ…ÉĞ È°€œÀœ¥õ€°€¸¸¹ÍÑ•Àô¤ì(€ô((€…‘Ù…¹•QÕÑ½É¥…±]¡•¸¡•áÁ•Ñ•°™¥¹¥Í €ô™…±Í”¤ì(€€€¥˜€ …Ñ¡¥Ì¹µ…Ñ¡QÕÑ½É¥…°ñğÑ¡¥Ì¹ÑÕÑ½É¥…±½µÁ±•Ñ”ñğÑ¡¥Ì¹ÑÕÑ½É¥…±MÑ•À€„ôô•áÁ•Ñ•¤É•ÑÕÉ¸ì(€€€¥˜€¡™¥¹¥Í ¤ì(€€€€€Ù½¥Ñ¡¥Ì¹™¥¹¥Í¡QÕÑ½É¥…°¡™…±Í”¤ì(€€€€€É•ÑÕÉ¸ì(€€€ô(€€€Ñ¡¥Ì¹ÑÕÑ½É¥…±MÑ•À€¬ô€Äì(€€€Ñ¡¥Ì¹Í¡½İQÕÑ½É¥…±MÑ•À ¤ì(€ô((€…Íå¹Œ™¥¹¥Í¡QÕÑ½É¥…°¡Í­¥ÁÁ•€ô™…±Í”¤ì(€€€¥˜€ …Ñ¡¥Ì¹µ…Ñ¡QÕÑ½É¥…°ñğÑ¡¥Ì¹ÑÕÑ½É¥…±½µÁ±•Ñ”¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹ÑÕÑ½É¥…±½µÁ±•Ñ”€ôÑÉÕ”ì(€€€Ñ¡¥Ì¹µ…Ñ¡QÕÑ½É¥…°€ô™…±Í”ì(€€€¥˜€¡Ñ¡¥Ì¹ÍÑ…Ñ”¹¥Ì¡5}MQQL¹QUQ=I%0¤¤Ñ¡¥Ì¹ÍÑ…Ñ”¹ÑÉ…¹Í¥Ñ¥½¸¡5}MQQL¹A1e%9°ìÉ•…Í½¸èÍ­¥ÁÁ•€ü€ÑÕÑ½É¥…°µÍ­¥ÁÁ•œ€è€ÑÕÑ½É¥…°µ½µÁ±•Ñ”œô¤ì(€€€Ñ¡¥Ì¹Õ¤¹¡¥‘•=Ù•É±…ä ¤ì(€€€Ñ¡¥Ì¹Õ¤¹Í¡½İ!U ¤ì(€€€Ñ¡¥Ì¹Õ¤¹Í¡½İQ½…ÍĞ¡ìÑåÁ”è€ÍÕ•ÍÌœ°Ñ¥Ñ±”è€ŸBBƒB{B‹B{BkB{BlƒB{B‡BKB{BWBtœ°µ•ÍÍ…”èÍ­¥ÁÁ•€ü€ŸBBûBÓFBëBÃBßBëBàƒBûFBëBïF;FB×B÷F,ƒBÓBïF<ƒF7FBûBÏBøƒBÿFBûBÏBûB÷BÀ¸œ€è€ŸBGBÃBßBûBËF/BÔƒFBãFFB×BóF,ƒBûBÿB×FBÃFBûFBÀƒFBãB÷FFBûB÷BãBßBãFBûBËBÃB÷F,¸œô¤ì(€€€ÑÉäì(€€€€€…İ…¥ĞÑ¡¥Ì¹Í…Ù”¹ÕÁ‘…Ñ•AÉ½™¥±”¡ìÑÕÑ½É¥…±½µÁ±•Ñ”èÑÉÕ”°ÑÕÑ½É¥…±½µÁ±•Ñ•èÑÉÕ”ô¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹İ…É¸ m…µ•tQÕÑ½É¥…°½µÁ±•Ñ¥½¸İ…Ì¹½ĞÍ…Ù•¸œ°•ÉÉ½È¤ì(€€€ô(€ô((€…ÁÁ±åM•ÑÑ¥¹Ì¡Í•ÑÑ¥¹Ì€ôÑ¡¥Ì¹Í•ÑÑ¥¹Ì¹•ÑM•ÑÑ¥¹Ì ¤¤ì(€€€¥˜€ …Í•ÑÑ¥¹Ì¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹Í•¹•5…¹…•Èü¹…ÁÁ±åM•ÑÑ¥¹Ì¡Í•ÑÑ¥¹Ì¤ì(€€€Ñ¡¥Ì¹¥¹ÁÕĞ¹Í•Ñ	¥¹‘¥¹Ì¡Í•ÑÑ¥¹Ì¹½¹ÑÉ½±Ì¹‰¥¹‘¥¹Ì°ìÉ•Á±…”èÑÉÕ”°Í¥±•¹ĞèÑÉÕ”ô¤ì(€€€Ñ¡¥Ì¹¥¹ÁÕĞ¹Í•Ñ5½ÕÍ•=ÁÑ¥½¹Ì¡ìÍ•¹Í¥Ñ¥Ù¥ÑäèÍ•ÑÑ¥¹Ì¹½¹ÑÉ½±Ì¹µ½ÕÍ•M•¹Í¥Ñ¥Ù¥Ñä°¥¹Ù•ÉÑdèÍ•ÑÑ¥¹Ì¹½¹ÑÉ½±Ì¹¥¹Ù•ÉÑdô¤ì(€€€Ñ¡¥Ì¹Á±…å•Èü¹Í•Ñ!•…‘	½‰¹…‰±•¡Í•ÑÑ¥¹Ì¹…µ•Á±…ä¹¡•…‘	½ˆ€˜˜€…Í•ÑÑ¥¹Ì¹…•ÍÍ¥‰¥±¥Ñä¹É•‘Õ•‘5½Ñ¥½¸¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹Í•ÑY½±Õµ•Ì¡Í•ÑÑ¥¹Ì¹…Õ‘¥¼¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹Í•Ñ5ÕÑ•¡Í•ÑÑ¥¹Ì¹…Õ‘¥¼¹µÕÑ•¤ì(€€€‘½Õµ•¹Ğ¹‘½Õµ•¹Ñ±•µ•¹Ğ¹ÍÑå±”¹Í•ÑAÉ½Á•ÉÑä œ´µÕ¤µÍ…±”œ°MÑÉ¥¹œ¡Í•ÑÑ¥¹Ì¹…•ÍÍ¥‰¥±¥Ñä¹Õ¥M…±”€üü€Ä¤¤ì(€€€‘½Õµ•¹Ğ¹‘½Õµ•¹Ñ±•µ•¹Ğ¹ÍÑå±”¹Í•ÑAÉ½Á•ÉÑä œ´µÉ½ÍÍ¡…¥Èµ½±½Èœ°Í•ÑÑ¥¹Ì¹…µ•Á±…ä¹É½ÍÍ¡…¥É½±½È¤ì(€ô((€‘•½É…Ñ•AÉ½™¥±”¡ÁÉ½™¥±”€ôíô¤ì(€€€É•ÑÕÉ¸ì(€€€€€€¸¸¹ÁÉ½™¥±”°(€€€€€…¡¥•Ù•µ•¹ÑÍ…Ñ…±½œèÑ¡¥Ì¹…¡¥•Ù•µ•¹ÑÌü¹•Ñ…Ñ…±½œü¸ ¤€üümt°(€€€€€‘¥™™¥Õ±ÑäèÑ¡¥Ì¹µ…Ñ¡¥™™¥Õ±Ñä°(€€€ôì(€ô((€™É…µ”¡Ñ¥µ•ÍÑ…µÀ¤ì(€€€¥˜€ …Ñ¡¥Ì¹ÉÕ¹¹¥¹œñğÑ¡¥Ì¹‘¥ÍÁ½Í•¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹É…˜€ôÉ•ÅÕ•ÍÑ¹¥µ…Ñ¥½¹É…µ”¡Ñ¡¥Ì¹}™É…µ”¤ì(€€€½¹ÍĞ™ÁÍ1¥µ¥Ğ€ô9Õµ‰•È¡Ñ¡¥Ì¹Í•ÑÑ¥¹Ì¹•Ğ É…Á¡¥Ì¹™ÁÍ1¥µ¥Ğœ°€À¤¤ì(€€€¥˜€¡™ÁÍ1¥µ¥Ğ€ø€À€˜˜Ñ¥µ•ÍÑ…µÀ€´Ñ¡¥Ì¹±…ÍÑQ¥µ•ÍÑ…µÀ€ğ€ÄÀÀÀ€¼™ÁÍ1¥µ¥Ğ€´€À¸ÌÔ¤É•ÑÕÉ¸ì(€€€½¹ÍĞÉ•…±•±Ñ„€ô5…Ñ ¹µ¥¸¡5a}I5}1Q°5…Ñ ¹µ…à À°€¡Ñ¥µ•ÍÑ…µÀ€´Ñ¡¥Ì¹±…ÍÑQ¥µ•ÍÑ…µÀ¤€¼€ÄÀÀÀ¤¤ì(€€€Ñ¡¥Ì¹±…ÍÑQ¥µ•ÍÑ…µÀ€ôÑ¥µ•ÍÑ…µÀì(€€€½¹ÍĞ‘•±Ñ„€ôÉ•…±•±Ñ„€¨Ñ¡¥Ì¹Ñ¥µ•M…±”ì((€€€ÑÉäì(€€€€€¥˜€¡A1e%9}MQQL¹¡…Ì¡Ñ¡¥Ì¹ÍÑ…Ñ”¹ÍÑ…Ñ”¤¤Ñ¡¥Ì¹ÕÁ‘…Ñ•…µ•Á±…ä¡‘•±Ñ„¤ì(€€€€€¥˜€¡m5}MQQL¹A1e%9°5}MQQL¹QUQ=I%0°5}MQQL¹AUM°5}MQQL¹UAI}M1Q%=9t¹¥¹±Õ‘•Ì¡Ñ¡¥Ì¹ÍÑ…Ñ”¹ÍÑ…Ñ”¤¤ì(€€€€€€€Ñ¡¥Ì¹Á±…å•Èü¹ÕÁ‘…Ñ”¡Ñ¡¥Ì¹Í•¹•5…¹…•È¹…µ•É„°A1e%9}MQQL¹¡…Ì¡Ñ¡¥Ì¹ÍÑ…Ñ”¹ÍÑ…Ñ”¤€üÉ•…±•±Ñ„€è€À¤ì(€€€€€ô(€€€€€Ñ¡¥Ì¹ÕÁ‘…Ñ•Õ‘¥½1¥ÍÑ•¹•È ¤ì(€€€€€Ñ¡¥Ì¹ÕÁ‘…Ñ••‰Õœ¡É•…±•±Ñ„¤ì(€€€€€½¹ÍĞÍÑ…ÑÌ€ôÑ¡¥Ì¹Í•¹•5…¹…•È¹É•¹‘•È¡É•…±•±Ñ„¤ì(€€€€€Ñ¡¥Ì¹ÕÁ‘…Ñ•‘…ÁÑ¥Ù•EÕ…±¥Ñä¡É•…±•±Ñ„°ÍÑ…ÑÌ¹™ÁÌ¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€Ñ¡¥Ì¹¡…¹‘±•IÕ¹Ñ¥µ•ÉÉ½È¡•ÉÉ½È¤ì(€€€ô(€ô((€ÕÁ‘…Ñ•…µ•Á±…ä¡‘•±Ñ„¤ì(€€€Ñ¡¥Ì¹Á¡åÍ¥ÍÕµÕ±…Ñ½È€ô5…Ñ ¹µ¥¸¡%a}MQ@€¨5a}MU	}MQAL°Ñ¡¥Ì¹Á¡åÍ¥ÍÕµÕ±…Ñ½È€¬‘•±Ñ„¤ì(€€€±•ĞÍÑ•ÁÌ€ô€Àì(€€€¥˜€¡Ñ¡¥Ì¹Á¡åÍ¥ÍÕµÕ±…Ñ½È€øô%a}MQ@¤Ñ¡¥Ì¹…µ•Á±…å%¹ÁÕĞ¹‰•¥¹MÑ•Á	…Ñ  ¤ì(€€€İ¡¥±”€¡Ñ¡¥Ì¹Á¡åÍ¥ÍÕµÕ±…Ñ½È€øô%a}MQ@€˜˜ÍÑ•ÁÌ€ğ5a}MU	}MQAL€˜˜A1e%9}MQQL¹¡…Ì¡Ñ¡¥Ì¹ÍÑ…Ñ”¹ÍÑ…Ñ”¤¤ì(€€€€€Ñ¡¥Ì¹Á±…å•È¹™¥á•‘UÁ‘…Ñ”¡Ñ¡¥Ì¹…µ•Á±…å%¹ÁÕĞ°%a}MQ@¤ì(€€€€€Ñ¡¥Ì¹İ½É±¹ÍÑ•À¡%a}MQ@¤ì(€€€€€Ñ¡¥Ì¹İ•…Á½¹Ì¹ÕÁ‘…Ñ”¡%a}MQ@°Ñ¡¥Ì¹…µ•Á±…å%¹ÁÕĞ¤ì(€€€€€Ñ¡¥Ì¹•¹•µ¥•Ì¹ÕÁ‘…Ñ”¡%a}MQ@¤ì(€€€€€Ñ¡¥Ì¹‘¥É•Ñ½È¹ÕÁ‘…Ñ”¡%a}MQ@°Ñ¡¥Ì¹…µ•Á±…å%¹ÁÕĞ¤ì(€€€€€Ñ¡¥Ì¹•™™•ÑÌ¹ÕÁ‘…Ñ”¡%a}MQ@¤ì(€€€€€Ñ¡¥Ì¹…É•¹„¹ÕÁ‘…Ñ”¡%a}MQ@°Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¤ì(€€€€€Ñ¡¥Ì¹Á¡åÍ¥ÍÕµÕ±…Ñ½È€´ô%a}MQ@ì(€€€€€ÍÑ•ÁÌ€¬ô€Äì(€€€ô(€€€¥˜€¡ÍÑ•ÁÌ€ø€À¤Ñ¡¥Ì¹¥¹ÁÕĞ¹•¹‘É…µ” ¤ì((€€€¥˜€¡Ñ¡¥Ì¹µ…Ñ¡QÕÑ½É¥…°€˜˜€…Ñ¡¥Ì¹ÑÕÑ½É¥…±½µÁ±•Ñ”€˜˜Ñ¡¥Ì¹ÑÕÑ½É¥…±MÑ•À€ôôô€À¤ì(€€€€€Ñ¡¥Ì¹ÑÕÑ½É¥…±5½Ù•µ•¹Ğ€¬ôÑ¡¥Ì¹Á±…å•È¹¡½É¥é½¹Ñ…±MÁ••€ø€À¸à€ü‘•±Ñ„€è€µ‘•±Ñ„€¨€À¸Ğì(€€€€€Ñ¡¥Ì¹ÑÕÑ½É¥…±5½Ù•µ•¹Ğ€ô5…Ñ ¹µ…à À°Ñ¡¥Ì¹ÑÕÑ½É¥…±5½Ù•µ•¹Ğ¤ì(€€€€€¥˜€¡Ñ¡¥Ì¹ÑÕÑ½É¥…±5½Ù•µ•¹Ğ€øô€Ä¸Ä¤ì(€€€€€€€Ñ¡¥Ì¹ÑÕÑ½É¥…±MÑ•À€ô€Äì(€€€€€€€Ñ¡¥Ì¹Í¡½İQÕÑ½É¥…±MÑ•À ¤ì(€€€€€ô(€€€ô(€€€¥˜€¡Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¹ä€ğ€´à¤ì(€€€€€Ñ¡¥Ì¹Á±…å•È¹‘…µ…” ÈĞ°ìÍ½ÕÉ”è€…É•¹„œ°…ÕÍ”è€ŸBBÃBÓB×B÷BãBÔƒBßBÀƒBÿFB×BÓB×BïF,ƒFB×F#FGFBëBàœ°‰åÁ…ÍÍÉµ½ÈèÑÉÕ”ô¤ì(€€€€€Ñ¡¥Ì¹Á±…å•È¹Ñ•±•Á½ÉĞ¡Ñ¡¥Ì¹…É•¹„¹•ÑM…™•A±…å•ÉMÁ…İ¸ ¤¤ì(€€€ô(€ô((€ÕÁ‘…Ñ•Õ‘¥½1¥ÍÑ•¹•È ¤ì(€€€¥˜€ …Ñ¡¥Ì¹…Õ‘¥¼¹É•…‘äñğ€…Ñ¡¥Ì¹Í•¹•5…¹…•Èü¹…µ•É„¤É•ÑÕÉ¸ì(€€€½¹ÍĞÁ½Í¥Ñ¥½¸€ô¹•ÜQ!I¹Y•Ñ½ÈÌ ¤ì(€€€½¹ÍĞ™½Éİ…É€ô¹•ÜQ!I¹Y•Ñ½ÈÌ ¤ì(€€€Ñ¡¥Ì¹Í•¹•5…¹…•È¹…µ•É„¹•Ñ]½É±‘A½Í¥Ñ¥½¸¡Á½Í¥Ñ¥½¸¤ì(€€€Ñ¡¥Ì¹Í•¹•5…¹…•È¹…µ•É„¹•Ñ]½É±‘¥É•Ñ¥½¸¡™½Éİ…É¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼¹Í•Ñ1¥ÍÑ•¹•È¡Á½Í¥Ñ¥½¸°™½Éİ…É¤ì(€ô((€ÕÁ‘…Ñ•‘…ÁÑ¥Ù•EÕ…±¥Ñä¡‘Ğ°™ÁÌ¤ì(€€€¥˜€ …A1e%9}MQQL¹¡…Ì¡Ñ¡¥Ì¹ÍÑ…Ñ”¹ÍÑ…Ñ”¤ñğ€…9Õµ‰•È¹¥Í¥¹¥Ñ”¡™ÁÌ¤ñğ™ÁÌ€ğô€À¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹±½İÁÍQ¥µ”€ô™ÁÌ€ğ€ĞÈ€üÑ¡¥Ì¹±½İÁÍQ¥µ”€¬‘Ğ€è5…Ñ ¹µ…à À°Ñ¡¥Ì¹±½İÁÍQ¥µ”€´‘Ğ€¨€À¸Ô¤ì(€€€¥˜€¡Ñ¡¥Ì¹±½İÁÍQ¥µ”€ø€à€˜˜€…Ñ¡¥Ì¹…‘…ÁÑ¥Ù•EÕ…±¥ÑåI•‘Õ•€˜˜Ñ¡¥Ì¹Í•ÑÑ¥¹Ì¹•Ğ É…Á¡¥Ì¹Á…ÉÑ¥±•Ìœ¤€„ôô€±½Üœ¤ì(€€€€€Ñ¡¥Ì¹…‘…ÁÑ¥Ù•EÕ…±¥ÑåI•‘Õ•€ôÑÉÕ”ì(€€€€€Ñ¡¥Ì¹•™™•ÑÌ¹ÅÕ…±¥Ñä€ô€±½Üœì(€€€€€Ñ¡¥Ì¹Õ¤¹Í¡½İQ½…ÍĞ¡ìÑåÁ”è€İ…É¹¥¹œœ°Ñ¥Ñ±”è€ŸBCBSBCBB‹BcBKBwB{BTƒBkBCBŸBWB‡B‹BKBxœ°µ•ÍÍ…”è€ŸBBïBûFB÷BûFFF0ƒBËFBûFBãFB÷F/FƒFBÃFFBãFƒBËFB×BóB×B÷B÷BøƒFB÷BãBÛB×B÷BÀ¸ƒBBûBïF3BßBûBËBÃFB×BïF3FBëBãBÔƒB÷BÃFFFBûBçBëBàƒB÷BÔƒBãBßBóB×B÷B×B÷F,¸œ°‘ÕÉ…Ñ¥½¸è€ÔÈÀÀô¤ì(€€€ô(€ô((€ÕÁ‘…Ñ••‰Õœ¡‘Ğ¤ì(€€€¥˜€ …Ñ¡¥Ì¹‘•‰Õœ¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹‘•‰Õœ¹ÕÁ‘…Ñ”¡‘Ğ°ì(€€€€€É•¹‘•É•ÈèÑ¡¥Ì¹Í•¹•5…¹…•È¹É•¹‘•É•È°(€€€€€Í•¹”èÑ¡¥Ì¹Í•¹•5…¹…•È¹Í•¹”°(€€€€€Á±…å•ÈèÑ¡¥Ì¹Á±…å•È°(€€€€€•¹•µåMåÍÑ•´èÑ¡¥Ì¹•¹•µ¥•Ì°(€€€€€•™™•ÑÍMåÍÑ•´èÑ¡¥Ì¹•™™•ÑÌ°(€€€€€Á…ÉÑ¥±•ÌèÑ¡¥Ì¹•™™•ÑÌ°(€€€€€‘¥É•Ñ½ÈèÑ¡¥Ì¹‘¥É•Ñ½È¹•Ñ•‰Õ…Ñ„ ¤°(€€€€€…¥MÑ…Ñ”èÑ¡¥Ì¹•¹•µ¥•Ì¹•Ñ9•…É•ÍÑ%MÑ…Ñ” ¤°(€€€€€…¹½µ…±äèÑ¡¥Ì¹‘¥É•Ñ½È¹ÕÉÉ•¹Ñ¹½µ…±äü¹¹…µ”€üü€¹½¹”œ°(€€€ô¤ì(€€€Ñ¡¥Ì¹‘•‰ÕI•™É•Í €´ô‘Ğì(€€€¥˜€¡Ñ¡¥Ì¹‘•‰Õœ¹Ù¥Í¥‰±”€˜˜Ñ¡¥Ì¹‘•‰ÕI•™É•Í €ğô€À¤ì(€€€€€Ñ¡¥Ì¹‘•‰ÕI•™É•Í €ô€À¸ÈĞì(€€€€€Ñ¡¥Ì¹É•™É•Í¡•‰ÕY¥ÍÕ…±Ì ¤ì(€€€ô•±Í”¥˜€ …Ñ¡¥Ì¹‘•‰Õœ¹Ù¥Í¥‰±”€˜˜Ñ¡¥Ì¹‘•‰Õ1…å•Èü¹¡¥±‘É•¸¹±•¹Ñ ¤ì(€€€€€Ñ¡¥Ì¹±•…É•‰ÕY¥ÍÕ…±Ì ¤ì(€€€ô(€ô((€±•…É•‰ÕY¥ÍÕ…±Ì ¤ì(€€€¥˜€ …Ñ¡¥Ì¹‘•‰Õ1…å•È¤É•ÑÕÉ¸ì(€€€™½È€¡½¹ÍĞ¡¥±½˜l¸¸¹Ñ¡¥Ì¹‘•‰Õ1…å•È¹¡¥±‘É•¹t¤‘¥ÍÁ½Í••‰Õ=‰©•Ğ¡¡¥±¤ì(€ô((€É•™É•Í¡•‰ÕY¥ÍÕ…±Ì ¤ì(€€€Ñ¡¥Ì¹±•…É•‰ÕY¥ÍÕ…±Ì ¤ì(€€€½¹ÍĞÑ½±•Ì€ôÑ¡¥Ì¹‘•‰Õœ¹Ñ½±•Ìì(€€€½¹ÍĞ…É•¹……Ñ„€ôÑ¡¥Ì¹…É•¹„¹•Ñ•‰Õ…Ñ„ ¤ì(€€€½¹ÍĞ•¹•µå…Ñ„€ôÑ¡¥Ì¹•¹•µ¥•Ì¹•Ñ•‰Õ…Ñ„ ¤ì(€€€½¹ÍĞ…‘‘5…É­•È€ô€¡Á½Í¥Ñ¥½¸°½±½È°Í¥é”€ô€À¸ÈÔ¤€ôøì(€€€€€½¹ÍĞµ…É­•È€ô¹•ÜQ!I¹5•Í  (€€€€€€€¹•ÜQ!I¹MÁ¡•É••½µ•ÑÉä¡Í¥é”°€Ü°€Ô¤°(€€€€€€€¹•ÜQ!I¹5•Í¡	…Í¥5…Ñ•É¥…°¡ì½±½È°İ¥É•™É…µ”èÑÉÕ”°‘•ÁÑ¡Q•ÍĞè™…±Í”ô¤°(€€€€€€¤ì(€€€€€µ…É­•È¹Á½Í¥Ñ¥½¸¹½Áä¡Á½Í¥Ñ¥½¸¤ì(€€€€€µ…É­•È¹É•¹‘•É=É‘•È€ô€ÄÀÀì(€€€€€Ñ¡¥Ì¹‘•‰Õ1…å•È¹…‘¡µ…É­•È¤ì(€€€ôì(€€€½¹ÍĞ…‘‘1¥¹”€ô€¡Á½¥¹ÑÌ°½±½È¤€ôøì(€€€€€¥˜€¡Á½¥¹ÑÌ¹±•¹Ñ €ğ€È¤É•ÑÕÉ¸ì(€€€€€½¹ÍĞ•½µ•ÑÉä€ô¹•ÜQ!I¹	Õ™™•É•½µ•ÑÉä ¤¹Í•ÑÉ½µA½¥¹ÑÌ¡Á½¥¹ÑÌ¤ì(€€€€€½¹ÍĞ±¥¹”€ô¹•ÜQ!I¹1¥¹•M•µ•¹ÑÌ¡•½µ•ÑÉä°¹•ÜQ!I¹1¥¹•	…Í¥5…Ñ•É¥…°¡ì½±½È°‘•ÁÑ¡Q•ÍĞè™…±Í”°ÑÉ…¹ÍÁ…É•¹ĞèÑÉÕ”°½Á…¥Ñäè€À¸äô¤¤ì(€€€€€±¥¹”¹É•¹‘•É=É‘•È€ô€ÄÀÀì(€€€€€Ñ¡¥Ì¹‘•‰Õ1…å•È¹…‘¡±¥¹”¤ì(€€€ôì((€€€¥˜€¡Ñ½±•Ì¹ÍÁ…İ¹Ì¤ì(€€€€€…É•¹……Ñ„¹Á±…å•ÉMÁ…İ¹Ì¹™½É…  ¡Á½Í¥Ñ¥½¸¤€ôø…‘‘5…É­•È¡Á½Í¥Ñ¥½¸°€ÁàÔÕ™˜å„°€À¸Ìà¤¤ì(€€€€€…É•¹……Ñ„¹•¹•µåMÁ…İ¹Ì¹™½É…  ¡Á½Í¥Ñ¥½¸¤€ôø…‘‘5…É­•È¡Á½Í¥Ñ¥½¸°€Áá™˜ÑÜÈ°€À¸Ì¤¤ì(€€€ô(€€€¥˜€¡Ñ½±•Ì¹¹…Ù¥…Ñ¥½¹9½‘•Ì¤ì(€€€€€…É•¹……Ñ„¹İ…åÁ½¥¹ÑÌ¹™½É…  ¡¹½‘”¤€ôø…‘‘5…É­•È¡¹½‘”¹Á½Í¥Ñ¥½¸°¹½‘”¹•¹…‰±•€ü€ÁàÕ•”İ™˜€è€ÁàÔÔÔÔÔÔ°€À¸Äà¤¤ì(€€€€€½¹ÍĞµ…À€ô¹•Ü5…À¡…É•¹……Ñ„¹İ…åÁ½¥¹ÑÌ¹µ…À ¡¹½‘”¤€ôøm¹½‘”¹¥°¹½‘”¹Á½Í¥Ñ¥½¹t¤¤ì(€€€€€½¹ÍĞÁ½¥¹ÑÌ€ômtì(€€€€€…É•¹……Ñ„¹•‘•Ì¹™¥±Ñ•È ¡•‘”¤€ôø•‘”¹•¹…‰±•¤¹™½É…  ¡•‘”¤€ôøì(€€€€€€€¥˜€¡µ…À¹•Ğ¡•‘”¹„¤€˜˜µ…À¹•Ğ¡•‘”¹ˆ¤¤Á½¥¹ÑÌ¹ÁÕÍ ¡µ…À¹•Ğ¡•‘”¹„¤°µ…À¹•Ğ¡•‘”¹ˆ¤¤ì(€€€€€ô¤ì(€€€€€…‘‘1¥¹”¡Á½¥¹ÑÌ°€ÁàÉŒàĞäÄ¤ì(€€€ô(€€€¥˜€¡Ñ½±•Ì¹½‰©•Ñ¥Ù•i½¹•Ì€˜˜Ñ¡¥Ì¹‘¥É•Ñ½È¹½‰©•Ñ¥Ù”¤ì(€€€€€½¹ÍĞÍ•µ•¹ÑÌ€ô€ĞÀì(€€€€€½¹ÍĞÁ½¥¹ÑÌ€ômtì(€€€€€½¹ÍĞ•¹Ñ•È€ôÑ¡¥Ì¹‘¥É•Ñ½È¹½‰©•Ñ¥Ù”¹Á½Í¥Ñ¥½¸ì(€€€€€½¹ÍĞÉ…‘¥ÕÌ€ôÑ¡¥Ì¹‘¥É•Ñ½È¹½‰©•Ñ¥Ù”¹É…‘¥ÕÌ€üü€Ìì(€€€€€™½È€¡±•Ğ¥¹‘•à€ô€Àì¥¹‘•à€ğÍ•µ•¹ÑÌì¥¹‘•à€¬ô€Ä¤ì(€€€€€€€½¹ÍĞ„€ô¥¹‘•à€¼Í•µ•¹ÑÌ€¨5…Ñ ¹A$€¨€Èì(€€€€€€€½¹ÍĞˆ€ô€¡¥¹‘•à€¬€Ä¤€¼Í•µ•¹ÑÌ€¨5…Ñ ¹A$€¨€Èì(€€€€€€€Á½¥¹ÑÌ¹ÁÕÍ  (€€€€€€€€€¹•ÜQ!I¹Y•Ñ½ÈÌ¡•¹Ñ•È¹à€¬5…Ñ ¹½Ì¡„¤€¨É…‘¥ÕÌ°•¹Ñ•È¹ä€¬€À¸ÄÈ°•¹Ñ•È¹è€¬5…Ñ ¹Í¥¸¡„¤€¨É…‘¥ÕÌ¤°(€€€€€€€€€¹•ÜQ!I¹Y•Ñ½ÈÌ¡•¹Ñ•È¹à€¬5…Ñ ¹½Ì¡ˆ¤€¨É…‘¥ÕÌ°•¹Ñ•È¹ä€¬€À¸ÄÈ°•¹Ñ•È¹è€¬5…Ñ ¹Í¥¸¡ˆ¤€¨É…‘¥ÕÌ¤°(€€€€€€€€¤ì(€€€€€ô(€€€€€…‘‘1¥¹”¡Á½¥¹ÑÌ°€Áá™™ŒàÔÜ¤ì(€€€ô(€€€¥˜€¡Ñ½±•Ì¹•¹•µåI½ÕÑ•Ì¤ì(€€€€€½¹ÍĞÁ½¥¹ÑÌ€ômtì(€€€€€•¹•µå…Ñ„¹™½É…  ¡•¹•µä¤€ôøÁ½¥¹ÑÌ¹ÁÕÍ ¡•¹•µä¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€Ä°€À¤¤°•¹•µä¹Ñ…É•Ğ¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€Ä°€À¤¤¤¤ì(€€€€€…‘‘1¥¹”¡Á½¥¹ÑÌ°€Áá™˜á„Í¤ì(€€€ô(€€€¥˜€¡Ñ½±•Ì¹±¥¹•=™M¥¡Ğ¤ì(€€€€€½¹ÍĞÁ½¥¹ÑÌ€ômtì(€€€€€•¹•µå…Ñ„¹™½É…  ¡•¹•µä¤€ôøÁ½¥¹ÑÌ¹ÁÕÍ ¡•¹•µä¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€Ä¸Ô°€À¤¤°Ñ¡¥Ì¹Á±…å•È¹Á½Í¥Ñ¥½¸¹±½¹” ¤¹…‘¡¹•ÜQ!I¹Y•Ñ½ÈÌ À°€Ä°€À¤¤¤¤ì(€€€€€…‘‘1¥¹”¡Á½¥¹ÑÌ°€Áá™˜ÑÜÈ¤ì(€€€ô(€€€¥˜€¡Ñ½±•Ì¹¡¥Ñ‰½á•Ì¤ì(€€€€€™½È€¡½¹ÍĞ•¹•µä½˜Ñ¡¥Ì¹•¹•µ¥•Ì¹•¹•µ¥•Ì¹™¥±Ñ•È ¡•¹ÑÉä¤€ôø€…•¹ÑÉä¹‘•…¤¤ì(€€€€€€€™½È€¡½¹ÍĞµ•Í ½˜•¹•µä¹¡¥Ñ5•Í¡•Ì¤ì(€€€€€€€€€½¹ÍĞ¡•±Á•È€ô¹•ÜQ!I¹	½àÍ!•±Á•È¡¹•ÜQ!I¹	½àÌ ¤¹Í•ÑÉ½µ=‰©•Ğ¡µ•Í ¤°µ•Í ¹ÕÍ•É…Ñ„¹¡¥Ñi½¹”€ôôô€¡•…œ€ü€Áá™™•˜ÜÔ€è€Áá™˜ÑÜÈ¤ì(€€€€€€€€€¡•±Á•È¹µ…Ñ•É¥…°¹‘•ÁÑ¡Q•ÍĞ€ô™…±Í”ì(€€€€€€€€€¡•±Á•È¹É•¹‘•É=É‘•È€ô€ÄÀÀì(€€€€€€€€€Ñ¡¥Ì¹‘•‰Õ1…å•È¹…‘¡¡•±Á•È¤ì(€€€€€€€ô(€€€€€ô(€€€ô(€€€¥˜€¡Ñ½±•Ì¹½±±¥‘•ÉÌ¤ì(€€€€€™½È€¡½¹ÍĞ‰½‘ä½˜Ñ¡¥Ì¹…É•¹„¹ÍÑ…Ñ¥	½‘¥•Ì¤ì(€€€€€€€‰½‘ä¹Í¡…Á•Ì¹™½É…  ¡Í¡…Á”°¥¹‘•à¤€ôøì(€€€€€€€€€±•Ğ•½µ•ÑÉäì(€€€€€€€€€¥˜€¡Í¡…Á”¹¡…±™áÑ•¹ÑÌ¤•½µ•ÑÉä€ô¹•ÜQ!I¹	½á•½µ•ÑÉä¡Í¡…Á”¹¡…±™áÑ•¹ÑÌ¹à€¨€È°Í¡…Á”¹¡…±™áÑ•¹ÑÌ¹ä€¨€È°Í¡…Á”¹¡…±™áÑ•¹ÑÌ¹è€¨€È¤ì(€€€€€€€€€•±Í”¥˜€¡Í¡…Á”¹É…‘¥ÕÌ¤•½µ•ÑÉä€ô¹•ÜQ!I¹MÁ¡•É••½µ•ÑÉä¡Í¡…Á”¹É…‘¥ÕÌ°€à°€Ø¤ì(€€€€€€€€€•±Í”É•ÑÕÉ¸ì(€€€€€€€€€½¹ÍĞµ•Í €ô¹•ÜQ!I¹5•Í ¡•½µ•ÑÉä°¹•ÜQ!I¹5•Í¡	…Í¥5…Ñ•É¥…°¡ì½±½Èè€ÁàÕ•”İ™˜°İ¥É•™É…µ”èÑÉÕ”°‘•ÁÑ¡Q•ÍĞè™…±Í”°ÑÉ…¹ÍÁ…É•¹ĞèÑÉÕ”°½Á…¥Ñäè€À¸ĞÈô¤¤ì(€€€€€€€€€½¹ÍĞ½™™Í•Ğ€ô‰½‘ä¹Í¡…Á•=™™Í•ÑÍm¥¹‘•átì(€€€€€€€€€µ•Í ¹Á½Í¥Ñ¥½¸¹Í•Ğ¡‰½‘ä¹Á½Í¥Ñ¥½¸¹à€¬½™™Í•Ğ¹à°‰½‘ä¹Á½Í¥Ñ¥½¸¹ä€¬½™™Í•Ğ¹ä°‰½‘ä¹Á½Í¥Ñ¥½¸¹è€¬½™™Í•Ğ¹è¤ì(€€€€€€€€€µ•Í ¹ÅÕ…Ñ•É¹¥½¸¹Í•Ğ¡‰½‘ä¹ÅÕ…Ñ•É¹¥½¸¹à°‰½‘ä¹ÅÕ…Ñ•É¹¥½¸¹ä°‰½‘ä¹ÅÕ…Ñ•É¹¥½¸¹è°‰½‘ä¹ÅÕ…Ñ•É¹¥½¸¹Ü¤ì(€€€€€€€€€µ•Í ¹É•¹‘•É=É‘•È€ô€ääì(€€€€€€€€€Ñ¡¥Ì¹‘•‰Õ1…å•È¹…‘¡µ•Í ¤ì(€€€€€€€ô¤ì(€€€€€ô(€€€ô(€ô((€¡…¹‘±•IÕ¹Ñ¥µ•ÉÉ½È¡•ÉÉ½È¤ì(€€€½¹Í½±”¹•ÉÉ½È m…µ•tIÕ¹Ñ¥µ”™…¥±ÕÉ”¸œ°•ÉÉ½È¤ì(€€€Ñ¡¥Ì¹ÉÕ¹¹¥¹œ€ô™…±Í”ì(€€€…¹•±¹¥µ…Ñ¥½¹É…µ”¡Ñ¡¥Ì¹É…˜¤ì(€€€Ñ¡¥Ì¹Õ¤¹Í¡½İÉÉ½È¡ìÑ¥Ñ±”è€ŸB‡BãBóFBïF?FBãF<ƒBûFFBÃB÷BûBËBïB×B÷BÀœ°‘•Ñ…¥°è•ÉÉ½È¹µ•ÍÍ…”°½‘”è€IU9Q%5}%1UIœô¤ì(€ô((€‘¥ÍÁ½Í” ¤ì(€€€¥˜€¡Ñ¡¥Ì¹‘¥ÍÁ½Í•¤É•ÑÕÉ¸ì(€€€Ñ¡¥Ì¹‘¥ÍÁ½Í•€ôÑÉÕ”ì(€€€Ñ¡¥Ì¹ÉÕ¹¹¥¹œ€ô™…±Í”ì(€€€…¹•±¹¥µ…Ñ¥½¹É…µ”¡Ñ¡¥Ì¹É…˜¤ì(€€€İ¥¹‘½Ü¹±•…ÉQ¥µ•½ÕĞ¡Ñ¡¥Ì¹ÁÉ½™¥±•M…Ù•Q¥µ•È¤ì(€€€™½È€¡½¹ÍĞÕ¹ÍÕ‰ÍÉ¥‰”½˜Ñ¡¥Ì¹Õ¹ÍÕ‰ÍÉ¥‰•ÉÌ¤Õ¹ÍÕ‰ÍÉ¥‰”ü¸ ¤ì(€€€Ñ¡¥Ì¹Õ¹ÍÕ‰ÍÉ¥‰•ÉÌ¹±•¹Ñ €ô€Àì(€€€Ñ¡¥Ì¹±•…É•‰ÕY¥ÍÕ…±Ì ¤ì(€€€Ñ¡¥Ì¹‘•‰Õœü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹…¡¥•Ù•µ•¹ÑÌü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹‘¥É•Ñ½Èü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹İ•…Á½¹Ìü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹•¹•µ¥•Ìü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹•™™•ÑÌü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹Á±…å•Èü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹…É•¹„ü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹Í•¹•5…¹…•Èü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹…Õ‘¥¼ü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹¥¹ÁÕĞü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹…ÍÍ•ÑÌü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹Í…Ù”ü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹Õ¤ü¹‘¥ÍÁ½Í” ¤ì(€€€Ñ¡¥Ì¹•Ù•¹Ñ	ÕÌ¹±•…È ¤ì(€ô)ô()•áÁ½ÉĞ‘•™…Õ±Ğ…µ”ì(
+        if (hits > 0) this.effects.spawnExplosion(this.player.position, 2.25, 0x5ee7ff);
+      }
+    });
+    on('player:slideStarted', () => this.advanceTutorialWhen(2));
+    on('combat:shot', () => this.advanceTutorialWhen(3));
+    on('weapon:reload-start', () => this.advanceTutorialWhen(4));
+    on('director:objective-complete', () => this.advanceTutorialWhen(5));
+    on('upgrade:applied', () => this.advanceTutorialWhen(6, true));
+
+    on('player:jumped', () => this.audio.playEffect('jump'));
+    on('player:landed', ({ impact }) => this.audio.playEffect('land', { gain: Math.min(0.35, 0.08 + impact * 0.014) }));
+    on('player:dashStarted', () => this.audio.playEffect('dash'));
+    on('debug:toggle', () => { this.debugRefresh = 0; });
+  }
+
+  createDebugManager() {
+    this.debug = new DebugManager({
+      eventBus: this.eventBus,
+      hooks: {
+        toggleGodMode: (enabled) => {
+          const next = typeof enabled === 'boolean' ? enabled : !this.player.invincible;
+          this.player.setInvincible?.(next);
+          return `god: ${next ? 'on' : 'off'}`;
+        },
+        infiniteAmmo: (enabled = true) => `ammo: ${this.weapons.setInfiniteAmmo(enabled) ? 'on' : 'off'}`,
+        giveWeapon: (weapon = 'carbine') => {
+          const index = this.weapons.weaponOrder.indexOf(String(weapon));
+          if (index < 0) throw new Error(`Unknown weapon: ${weapon}`);
+          this.weapons.switchTo(index);
+          this.weapons.addAmmo(999, weapon);
+          return `equipped: ${weapon}`;
+        },
+        spawnEnemy: (type = 'trooper', count = 1) => {
+          const amount = THREE.MathUtils.clamp(Math.floor(Number(count) || 1), 1, 20);
+          for (let index = 0; index < amount; index += 1) this.enemies.spawn(String(type));
+          return `spawned ${amount} ${type}`;
+        },
+        killAllEnemies: () => { this.enemies.killAll(); return 'hostiles cleared'; },
+        freezeAI: (enabled = true) => {
+          this.enemies.aiFrozen = Boolean(enabled);
+          this.eventBus.emit('debug:freeze-ai', { enabled: Boolean(enabled) });
+          return `ai: ${enabled ? 'frozen' : 'active'}`;
+        },
+        forceShift: () => { this.director.forceShift(); return 'shift forced'; },
+        completeObjective: () => { this.director.forceCompleteObjective(); return 'objective completed'; },
+        teleport: (x, y, z) => { this.player.teleport(new THREE.Vector3(Number(x), Number(y), Number(z))); return `teleported: ${x}, ${y}, ${z}`; },
+        restartMatch: () => { void this.restartMatch(); return 'match restarted'; },
+        setTimeScale: (scale) => { this.timeScale = THREE.MathUtils.clamp(Number(scale) || 1, 0.1, 5); return `timescale: ${this.timeScale}`; },
+      },
+    });
+    this.debug.registerMetric('State', () => this.state.state);
+    this.debug.registerMetric('Arena', () => this.arena.getMapInfo().shortName);
+    this.debug.registerMetric('Accuracy', () => `${(this.weapons.getAccuracy() * 100).toFixed(1)}%`);
+    this.debug.registerMetric('Time scale', () => this.timeScale.toFixed(2));
+  }
+
+  async startMatch({ difficulty = this.matchDifficulty, tutorial = false, mapId = null, map = null } = {}) {
+    if (this.disposed) return;
+    this.audio.stopAll('weapons');
+    this.audio.stopAll('effects');
+    void this.audio.unlock().then((ready) => {
+      if (ready) {
+        this.audio.startAmbience();
+        this.audio.startMusic();
+      }
+    });
+    if (![GAME_STATES.MAIN_MENU, GAME_STATES.VICTORY, GAME_STATES.DEFEAT].includes(this.state.state)) {
+      this.returnToMenu({ show: false });
+    }
+    const nextMapId = resolveMapId(mapId ?? map ?? this.matchMapId);
+    const mapChanged = nextMapId !== this.arena.mapId;
+    this.matchMapId = nextMapId;
+    if (mapChanged) {
+      this.weapons.setEnabled(false);
+      this.enemies.reset();
+      this.effects.reset();
+      this.arena.setMap(this.matchMapId, { rebuild: true });
+    }
+    void this.input.requestPointerLock(this.canvas, { rawInput: this.settings.get('controls.rawInput', true) });
+    this.matchDifficulty = ['easy', 'normal', 'hard'].includes(difficulty) ? difficulty : 'normal';
+    this.matchTutorial = Boolean(tutorial);
+    this.timeScale = 1;
+    this.physicsAccumulator = 0;
+    this.adaptiveQualityReduced = false;
+    this.lowFpsTime = 0;
+    this.gameplayInput.reset();
+    this.clearDebugVisuals();
+    this.arena.reset();
+    this.player.reset(this.arena.getSafePlayerSpawn());
+    this.effects.reset();
+    this.enemies.reset();
+    this.enemies.setDifficulty(this.matchDifficulty);
+    this.weapons.reset();
+    this.weapons.setEnabled(true);
+    this.upgrades.reset({ player: this.player, weaponSystem: this.weapons });
+    this.director.reset({ difficulty: this.matchDifficulty, tutorial: this.matchTutorial });
+    this.achievements.beginRun();
+    this.lastHud = {};
+    this.tutorialStep = 0;
+    this.tutorialMovement = 0;
+    this.tutorialComplete = !this.matchTutorial;
+    this.ui.showHUD();
+    this.director.start();
+    const nextState = this.matchTutorial ? GAME_STATES.TUTORIAL : GAME_STATES.PLAYING;
+    this.state.transition(nextState, { difficulty: this.matchDifficulty, tutorial: this.matchTutorial });
+    if (mapChanged) {
+      const mapInfo = this.arena.getMapInfo();
+      this.ui.showToast({ type: 'info', title: mapInfo.name, message: mapInfo.description, duration: 4200 });
+    }
+    if (this.matchTutorial) this.showTutorialStep();
+    this.input.focusElement();
+  }
+
+  pause(reason = 'manual') {
+    if (!PLAYING_STATES.has(this.state.state)) return false;
+    const paused = this.state.pause({ reason });
+    if (!paused) return false;
+    void this.input.exitPointerLock();
+    this.input.clear();
+    this.ui.showPause();
+    this.audio.setVolume('master', this.settings.get('audio.master', 0.8) * 0.3);
+    return true;
+  }
+
+  async resume() {
+    if (!this.state.is(GAME_STATES.PAUSED)) return false;
+    void this.audio.unlock();
+    void this.input.requestPointerLock(this.canvas, { rawInput: this.settings.get('controls.rawInput', true) });
+    const resumed = this.state.resume({ reason: 'ui' });
+    if (resumed) {
+      this.audio.setVolume('master', this.settings.get('audio.master', 0.8));
+      this.ui.showHUD();
+      if (this.director?.shift?.stage === 'warning') {
+        this.ui.showWarning(
+          'Ğ¡Ğ”Ğ’Ğ˜Ğ“ Ğ Ğ•ĞĞ›Ğ¬ĞĞĞ¡Ğ¢Ğ˜',
+          this.director.shift.anomaly?.name ?? 'ĞŸĞµÑ€ĞµÑÑ‚Ñ€Ğ¾Ğ¹ĞºĞ° Ğ¿Ğ¾Ğ»Ğ¸Ğ³Ğ¾Ğ½Ğ°',
+          Math.max(0.1, this.director.shift.remaining),
+        );
+      }
+      if (this.matchTutorial && !this.tutorialComplete) this.showTutorialStep();
+      this.input.focusElement();
+    }
+    return resumed;
+  }
+
+  openUpgrade(options) {
+    if (![GAME_STATES.PLAYING, GAME_STATES.TUTORIAL].includes(this.state.state)) return;
+    this.state.transition(GAME_STATES.UPGRADE_SELECTION, { reason: 'upgrade' });
+    void this.input.exitPointerLock();
+    this.input.clear();
+    this.ui.showUpgrade(options);
+    this.audio.setVolume('master', this.settings.get('audio.master', 0.8) * 0.55);
+  }
+
+  selectUpgrade(id) {
+    if (!this.state.is(GAME_STATES.UPGRADE_SELECTION)) return false;
+    const selected = this.director.selectUpgrade(id);
+    if (!selected) return false;
+    void this.audio.unlock();
+    void this.input.requestPointerLock(this.canvas, { rawInput: this.settings.get('controls.rawInput', true) });
+    this.state.transition(GAME_STATES.PLAYING, { reason: 'upgrade-selected', id });
+    this.audio.setVolume('master', this.settings.get('audio.master', 0.8));
+    this.ui.showHUD();
+    if (this.matchTutorial && !this.tutorialComplete) this.showTutorialStep();
+    this.input.focusElement();
+    return true;
+  }
+
+  async finishMatch({ victory, cause, stats }) {
+    if (![GAME_STATES.PLAYING, GAME_STATES.TUTORIAL, GAME_STATES.UPGRADE_SELECTION].includes(this.state.state)) return;
+    const resultState = victory ? GAME_STATES.VICTORY : GAME_STATES.DEFEAT;
+    this.state.transition(resultState, { cause });
+    this.weapons.setEnabled(false);
+    void this.input.exitPointerLock();
+    this.input.clear();
+    this.audio.play(victory ? 'victory' : 'defeat');
+    let progress = { newBest: false };
+    try {
+      progress = await this.achievements.finishRun(victory, stats);
+    } catch (error) {
+      console.warn('[Game] Could not persist run results.', error);
+      this.ui.showToast({ type: 'warning', title: 'Ğ¡Ğ¾Ñ…Ñ€Ğ°Ğ½ĞµĞ½Ğ¸Ğµ', message: 'Ğ ĞµĞ·ÑƒĞ»ÑŒÑ‚Ğ°Ñ‚ Ğ¿Ğ¾ĞºĞ°Ğ·Ğ°Ğ½, Ğ½Ğ¾ Ğ¿Ñ€Ğ¾Ñ„Ğ¸Ğ»ÑŒ Ğ½Ğµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ¾Ğ±Ğ½Ğ¾Ğ²Ğ¸Ñ‚ÑŒ.' });
+    }
+    this.ui.profile = this.save.getProfile();
+    this.ui.showResults(victory ? 'victory' : 'defeat', { ...stats, cause, newBest: progress.newBest });
+  }
+
+  restartMatch() {
+    return this.startMatch({ difficulty: this.matchDifficulty, mapId: this.matchMapId, tutorial: false });
+  }
+
+  returnToMenu({ show = true } = {}) {
+    if (this.director) this.director.running = false;
+    this.weapons?.setEnabled(false);
+    this.audio.stopAll('weapons');
+    this.audio.stopAll('effects');
+    this.input.clear();
+    void this.input.exitPointerLock();
+    if (this.state.state !== GAME_STATES.MAIN_MENU) {
+      if (this.state.canTransition(GAME_STATES.MAIN_MENU)) this.state.transition(GAME_STATES.MAIN_MENU, { reason: 'menu' });
+      else {
+        this.state.reset({ reason: 'menu-recovery' });
+        this.state.transition(GAME_STATES.LOADING);
+        this.state.transition(GAME_STATES.MAIN_MENU);
+      }
+    }
+    this.clearDebugVisuals();
+    this.positionMenuCamera();
+    this.audio.setVolume('master', this.settings.get('audio.master', 0.8));
+    if (show) this.ui.showMainMenu(this.decorateProfile(this.save.getProfile()));
+  }
+
+  positionMenuCamera() {
+    if (!this.sceneManager?.camera) return;
+    const camera = this.sceneManager.camera;
+    camera.position.set(20, 11, 29);
+    camera.lookAt(0, 4, 0);
+  }
+
+  showTutorialStep() {
+    if (!this.matchTutorial || this.tutorialComplete) return;
+    const step = TUTORIAL_STEPS[this.tutorialStep];
+    if (!step) {
+      void this.finishTutorial(false);
+      return;
+    }
+    this.ui.showTutorial({ index: this.tutorialStep, kicker: `ĞŸĞ ĞĞ¢ĞĞšĞĞ› // ${String(this.tutorialStep + 1).padStart(2, '0')}`, ...step });
+  }
+
+  advanceTutorialWhen(expected, finish = false) {
+    if (!this.matchTutorial || this.tutorialComplete || this.tutorialStep !== expected) return;
+    if (finish) {
+      void this.finishTutorial(false);
+      return;
+    }
+    this.tutorialStep += 1;
+    this.showTutorialStep();
+  }
+
+  async finishTutorial(skipped = false) {
+    if (!this.matchTutorial || this.tutorialComplete) return;
+    this.tutorialComplete = true;
+    this.matchTutorial = false;
+    if (this.state.is(GAME_STATES.TUTORIAL)) this.state.transition(GAME_STATES.PLAYING, { reason: skipped ? 'tutorial-skipped' : 'tutorial-complete' });
+    this.ui.hideOverlay();
+    this.ui.showHUD();
+    this.ui.showToast({ type: 'success', title: 'ĞŸĞ ĞĞ¢ĞĞšĞĞ› ĞĞ¡Ğ’ĞĞ•Ğ', message: skipped ? 'ĞŸĞ¾Ğ´ÑĞºĞ°Ğ·ĞºĞ¸ Ğ¾Ñ‚ĞºĞ»ÑÑ‡ĞµĞ½Ñ‹ Ğ´Ğ»Ñ ÑÑ‚Ğ¾Ğ³Ğ¾ Ğ¿Ñ€Ğ¾Ğ³Ğ¾Ğ½Ğ°.' : 'Ğ‘Ğ°Ğ·Ğ¾Ğ²Ñ‹Ğµ ÑĞ¸ÑÑ‚ĞµĞ¼Ñ‹ Ğ¾Ğ¿ĞµÑ€Ğ°Ñ‚Ğ¾Ñ€Ğ° ÑĞ¸Ğ½Ñ…Ñ€Ğ¾Ğ½Ğ¸Ğ·Ğ¸Ñ€Ğ¾Ğ²Ğ°Ğ½Ñ‹.' });
+    try {
+      await this.save.updateProfile({ tutorialComplete: true, tutorialCompleted: true });
+    } catch (error) {
+      console.warn('[Game] Tutorial completion was not saved.', error);
+    }
+  }
+
+  applySettings(settings = this.settings.getSettings()) {
+    if (!settings) return;
+    this.sceneManager?.applySettings(settings);
+    this.input.setBindings(settings.controls.bindings, { replace: true, silent: true });
+    this.input.setMouseOptions({ sensitivity: settings.controls.mouseSensitivity, invertY: settings.controls.invertY });
+    this.player?.setHeadBobEnabled(settings.gameplay.headBob && !settings.accessibility.reducedMotion);
+    this.audio.setVolumes(settings.audio);
+    this.audio.setMuted(settings.audio.muted);
+    document.documentElement.style.setProperty('--ui-scale', String(settings.accessibility.uiScale ?? 1));
+    document.documentElement.style.setProperty('--crosshair-color', settings.gameplay.crosshairColor);
+  }
+
+  decorateProfile(profile = {}) {
+    return {
+      ...profile,
+      achievementsCatalog: this.achievements?.getCatalog?.() ?? [],
+      difficulty: this.matchDifficulty,
+      mapId: this.matchMapId,
+    };
+  }
+
+  frame(timestamp) {
+    if (!this.running || this.disposed) return;
+    this.raf = requestAnimationFrame(this._frame);
+    const fpsLimit = Number(this.settings.get('graphics.fpsLimit', 0));
+    if (fpsLimit > 0 && timestamp - this.lastTimestamp < 1000 / fpsLimit - 0.35) return;
+    const realDelta = Math.min(MAX_FRAME_DELTA, Math.max(0, (timestamp - this.lastTimestamp) / 1000));
+    this.lastTimestamp = timestamp;
+    const delta = realDelta * this.timeScale;
+
+    try {
+      if (PLAYING_STATES.has(this.state.state)) this.updateGameplay(delta);
+      if ([GAME_STATES.PLAYING, GAME_STATES.TUTORIAL, GAME_STATES.PAUSED, GAME_STATES.UPGRADE_SELECTION].includes(this.state.state)) {
+        this.player?.update(this.sceneManager.camera, PLAYING_STATES.has(this.state.state) ? realDelta : 0);
+      }
+      this.updateAudioListener();
+      this.updateDebug(realDelta);
+      const stats = this.sceneManager.render(realDelta);
+      this.updateAdaptiveQuality(realDelta, stats.fps);
+    } catch (error) {
+      this.handleRuntimeError(error);
+    }
+  }
+
+  updateGameplay(delta) {
+    if (this.input.wasPressed('pause')) {
+      this.pause('manual');
+      this.input.endFrame();
+      return;
+    }
+    this.physicsAccumulator = Math.min(FIXED_STEP * MAX_SUB_STEPS, this.physicsAccumulator + delta);
+    let steps = 0;
+    if (this.physicsAccumulator >= FIXED_STEP) this.gameplayInput.beginStepBatch();
+    while (this.physicsAccumulator >= FIXED_STEP && steps < MAX_SUB_STEPS && PLAYING_STATES.has(this.state.state)) {
+      this.player.fixedUpdate(this.gameplayInput, FIXED_STEP);
+      this.world.step(FIXED_STEP);
+      this.weapons.update(FIXED_STEP, this.gameplayInput);
+      this.enemies.update(FIXED_STEP);
+      this.director.update(FIXED_STEP, this.gameplayInput);
+      this.effects.update(FIXED_STEP);
+      this.arena.update(FIXED_STEP, this.player.position);
+      this.physicsAccumulator -= FIXED_STEP;
+      steps += 1;
+    }
+    if (steps > 0) this.input.endFrame();
+
+    if (this.matchTutorial && !this.tutorialComplete && this.tutorialStep === 0) {
+      this.tutorialMovement += this.player.horizontalSpeed > 0.8 ? delta : -delta * 0.4;
+      this.tutorialMovement = Math.max(0, this.tutorialMovement);
+      if (this.tutorialMovement >= 1.1) {
+        this.tutorialStep = 1;
+        this.showTutorialStep();
+      }
+    }
+    if (this.player.position.y < -8) {
+      this.player.damage(24, { source: 'arena', cause: 'ĞŸĞ°Ğ´ĞµĞ½Ğ¸Ğµ Ğ·Ğ° Ğ¿Ñ€ĞµĞ´ĞµĞ»Ñ‹ Ñ€ĞµÑˆÑ‘Ñ‚ĞºĞ¸', bypassArmor: true });
+      this.player.teleport(this.arena.getSafePlayerSpawn());
+    }
+  }
+
+  updateAudioListener() {
+    if (!this.audio.ready || !this.sceneManager?.camera) return;
+    const position = new THREE.Vector3();
+    const forward = new THREE.Vector3();
+    this.sceneManager.camera.getWorldPosition(position);
+    this.sceneManager.camera.getWorldDirection(forward);
+    this.audio.setListener(position, forward);
+  }
+
+  updateAdaptiveQuality(dt, fps) {
+    if (!PLAYING_STATES.has(this.state.state) || !Number.isFinite(fps) || fps <= 0) return;
+    this.lowFpsTime = fps < 42 ? this.lowFpsTime + dt : Math.max(0, this.lowFpsTime - dt * 0.5);
+    if (this.lowFpsTime > 8 && !this.adaptiveQualityReduced && this.settings.get('graphics.particles') !== 'low') {
+      this.adaptiveQualityReduced = true;
+      this.effects.quality = 'low';
+      this.ui.showToast({ type: 'warning', title: 'ĞĞ”ĞĞŸĞ¢Ğ˜Ğ’ĞĞĞ• ĞšĞĞ§Ğ•Ğ¡Ğ¢Ğ’Ğ', message: 'ĞŸĞ»Ğ¾Ñ‚Ğ½Ğ¾ÑÑ‚ÑŒ Ğ²Ñ‚Ğ¾Ñ€Ğ¸Ñ‡Ğ½Ñ‹Ñ… Ñ‡Ğ°ÑÑ‚Ğ¸Ñ† Ğ²Ñ€ĞµĞ¼ĞµĞ½Ğ½Ğ¾ ÑĞ½Ğ¸Ğ¶ĞµĞ½Ğ°. ĞŸĞ¾Ğ»ÑŒĞ·Ğ¾Ğ²Ğ°Ñ‚ĞµĞ»ÑŒÑĞºĞ¸Ğµ Ğ½Ğ°ÑÑ‚Ñ€Ğ¾Ğ¹ĞºĞ¸ Ğ½Ğµ Ğ¸Ğ·Ğ¼ĞµĞ½ĞµĞ½Ñ‹.', duration: 5200 });
+    }
+  }
+
+  updateDebug(dt) {
+    if (!this.debug) return;
+    this.debug.update(dt, {
+      renderer: this.sceneManager.renderer,
+      scene: this.sceneManager.scene,
+      player: this.player,
+      enemySystem: this.enemies,
+      effectsSystem: this.effects,
+      particles: this.effects,
+      director: this.director.getDebugData(),
+      aiState: this.enemies.getNearestAIState(),
+      anomaly: this.director.currentAnomaly?.name ?? 'none',
+    });
+    this.debugRefresh -= dt;
+    if (this.debug.visible && this.debugRefresh <= 0) {
+      this.debugRefresh = 0.24;
+      this.refreshDebugVisuals();
+    } else if (!this.debug.visible && this.debugLayer?.children.length) {
+      this.clearDebugVisuals();
+    }
+  }
+
+  clearDebugVisuals() {
+    if (!this.debugLayer) return;
+    for (const child of [...this.debugLayer.children]) disposeDebugObject(child);
+  }
+
+  refreshDebugVisuals() {
+    this.clearDebugVisuals();
+    const toggles = this.debug.toggles;
+    const arenaData = this.arena.getDebugData();
+    const enemyData = this.enemies.getDebugData();
+    const addMarker = (position, color, size = 0.25) => {
+      const marker = new THREE.Mesh(
+        new THREE.SphereGeometry(size, 7, 5),
+        new THREE.MeshBasicMaterial({ color, wireframe: true, depthTest: false }),
+      );
+      marker.position.copy(position);
+      marker.renderOrder = 100;
+      this.debugLayer.add(marker);
+    };
+    const addLine = (points, color) => {
+      if (points.length < 2) return;
+      const geometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: 0.9 }));
+      line.renderOrder = 100;
+      this.debugLayer.add(line);
+    };
+
+    if (toggles.spawns) {
+      arenaData.playerSpawns.forEach((position) => addMarker(position, 0x55ff9a, 0.38));
+      arenaData.enemySpawns.forEach((position) => addMarker(position, 0xff4d72, 0.3));
+    }
+    if (toggles.navigationNodes) {
+      arenaData.waypoints.forEach((node) => addMarker(node.position, node.enabled ? 0x5ee7ff : 0x555555, 0.18));
+      const map = new Map(arenaData.waypoints.map((node) => [node.id, node.position]));
+      const points = [];
+      arenaData.edges.filter((edge) => edge.enabled).forEach((edge) => {
+        if (map.get(edge.a) && map.get(edge.b)) points.push(map.get(edge.a), map.get(edge.b));
+      });
+      addLine(points, 0x2c8491);
+    }
+    if (toggles.objectiveZones && this.director.objective) {
+      const segments = 40;
+      const points = [];
+      const center = this.director.objective.position;
+      const radius = this.director.objective.radius ?? 3;
+      for (let index = 0; index < segments; index += 1) {
+        const a = index / segments * Math.PI * 2;
+        const b = (index + 1) / segments * Math.PI * 2;
+        points.push(
+          new THREE.Vector3(center.x + Math.cos(a) * radius, center.y + 0.12, center.z + Math.sin(a) * radius),
+          new THREE.Vector3(center.x + Math.cos(b) * radius, center.y + 0.12, center.z + Math.sin(b) * radius),
+        );
+      }
+      addLine(points, 0xffc857);
+    }
+    if (toggles.enemyRoutes) {
+      const points = [];
+      enemyData.forEach((enemy) => points.push(enemy.position.clone().add(new THREE.Vector3(0, 1, 0)), enemy.target.clone().add(new THREE.Vector3(0, 1, 0))));
+      addLine(points, 0xff8a3d);
+    }
+    if (toggles.lineOfSight) {
+      const points = [];
+      enemyData.forEach((enemy) => points.push(enemy.position.clone().add(new THREE.Vector3(0, 1.5, 0)), this.player.position.clone().add(new THREE.Vector3(0, 1, 0))));
+      addLine(points, 0xff4d72);
+    }
+    if (toggles.hitboxes) {
+      for (const enemy of this.enemies.enemies.filter((entry) => !entry.dead)) {
+        for (const mesh of enemy.hitMeshes) {
+          const helper = new THREE.Box3Helper(new THREE.Box3().setFromObject(mesh), mesh.userData.hitZone === 'head' ? 0xffef75 : 0xff4d72);
+          helper.material.depthTest = false;
+          helper.renderOrder = 100;
+          this.debugLayer.add(helper);
+        }
+      }
+    }
+    if (toggles.colliders) {
+      for (const body of this.arena.staticBodies) {
+        body.shapes.forEach((shape, index) => {
+          let geometry;
+          if (shape.halfExtents) geometry = new THREE.BoxGeometry(shape.halfExtents.x * 2, shape.halfExtents.y * 2, shape.halfExtents.z * 2);
+          else if (shape.radius) geometry = new THREE.SphereGeometry(shape.radius, 8, 6);
+          else return;
+          const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x5ee7ff, wireframe: true, depthTest: false, transparent: true, opacity: 0.42 }));
+          const offset = body.shapeOffsets[index];
+          mesh.position.set(body.position.x + offset.x, body.position.y + offset.y, body.position.z + offset.z);
+          mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
+          mesh.renderOrder = 99;
+          this.debugLayer.add(mesh);
+        });
+      }
+    }
+  }
+
+  handleRuntimeError(error) {
+    console.error('[Game] Runtime failure.', error);
+    this.running = false;
+    cancelAnimationFrame(this.raf);
+    this.ui.showError({ title: 'Ğ¡Ğ¸Ğ¼ÑƒĞ»ÑÑ†Ğ¸Ñ Ğ¾ÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ğ»ĞµĞ½Ğ°', detail: error.message, code: 'RUNTIME_FAILURE' });
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.running = false;
+    cancelAnimationFrame(this.raf);
+    window.clearTimeout(this.profileSaveTimer);
+    window.clearTimeout(this.fallbackToastTimer);
+    for (const unsubscribe of this.unsubscribers) unsubscribe?.();
+    this.unsubscribers.length = 0;
+    this.clearDebugVisuals();
+    this.debug?.dispose();
+    this.achievements?.dispose();
+    this.director?.dispose();
+    this.weapons?.dispose();
+    this.enemies?.dispose();
+    this.effects?.dispose();
+    this.player?.dispose();
+    this.arena?.dispose();
+    this.sceneManager?.dispose();
+    this.audio?.dispose();
+    this.input?.dispose();
+    this.assets?.dispose();
+    this.save?.dispose();
+    this.ui?.dispose();
+    this.eventBus.clear();
+  }
+}
+
+export default Game;

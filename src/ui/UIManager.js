@@ -4,9 +4,27 @@ const DIFFICULTIES = {
   hard: ['–†–∞–∑—Ä—ã–≤', '–ü–ª–æ—Ç–Ω—ã–µ –≤–æ–ª–Ω—ã, –º–µ–Ω—å—à–µ —Ä–µ—Å—É—Ä—Å–æ–≤, –∞–≥—Ä–µ—Å—Å–∏–≤–Ω—ã–π –¥–∏—Ä–µ–∫—Ç–æ—Ä.'],
 };
 
+const MAPS = Object.freeze({
+  'null-grid': {
+    label: '–ù—É–ª–µ–≤–∞—è —Ä–µ—à—ë—Ç–∫–∞',
+    code: '07-A',
+    detail: '–°–±–∞–ª–∞–Ω—Å–∏—Ä–æ–≤–∞–Ω–Ω—ã–π –∫–æ–º–ø–ª–µ–∫—Å —Å –ø–µ—Ä–µ—Å—Ç—Ä–∞–∏–≤–∞–µ–º—ã–º–∏ –º–æ—Å—Ç–∞–º–∏ –∏ —É–∫—Ä—ã—Ç–∏—è–º–∏.',
+  },
+  'sunken-relay': {
+    label: '–ó–∞—Ç–æ–Ω—É–≤—à–∏–π —Ä–µ—Ç—Ä–∞–Ω—Å–ª—è—Ç–æ—Ä',
+    code: '12-S',
+    detail: '–ü—Ä—è–º–æ—É–≥–æ–ª—å–Ω—ã–π –≥—Ä—É–∑–æ–≤–æ–π –¥–≤–æ—Ä —Å –¥–ª–∏–Ω–Ω—ã–º–∏ –ø—Ä–æ—Å—Ç—Ä–µ–ª–∞–º–∏ –∏ —Ç–µ—Å–Ω—ã–º–∏ –∫–æ–Ω—Ç–µ–π–Ω–µ—Ä–Ω—ã–º–∏ –ø—Ä–æ—Ö–æ–¥–∞–º–∏.',
+  },
+  'sky-foundry': {
+    label: '–ù–µ–±–µ—Å–Ω–∞—è –ª–∏—Ç–µ–π–Ω–∞—è',
+    code: '31-F',
+    detail: '–¢—Ä—ë—Ö—ä—è—Ä—É—Å–Ω–∞—è –ª–∏—Ç–µ–π–Ω–∞—è –Ω–∞–¥ –æ–±–ª–∞–∫–∞–º–∏ —Å –≤–æ–∑–¥—É—à–Ω—ã–º–∏ –ø–æ—Ç–æ–∫–∞–º–∏ –∏ –ø–µ—Ä–µ–ø–∞–¥–∞–º–∏ –≤—ã—Å–æ—Ç—ã.',
+  },
+});
+
 const DEFAULT_SETTINGS = Object.freeze({
   audio: { master: 0.8, music: 0.45, weapons: 0.85, effects: 0.75, environment: 0.6, ui: 0.7, muted: false },
-  graphics: { quality: 'high', resolutionScale: 1, shadows: true, shadowQuality: 'medium', antialias: true, bloom: true, particles: 'high', maxPixelRatio: 1.5, fpsLimit: 0 },
+  graphics: { quality: 'high', exposure: 1.12, resolutionScale: 1, shadows: true, shadowQuality: 'medium', antialias: true, bloom: true, particles: 'high', maxPixelRatio: 1.5, fpsLimit: 0 },
   controls: {
     mouseSensitivity: 0.55,
     invertY: false,
@@ -20,7 +38,7 @@ const DEFAULT_SETTINGS = Object.freeze({
 const TUTORIAL_STEPS = [
   ['–ü–†–û–¢–û–ö–û–õ // 01', '–ù–∞–≤–∏–≥–∞—Ü–∏—è', '–î–≤–∏–≥–∞–π—Ç–µ—Å—å –æ—Ç –æ—Ç–º–µ—Ç–∫–∏ –∫ –∞–∫—Ç–∏–≤–Ω–æ–º—É —Ñ–∞–∑–æ–≤–æ–º—É —É–∑–ª—É.', ['W', 'A', 'S', 'D']],
   ['–ü–†–û–¢–û–ö–û–õ // 02', '–ò–º–ø—É–ª—å—Å –¥–≤–∏–∂–µ–Ω–∏—è', '–£–¥–µ—Ä–∂–∏–≤–∞–π—Ç–µ —Å–ø—Ä–∏–Ω—Ç –∏ —Å–æ–≤–µ—Ä—à–∞–π—Ç–µ —Ä—ã–≤–æ–∫, —á—Ç–æ–±—ã —Å–º–µ–Ω–∏—Ç—å –≤–µ–∫—Ç–æ—Ä –∞—Ç–∞–∫–∏.', ['SHIFT', 'Q']],
-  ['–ü–†–û–¢–û–ö–û–õ // 03', '–û–≥–Ω–µ–≤–æ–π –∫–æ–Ω—Ç–∞–∫—Ç', '–õ–µ–≤–∞—è –∫–Ω–æ–ø–∫–∞ —Å—Ç—Ä–µ–ª—è–µ—Ç, –ø—Ä–∞–≤–∞—è —Å—É–∂–∞–µ—Ç –ø—Ä–∏—Ü–µ–ª. –ü–æ–ø–∞–¥–∞–Ω–∏–µ –≤ –≥–æ–ª–æ–≤—É –Ω–∞–Ω–æ—Å–∏—Ç –±–æ–ª—å—à–µ —É—Ä–æ–Ω–∞.', ['–õ–ö–ú', '–ü–ö–ú']],
+  ['–ü–†–û–¢–û–ö–û–õ // 03', '–û–≥–Ω–µ–≤–æ–π –∫–æ–Ω—Ç–∞–∫—Ç', '–õ–µ–≤–∞—è –∫–Ω–æ–ø–∫–∞ —Å—Ç—Ä–µ–ª—è–µ—Ç, –ø—Ä–∞–≤–∞—è —Å—É–∂–∞–µ—Ç –ø—Ä–∏—Ü–µ–ª. –ö–ª–∞–≤–∏—à–∏ 1‚Äî5 –º–≥–Ω–æ–≤–µ–Ω–Ω–æ –≤—ã–±–∏—Ä–∞—é—Ç –æ—Ä—É–∂–∏–µ.', ['–õ–ö–ú', '–ü–ö–ú', '1', '2', '3', '4', '5']],
   ['–ü–†–û–¢–û–ö–û–õ // 04', '–°—Ç–∞–±–∏–ª–∏–∑–∞—Ü–∏—è —É–∑–ª–∞', '–ü–æ–¥–æ–π–¥–∏—Ç–µ –∫ –º–∞—Ä–∫–µ—Ä—É —Ü–µ–ª–∏ –∏ —É–¥–µ—Ä–∂–∏–≤–∞–π—Ç–µ –≤–∑–∞–∏–º–æ–¥–µ–π—Å—Ç–≤–∏–µ –¥–æ –∑–∞–≤–µ—Ä—à–µ–Ω–∏—è —Å–∫–∞–Ω–∏—Ä–æ–≤–∞–Ω–∏—è.', ['E']],
   ['–ü–†–û–¢–û–ö–û–õ // 05', '–°–¥–≤–∏–≥ —Ä–µ–∞–ª—å–Ω–æ—Å—Ç–∏', '–ú–∞–≥–µ–Ω—Ç–æ–≤–∞—è –º–µ—Ç–∫–∞ –æ–±–æ–∑–Ω–∞—á–∞–µ—Ç –ø–µ—Ä–µ—Å—Ç—Ä–∞–∏–≤–∞–µ–º—ã–µ —Å–µ–∫—Ü–∏–∏. –î–æ –°–¥–≤–∏–≥–∞ –∑–∞–π–º–∏—Ç–µ –±–µ–∑–æ–ø–∞—Å–Ω—ã–π –º–∞—Ä—à—Ä—É—Ç.', []],
 ];
@@ -68,6 +86,7 @@ function setPath(object, path, value) {
 }
 
 function humanKey(code) {
+  if (Array.isArray(code)) return code.map((entry) => humanKey(entry)).join(' / ');
   const names = { Space: '–ü—Ä–æ–±–µ–ª', ShiftLeft: 'L Shift', ShiftRight: 'R Shift', ControlLeft: 'L Ctrl', ControlRight: 'R Ctrl', Escape: 'Esc' };
   return names[code] ?? String(code ?? '').replace(/^Key/, '').replace(/^Digit/, '');
 }
@@ -86,6 +105,7 @@ export class UIManager {
     this.profile = null;
     this.settings = deepMerge(DEFAULT_SETTINGS, {});
     this.difficulty = 'normal';
+    this.mapId = 'null-grid';
     this.hudState = {};
     this.options = [];
     this.lastKillfeedKey = '';
@@ -94,6 +114,7 @@ export class UIManager {
     this.timers = new Set();
     this.warningTimer = null;
     this.warningInterval = null;
+    this.warningHideTimer = null;
     this.hitmarkerTimer = null;
     this.bindingCapture = null;
     this._onRootClick = this._onRootClick.bind(this);
@@ -148,7 +169,7 @@ export class UIManager {
           <section class="vital-card vital-card--armor hud-panel" data-hud-panel="armor"><header><span>–ë–†–û–ù–Ø</span><b>AR</b></header><div><strong data-hud="armor">0</strong><small>/100</small></div><div class="segmented-meter"><span data-meter="armor"></span><i></i><i></i><i></i></div></section>
         </div>
         <div class="hud-abilities"><section class="dash-indicator hud-panel" data-hud-panel="dash"><div class="dash-ring"><i data-meter="dash"></i><b>Q</b></div><div><span>–†–´–í–û–ö</span><strong data-hud="dash">–ì–û–¢–û–í</strong></div></section><div class="hud-upgrades" data-hud="upgrades" aria-label="–ê–∫—Ç–∏–≤–Ω—ã–µ —É–ª—É—á—à–µ–Ω–∏—è"></div></div>
-        <section class="ammo-card hud-panel" data-hud-panel="ammo"><header><span data-hud="weapon">–ò–ú–ü–£–õ–¨–°–ù–´–ô –ö–ê–†–ê–ë–ò–ù</span><b>01</b></header><div class="ammo-readout"><strong data-hud="ammo">24</strong><i>/</i><span data-hud="reserve">120</span></div><footer><kbd>R</kbd><span>–ü–ï–†–ï–ó–ê–†–Ø–î–ö–ê</span></footer></section>
+        <section class="ammo-card hud-panel" data-hud-panel="ammo"><header><span data-hud="weapon">–ò–ú–ü–£–õ–¨–°–ù–´–ô –ö–ê–†–ê–ë–ò–ù</span><b>01</b></header><div class="ammo-readout"><strong data-hud="ammo">24</strong><i>/</i><span data-hud="reserve">120</span></div><footer><kbd>R</kbd><span data-hud="reload-status">–ü–ï–†–ï–ó–ê–†–Ø–î–ö–ê</span></footer></section>
         <div class="crosshair" data-ui-crosshair data-state="default" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
         <div class="hitmarker" data-ui-hitmarker data-type="body" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       </section>
@@ -170,7 +191,9 @@ export class UIManager {
 
   showMainMenu(profile = this.profile) {
     this._ensureInit();
+    this._hideWarning(true);
     this.profile = profile ?? this.profile ?? this._cachedProfile();
+    if (MAPS[this.profile?.mapId]) this.mapId = this.profile.mapId;
     this._readSettings();
     this.difficulty = getPath(this.settings, 'gameplay.difficulty', this.difficulty);
     this.returnView = 'main-menu';
@@ -178,8 +201,12 @@ export class UIManager {
     const stats = this.profile?.stats ?? {};
     const progression = this.profile?.progression ?? {};
     const tutorialCompleted = Boolean(this.profile?.tutorialCompleted);
+    if (!MAPS[this.mapId]) this.mapId = 'null-grid';
+    const selectedMap = MAPS[this.mapId];
     const difficultyButtons = Object.entries(DIFFICULTIES).map(([key, [label]]) =>
       `<button type="button" data-action="difficulty" data-value="${key}" aria-pressed="${key === this.difficulty}">${label}</button>`).join('');
+    const mapButtons = Object.entries(MAPS).map(([id, map]) =>
+      `<button class="map-option" type="button" role="radio" data-action="map" data-value="${id}" aria-checked="${id === this.mapId}"><b>${escapeHTML(map.label)}</b><small>${escapeHTML(map.code)}</small></button>`).join('');
 
     this._showScreen(`<main class="menu-screen" aria-labelledby="main-menu-title">
       <div class="menu-atmosphere" aria-hidden="true"><span></span><span></span><span></span></div>
@@ -190,16 +217,815 @@ export class UIManager {
           <button class="action-button action-button--primary" type="button" data-action="start" autofocus><span class="action-index">01</span><span><b>–ù–∞—á–∞—Ç—å –∑–∞–±–µ–≥</b><small>–°—Ç–∞–±–∏–ª–∏–∑–∏—Ä–æ–≤–∞—Ç—å 3 —É–∑–ª–∞ –∏ —ç–≤–∞–∫—É–∏—Ä–æ–≤–∞—Ç—å—Å—è</small></span><i>–ù–ê–ß–ê–¢–¨ –°–ï–ê–ù–°</i></button>
           <button class="action-button" type="button" data-action="tutorial"><span class="action-index">02</span><span><b>${tutorialCompleted ? '–ü–æ–≤—Ç–æ—Ä–∏—Ç—å –æ–±—É—á–µ–Ω–∏–µ' : '–ü—Ä–æ–¥–æ–ª–∂–∏—Ç—å –æ–±—É—á–µ–Ω–∏–µ'}</b><small>–ö–æ—Ä–æ—Ç–∫–∏–π –∏–Ω—Ç–µ—Ä–∞–∫—Ç–∏–≤–Ω—ã–π –ø—Ä–æ—Ç–æ–∫–æ–ª</small></span><i>WASD</i></button>
         </nav>
+        <section class="map-selector" aria-labelledby="map-selector-label"><div class="map-selector__meta"><span class="field-label" id="map-selector-label">–ü–û–õ–ò–ì–û–ù</span><p data-map-detail>${escapeHTML(selectedMap.detail)}</p></div><div class="map-options" role="radiogroup" aria-label="–í—ã–±–æ—Ä –∫–∞—Ä—Ç—ã">${mapButtons}</div></section>
         <div class="difficulty-block"><div><span class="field-label">–£–†–û–í–ï–ù–¨ –£–ì–†–û–ó–´</span><p data-difficulty-detail>${escapeHTML(DIFFICULTIES[this.difficulty]?.[1] ?? DIFFICULTIES.normal[1])}</p></div><div class="segmented-control" role="group" aria-label="–°–ª–æ–∂–Ω–æ—Å—Ç—å">${difficultyButtons}</div></div>
-        <nav clas◊7Ú⁄$z{-ÆÈ‹j◊ù‚÷'WGFˆ‚“◊&ñ÷'ír¢rw“G∂FÊvW"Úv7Fñˆ‚÷'WGFˆ‚“÷FÊvW"r¢rw“"GóS“&'WGFˆ‚"FF÷7Fñˆ„“"G∂7FñˆÁ“"G∂WFˆfˆ7W2ÚvWFˆfˆ7W2r¢rw”„«7‚6∆73“&7Fñˆ‚÷ñÊFWÇ#‚G∂ñÊFWá”¬˜7„„«7„„∆#‚G∑FóF∆W”¬ˆ#„«6÷∆√‚G∂FWFñ«”¬˜6÷∆√„¬˜7„‚G∂∂WíÚ∆ì‚G∂∂Wó”¬ˆìÊ¢rw”¬ˆ'WGFˆ„Ê∞¢–†¢˜&VÊFW$áVEWw&FW2áWw&FW2í∞¢6ˆÁ7B6ˆÁFñÊW"“FÜó2Á&ˆ˜BÁVW'ï6V∆V7F˜"Çu∂FF÷áVC“'Ww&FW2%“rì∞¢ñbÇ6ˆÁFñÊW"í&WGW&„∞¢6ˆÁFñÊW"Á&W∆6T6Üñ∆G&V‚Ç‚‚ÁWw&FW2Á6∆ñ6RÉ¬BíÊ÷ÇáWw&FR¬ñÊFWÇí”‚∞¢6ˆÁ7BóFV““Fˆ7V÷VÁBÊ7&VFTV∆V÷VÁBÇvFóbrì∞¢óFV“Ê6∆74Ê÷R“váVB◊Ww&FRs∞¢óFV“ÁFóF∆R“Ww&FRÊFW67&óFñˆ‚ÛÚWw&FRÊÊ÷RÛÚ7G&ñÊráWw&FRì∞¢6ˆÁ7Bv«óÇ“Fˆ7V÷VÁBÊ7&VFTV∆V÷VÁBÇv"rì≤v«óÇÁFWáD6ˆÁFVÁB“Ww&FRÊv«óÇÛÚ7G&ñÊrÜñÊFWÇ≤íÁE7F'BÉ"¬srì∞¢6ˆÁ7B∆&V¬“Fˆ7V÷VÁBÊ7&VFTV∆V÷VÁBÇw7‚rì≤∆&V¬ÁFWáD6ˆÁFVÁB“Ww&FRÊÊ÷RÛÚWw&FRÁFóF∆RÛÚ7G&ñÊráWw&FRì∞¢óFV“ÊVÊBÜv«óÇ¬∆&V¬ì∞¢&WGW&‚óFV”∞¢“íì∞¢–†¢˜WFFTñÁFW&7BÜñÁFW&7Bí∞¢6ˆÁ7BÊV¬“FÜó2Á&ˆ˜BÁVW'ï6V∆V7F˜"Çu∂FF÷áVB◊ÊV√“&ñÁFW&7B%“rì∞¢ñbÇÊV¬í&WGW&„∞¢ñbÇñÁFW&7B«¬ñÁFW&7BÁfó6ñ&∆R””“f«6Rí≤ÊV¬ÊÜñFFV‚“G'VS≤&WGW&„≤–¢6ˆÁ7BFF“GóVˆbñÁFW&7B””“w7G&ñÊrrÚ≤∆&V√¢ñÁFW&7B“¢ñÁFW&7C∞¢ÊV¬ÊÜñFFV‚“f«6S∞¢FÜó2Â˜6WEFWáBÇvñÁFW&7B÷∂Wír¬áV÷‰∂WíÜFFÊ∂WíÛÚt∂WîRríì∞¢FÜó2Â˜6WEFWáBÇvñÁFW&7B÷7Fñˆ‚r¬FFÊ7Fñˆ‚ÛÚÜFFÊÜˆ∆BÚ}
-=	M	]
-	m	ç	-		ù
--	Rr¢}	-	}		ç	Õ	Ì	M	]	ù
-
--	-	ç	Rríì∞¢FÜó2Â˜6WEFWáBÇvñÁFW&7B÷∆&V¬r¬FFÊ∆&V¬ÛÚFFÁFWáBÛÚ}	≠-ç-çÌ--¬rì∞¢FÜó2Â˜6WD÷WFW"ÇvñÁFW&7Br¬FFÁ&ˆw&W72ÛÚì∞¢ÊV¬Ê6∆74∆ó7BÁFˆvv∆RÇvó2÷Üˆ∆FñÊrr¬&ˆˆ∆V‚ÜFFÊÜˆ∆Bíì∞¢–†¢˜6Ü˜tF÷vTFó&V7Fñˆ‚ÜFó&V7Fñˆ‚í∞¢6ˆÁ7Bf«VW2“'&íÊó4'&íÜFó&V7Fñˆ‚íÚFó&V7Fñˆ‚¢∂Fó&V7FñˆÂ”∞¢f«VW2Êfñ«FW"Ñ&ˆˆ∆V‚íÊf˜$V6ÇÇáf«VRí”‚∞¢6ˆÁ7B∂Wí“GóVˆbf«VR””“vˆ&¶V7BrÚf«VRÊFó&V7Fñˆ‚¢f«VS∞¢6ˆÁ7BÊˆFR“FÜó2Á&ˆ˜BÁVW'ï6V∆V7F˜"Ü∂FF÷F÷vS“"Gµ7G&ñÊrÜ∂WííÁFÙ∆˜vW$66RÇó“%÷ì∞¢ñbÇÊˆFRí&WGW&„∞¢ÊˆFRÊ6∆74∆ó7BÁ&V÷˜fRÇvó2÷7FófRrì∞¢fˆñBÊˆFRÊˆfg6WEvñGFÉ∞¢ÊˆFRÊ6∆74∆ó7BÊFBÇvó2÷7FófRrì∞¢FÜó2Â˜G&6µFñ÷W"ávñÊF˜rÁ6WEFñ÷V˜WBÇÇí”‚ÊˆFRÊ6∆74∆ó7BÁ&V÷˜fRÇvó2÷7FófRrí¬fñÊóFRáf«VSÚÊGW&Fñˆ‚¬cSííì∞¢“ì∞¢–†¢˜WFFT∂ñ∆∆fVVBÜfVVBí∞¢6ˆÁ7B6ˆÁFñÊW"“FÜó2Á&ˆ˜BÁVW'ï6V∆V7F˜"Çu∂FF÷áVC“&∂ñ∆∆fVVB%“rì∞¢ñbÇ6ˆÁFñÊW"í&WGW&„∞¢ñbÑ'&íÊó4'&íÜfVVBíí∞¢6ˆÁFñÊW"Á&W∆6T6Üñ∆G&V‚Çì∞¢fVVBÁ6∆ñ6RÇ”BíÊf˜$V6ÇÇÜóFV“í”‚FÜó2ÂˆVÊD∂ñ∆∆fVVBÜ6ˆÁFñÊW"¬óFV“íì∞¢&WGW&„∞¢–¢6ˆÁ7B∂Wí“GóVˆbfVVB””“vˆ&¶V7BrÚG∂fVVBÊñBÛÚrw”¢G∂fVVBÊVÊV◊íÛÚfVVBÁF&vWBÛÚfVVBÁFWáG”¢G∂fVVBÁFñ÷RÛÚrw÷¢7G&ñÊrÜfVVBì∞¢ñbÜ∂Wí””“FÜó2Ê∆7D∂ñ∆∆fVVD∂Wíí&WGW&„∞¢FÜó2Ê∆7D∂ñ∆∆fVVD∂Wí“∂Wì∞¢FÜó2ÂˆVÊD∂ñ∆∆fVVBÜ6ˆÁFñÊW"¬fVVBì∞¢vÜñ∆RÜ6ˆÁFñÊW"Ê6Üñ∆G&V‚Ê∆VÊwFÇ‚Bí6ˆÁFñÊW"Êfó'7DV∆V÷VÁD6Üñ∆CÚÁ&V÷˜fRÇì∞¢–†¢ˆVÊD∂ñ∆∆fVVBÜ6ˆÁFñÊW"¬óFV“í∞¢6ˆÁ7BFF“GóVˆbóFV“””“vˆ&¶V7BrÚóFV“¢≤FWáC¢óFV“”∞¢6ˆÁ7BÊˆFR“Fˆ7V÷VÁBÊ7&VFTV∆V÷VÁBÇvFóbrì∞¢ÊˆFRÊ6∆74Ê÷R“∂ñ∆∆fVVB÷óFV“G∂FFÊÜVG6Ü˜BÚró2÷ÜVG6Ü˜Br¢rw÷∞¢6ˆÁ7B÷&∂W"“Fˆ7V÷VÁBÊ7&VFTV∆V÷VÁBÇvírì≤÷&∂W"ÁFWáD6ˆÁFVÁB“FFÊÜVG6Ü˜BÚ}
-Rr¢}
-rs∞¢6ˆÁ7BFWáB“Fˆ7V÷VÁBÊ7&VFTV∆V÷VÁBÇw7‚rì≤FWáBÁFWáD6ˆÁFVÁB“FFÁFWáBÛÚG∂FFÊVÊV◊íÛÚFFÁF&vWBÛÚ}	˝Ì-ç-›ç¢w“(	BΩç≠-çMçÌ-÷∞¢6ˆÁ7B66˜&R“Fˆ7V÷VÁBÊ7&VFTV∆V÷VÁBÇv"rì≤66˜&RÁFWáD6ˆÁFVÁB“FFÁ66˜&RÚ≤G∂f˜&÷DñÁFVvW"ÜFFÁ66˜&Ró÷¢rs∞¢ÊˆFRÊVÊBÜ÷&∂W"¬FWáB¬66˜&Rì∞¢6ˆÁFñÊW"ÊVÊBÜÊˆFRì∞¢–†¢ˆˆÂ&ˆ˜D6∆ñ6≤ÜWfVÁBí∞¢6ˆÁ7BG&ñvvW"“WfVÁBÁF&vWBÊ6∆˜6W7BÇu∂FF÷7FñˆÂ“¬∂FF◊6WGFñÊw2◊F%“rì∞¢ñbÇG&ñvvW"«¬FÜó2Á&ˆ˜BÊ6ˆÁFñÁ2áG&ñvvW"íí&WGW&„∞¢ñbáG&ñvvW"ÊFF6WBÁ6WGFñÊw5F"í∞¢FÜó2Á6WGFñÊw5F"“G&ñvvW"ÊFF6WBÁ6WGFñÊw5F#∞¢FÜó2Â˜&VÊFW%6WGFñÊw2Çì∞¢&WGW&„∞¢–¢6ˆÁ7B7Fñˆ‚“G&ñvvW"ÊFF6WBÊ7Fñˆ„∞¢ñbÜ7Fñˆ‚””“w7F'BríFÜó2ÂˆV÷óBÇwVìß7F'Br¬≤Fñffñ7V«Gì¢FÜó2ÊFñffñ7V«Gí¬GWF˜&ñ√¢f«6R¬÷ˆFS¢w'V‚r“ì∞¢V«6RñbÜ7Fñˆ‚””“wGWF˜&ñ¬ríFÜó2ÂˆV÷óBÇwVìß7F'Br¬≤Fñffñ7V«Gì¢FÜó2ÊFñffñ7V«Gí¬GWF˜&ñ√¢G'VR¬÷ˆFS¢wGWF˜&ñ¬r¬6ˆÁFñÁVS¢G'VR“ì∞¢V«6RñbÜ7Fñˆ‚””“vFñffñ7V«GíríFÜó2Â˜6V∆V7DFñffñ7V«GíáG&ñvvW"ÊFF6WBÁf«VRì∞¢V«6RñbÜ7Fñˆ‚””“w6WGFñÊw2ríFÜó2Á6Ü˜u6WGFñÊw2áFÜó2Ê7FófUfñWr””“wW6RrÚwW6Rr¢v÷ñ‚÷÷VÁRrì∞¢V«6RñbÖ≤v6ÜñWfV÷VÁG2r¬w7FFó7Fñ72r¬v6ˆÁG&ˆ«2u“ÊñÊ6«VFW2Ü7Fñˆ‚ííFÜó2Â˜6Ü˜tñÊfıfñWrÜ7Fñˆ‚ì∞¢V«6RñbÜ7Fñˆ‚””“w&W7V÷RríFÜó2ÂˆV÷óBÇwVìß&W7V÷Rrì∞¢V«6RñbÜ7Fñˆ‚””“w&W7F'BríFÜó2ÂˆV÷óBÇwVìß&W7F'Brì∞¢V«6RñbÜ7Fñˆ‚””“v÷VÁRríFÜó2ÂˆV÷óBÇwVì¶÷VÁRrì∞¢V«6RñbÜ7Fñˆ‚””“v&6≤ríFÜó2Â˜&WGW&‰g&ˆ’7V'fñWrÇì∞¢V«6RñbÜ7Fñˆ‚””“w6V∆V7B◊Ww&FRrí∞¢6ˆÁ7BñÊFWÇ“fñÊóFRáG&ñvvW"ÊFF6WBÁWw&FTñÊFWÇì∞¢6ˆÁ7B˜Fñˆ‚“FÜó2Ê˜FñˆÁ5∂ñÊFWÖ“ÛÚ≤ñC¢G&ñvvW"ÊFF6WBÁWw&FTñB”∞¢G&ñvvW"Ê6∆˜6W7BÇrÁWw&FR÷w&ñBrìÚÁVW'ï6V∆V7F˜$∆¬Çv'WGFˆ‚ríÊf˜$V6ÇÇÜ'WGFˆ‚í”‚≤'WGFˆ‚ÊFó6&∆VB“G'VS≤“ì∞¢FÜó2ÂˆV÷óBÇwVìß6V∆V7B◊Ww&FRr¬˜Fñˆ‚ÊñBÛÚG&ñvvW"ÊFF6WBÁWw&FTñB¬˜Fñˆ‚¬ñÊFWÇì∞¢“V«6RñbÜ7Fñˆ‚””“w6∂ó◊GWF˜&ñ¬rí∞¢FÜó2ÁGWF˜&ñ¬Ê6∆74∆ó7BÁ&V÷˜fRÇvó2÷7FófRrì∞¢FÜó2ÁGWF˜&ñ¬ÊÜñFFV‚“G'VS∞¢FÜó2ÂˆV÷óBÇwVìß6∂ó◊GWF˜&ñ¬rì∞¢“V«6RñbÜ7Fñˆ‚””“vgV∆«67&VV‚ríFÜó2Â˜Fˆvv∆TgV∆«67&VV‚Çì∞¢V«6RñbÜ7Fñˆ‚””“w&W6WB◊6WGFñÊw2ríFÜó2Â˜&W6WE6WGFñÊw2Çì∞¢V«6RñbÜ7Fñˆ‚””“w&W6WB◊6fRríFÜó2Â˜&W6WE6fRÇì∞¢V«6RñbÜ7Fñˆ‚””“v&ñÊB÷∂WíríFÜó2Âˆ6GW&T&ñÊFñÊráG&ñvvW"¬G&ñvvW"ÊFF6WBÁ6WGFñÊuFÇì∞¢V«6RñbÜ7Fñˆ‚””“w&V∆ˆBrívñÊF˜rÊ∆ˆ6Fñˆ‚Á&V∆ˆBÇì∞¢–†¢ˆˆÂ&ˆ˜DñÁWBÜWfVÁBí∞¢6ˆÁ7BñÁWB“WfVÁBÁF&vWBÊ6∆˜6W7BÇu∂FF◊6WGFñÊu“rì∞¢ñbÇñÁWB«¬ñÁWBÁGóR”“w&ÊvRrí&WGW&„∞¢ñbÜñÁWBÊÊWáDV∆V÷VÁE6ñ&∆ñÊríñÁWBÊÊWáDV∆V÷VÁE6ñ&∆ñÊrÁFWáD6ˆÁFVÁB“FÜó2Âˆf˜&÷E6WGFñÊuf«VRÜñÁWBÁf«VR¬ñÁWBÊFF6WBÊf˜&÷Bì∞¢FÜó2Âˆ«ï6WGFñÊrÜñÁWBÊFF6WBÁ6WGFñÊr¬ÁV÷&W"ÜñÁWBÁf«VRíì∞¢–†¢ˆˆÂ&ˆ˜D6ÜÊvRÜWfVÁBí∞¢6ˆÁ7BñÁWB“WfVÁBÁF&vWBÊ6∆˜6W7BÇu∂FF◊6WGFñÊu“rì∞¢ñbÇñÁWB«¬ñÁWBÁGóR””“w&ÊvRrí&WGW&„∞¢∆WBf«VR“ñÁWBÁGóR””“v6ÜV6∂&˜ÇrÚñÁWBÊ6ÜV6∂VB¢ñÁWBÁf«VS∞¢ñbÜñÁWBÊFF6WBÁ6WGFñÊr””“vw&Üñ72Êg4∆ñ÷óBríf«VR“ÁV÷&W"áf«VRì∞¢ñbÜñÁWBÁGóR””“v6ÜV6∂&˜Çrí∞¢6ˆÁ7B∆&V¬“ñÁWBÊ6∆˜6W7BÇrÁFˆvv∆RrìÚÁVW'ï6V∆V7F˜"ÇvV“rì∞¢ñbÜ∆&V¬í∆&V¬ÁFWáD6ˆÁFVÁB“f«VRÚ}	-	≠	≤r¢}	-
-Ω	≠	≤s∞¢–¢FÜó2Âˆ«ï6WGFñÊrÜñÁWBÊFF6WBÁ6WGFñÊr¬f«VRì∞¢–†¢ˆˆÂ&ˆ˜D∂WñF˜v‚ÜWfVÁBí∞¢ñbÜWfVÁBÁ&WVBí&WGW&„∞¢ñbáFÜó2Ê7FófUfñWr””“wWw&FRrbb≤sr¬s"r¬s2u“ÊñÊ6«VFW2ÜWfVÁBÊ∂Wííí∞¢FÜó2Á67&VV‚ÁVW'ï6V∆V7F˜$∆¬Çu∂FF÷7Fñˆ„“'6V∆V7B◊Ww&FR%“rï¥ÁV÷&W"ÜWfVÁBÊ∂Wíí“”ÚÊ6∆ñ6≤Çì∞¢&WGW&„∞¢–¢ñbÜWfVÁBÊ∂Wí”“tW66Rr«¬FÜó2Ê&ñÊFñÊt6GW&Rí&WGW&„∞¢ñbÖ≤w6WGFñÊw2r¬w7FFó7Fñ72r¬v6ÜñWfV÷VÁG2r¬v6ˆÁG&ˆ«2u“ÊñÊ6«VFW2áFÜó2Ê7FófUfñWríí∞¢WfVÁBÁ&WfVÁDFVfV«BÇì∞¢FÜó2Â˜&WGW&‰g&ˆ’7V'fñWrÇì∞¢“V«6RñbáFÜó2Ê7FófUfñWr””“wW6Rrí∞¢WfVÁBÁ&WfVÁDFVfV«BÇì∞¢FÜó2ÂˆV÷óBÇwVìß&W7V÷Rrì∞¢–¢–†¢˜6V∆V7DFñffñ7V«Gíáf«VRí∞¢ñbÇDîddî5T≈DîU5∑f«VU“í&WGW&„∞¢FÜó2ÊFñffñ7V«Gí“f«VS∞¢FÜó2Âˆ«ï6WGFñÊrÇvv÷W∆íÊFñffñ7V«Gír¬f«VR¬f«6Rì∞¢FÜó2Á67&VV‚ÁVW'ï6V∆V7F˜$∆¬Çu∂FF÷7Fñˆ„“&Fñffñ7V«Gí%“ríÊf˜$V6ÇÇÜ'WGFˆ‚í”‚'WGFˆ‚Á6WDGG&ñ'WFRÇv&ñ◊&W76VBr¬7G&ñÊrÜ'WGFˆ‚ÊFF6WBÁf«VR””“f«VRííì∞¢6ˆÁ7BFWFñ¬“FÜó2Á67&VV‚ÁVW'ï6V∆V7F˜"Çu∂FF÷Fñffñ7V«Gí÷FWFñ≈“rì∞¢ñbÜFWFñ¬íFWFñ¬ÁFWáD6ˆÁFVÁB“Dîddî5T≈DîU5∑f«VU’≥”∞¢6ˆÁ7Bfˆ˜FW"“FÜó2Á67&VV‚ÁVW'ï6V∆V7F˜"ÇrÊ÷VÁR÷fˆ˜FW"7„¶∆7B÷6Üñ∆Brì∞¢ñbÜfˆ˜FW"ífˆ˜FW"ÁFWáD6ˆÁFVÁB“	-ΩÌ¢G¥Dîddî5T≈DîU5∑f«VU’≥◊÷∞¢FÜó2ÂˆV÷óBÇwVì¶Fñffñ7V«Gír¬f«VR¬≤Fñffñ7V«Gì¢f«VR“ì∞¢–†¢ˆ6GW&T&ñÊFñÊrÜ'WGFˆ‚¬FÇí∞¢FÜó2Âˆ6Ê6Vƒ&ñÊFñÊt6GW&RÇì∞¢'WGFˆ‚Ê6∆74∆ó7BÊFBÇvó2÷∆ó7FVÊñÊrrì∞¢6ˆÁ7B∆&V¬“'WGFˆ‚ÁVW'ï6V∆V7F˜"Çw7‚rì∞¢ñbÜ∆&V¬í∆&V¬ÁFWáD6ˆÁFVÁB“}	›mÕç-R≠Ω-çç>(
-bs∞¢6ˆÁ7Bˆ‰∂Wí“ÜWfVÁBí”‚∞¢WfVÁBÁ&WfVÁDFVfV«BÇì∞¢WfVÁBÁ7F˜&˜vFñˆ‚Çì∞¢ñbÜWfVÁBÊ∂Wí”“tW66RríFÜó2Âˆ«ï6WGFñÊráFÇ¬WfVÁBÊ6ˆFR«¬WfVÁBÊ∂Wíì∞¢FÜó2Âˆ6Ê6Vƒ&ñÊFñÊt6GW&RÇì∞¢FÜó2Â˜&VÊFW%6WGFñÊw2Çì∞¢”∞¢FÜó2Ê&ñÊFñÊt6GW&R“≤'WGFˆ‚¬ˆ‰∂Wí”∞¢vñÊF˜rÊFDWfVÁD∆ó7FVÊW"Çv∂WñF˜v‚r¬ˆ‰∂Wí¬≤6GW&S¢G'VR¬ˆÊ6S¢G'VR“ì∞¢–†¢ˆ6Ê6Vƒ&ñÊFñÊt6GW&RÇí∞¢ñbÇFÜó2Ê&ñÊFñÊt6GW&Rí&WGW&„∞¢vñÊF˜rÁ&V÷˜fTWfVÁD∆ó7FVÊW"Çv∂WñF˜v‚r¬FÜó2Ê&ñÊFñÊt6GW&RÊˆ‰∂Wí¬≤6GW&S¢G'VR“ì∞¢FÜó2Ê&ñÊFñÊt6GW&RÊ'WGFˆ„ÚÊ6∆74∆ó7BÁ&V÷˜fRÇvó2÷∆ó7FVÊñÊrrì∞¢FÜó2Ê&ñÊFñÊt6GW&R“ÁV∆√∞¢–†¢˜Fˆvv∆TgV∆«67&VV‚Çí∞¢6ˆÁ7B&WVW7B“Fˆ7V÷VÁBÊgV∆«67&VV‰V∆V÷VÁBÚFˆ7V÷VÁBÊWÜóDgV∆«67&VV„Ú‚Çí¢Fˆ7V÷VÁBÊFˆ7V÷VÁDV∆V÷VÁBÁ&WVW7DgV∆«67&VV„Ú‚Çì∞¢&ˆ÷ó6RÁ&W6ˆ«fRá&WVW7BíÁFÜV‚ÇÇí”‚FÜó2ÂˆV÷óBÇwVì¶gV∆«67&VV‚r¬&ˆˆ∆V‚ÜFˆ7V÷VÁBÊgV∆«67&VV‰V∆V÷VÁBíííÊ6F6ÇÇÜW'&˜"í”‚∞¢FÜó2Á6Ü˜uFˆ7Bá≤GóS¢wv&ÊñÊrr¬FóF∆S¢}	˝ÌΩ›Ωí›≠“r¬÷W76vS¢W'&˜#ÚÊ÷W76vRÛÚ}	=}]Ì-≠ΩÌ›ç≤}˝Ì‚r“ì∞¢“ì∞¢–†¢ˆˆ‰gV∆«67&VV‰6ÜÊvRÇí∞¢FÜó2Á&ˆ˜BÁVW'ï6V∆V7F˜$∆¬Çu∂FF÷gV∆«67&VV‚÷∆&V≈“ríÊf˜$V6ÇÇÜÊˆFRí”‚≤ÊˆFRÁFWáD6ˆÁFVÁB“Fˆ7V÷VÁBÊgV∆«67&VV‰V∆V÷VÁBÚ}	-Ωù-Çr¢}	-≠ΩÌ}ç-¬s≤“ì∞¢–†¢7ñÊ2˜&W6WE6WGFñÊw2Çí∞¢ñbÇvñÊF˜rÊ6ˆÊfó&“Ç}	-]›=-¬-R›-Ìù≠Ç¢}-ÌM≠ç√Úríí&WGW&„∞¢G'í∞¢vóBFÜó2Á6WGFñÊw4÷ÊvW#ÚÁ&W6WCÚ‚Çì∞¢FÜó2Á6WGFñÊw2“FVW÷W&vRÑDTdT≈Eı4UEDî‰u2¬FÜó2Á6WGFñÊw4÷ÊvW#ÚÊvWE6WGFñÊw3Ú‚ÇíÛÚFÜó2Á6WGFñÊw4÷ÊvW#ÚÁ6WGFñÊw2ÛÚ∑“ì∞¢FÜó2ÊFñffñ7V«Gí“vWEFÇáFÜó2Á6WGFñÊw2¬vv÷W∆íÊFñffñ7V«Gír¬vÊ˜&÷¬rì∞¢FÜó2Âˆ«î66W76ñ&ñ∆óGï6WGFñÊw2Çì∞¢FÜó2ÂˆV÷óBÇwVìß6WGFñÊrr¬w&W6WBr¬ÁV∆¬¬≤&W6WC¢G'VR“ì∞¢FÜó2Â˜&VÊFW%6WGFñÊw2Çì∞¢FÜó2Á6Ü˜uFˆ7Bá≤GóS¢w7V66W72r¬÷W76vS¢}	›-Ìù≠Ç-Ì}-ù]›≤¢}-ÌM≠ç¬‚r“ì∞¢“6F6ÇÜW'&˜"í∞¢FÜó2Á6Ü˜uFˆ7Bá≤GóS¢wv&ÊñÊrr¬÷W76vS¢	›R=MΩÌ¬Ìç-¬›-Ìù≠É¢G∂W'&˜#ÚÊ÷W76vRÛÚW'&˜'÷“ì∞¢–¢–†¢˜&W6WE6fRÇí∞¢ñbÇvñÊF˜rÊ6ˆÊfó&“Ç}
-=MΩç-¬-]¬˝Ì=]˝ÌMçΩÛÚ
-›-‚M]ù--çR›]ΩÕ}ÚÌ-Õ]›ç-¬‚ríí&WGW&„∞¢FÜó2ÂˆV÷óBÇwVìß&W6WB◊6fRr¬≤ñC¢FÜó2Á&ˆfñ∆SÚÊñBÛÚw&ñ÷'ír“ì∞¢–†¢˜&WGW&‰g&ˆ’7V'fñWrÇí∞¢ñbáFÜó2Á&WGW&ÂfñWr””“wW6RríFÜó2Á6Ü˜uW6RÇì∞¢V«6RFÜó2Á6Ü˜t÷ñ‰÷VÁRáFÜó2Á&ˆfñ∆Rì∞¢–†¢˜&VE6WGFñÊw2Çí∞¢∆WB∆ˆFVC∞¢G'í≤∆ˆFVB“FÜó2Á6WGFñÊw4÷ÊvW#ÚÊvWE6WGFñÊw3Ú‚ÇíÛÚFÜó2Á6WGFñÊw4÷ÊvW#ÚÊvWCÚ‚ÇíÛÚFÜó2Á6WGFñÊw4÷ÊvW#ÚÁ6WGFñÊw3≤–¢6F6Ç≤∆ˆFVB“FÜó2Á6WGFñÊw4÷ÊvW#ÚÁ6WGFñÊw3≤–¢FÜó2Á6WGFñÊw2“FVW÷W&vRÑDTdT≈Eı4UEDî‰u2¬∆ˆFVBÛÚFÜó2Á&ˆfñ∆SÚÁ6WGFñÊw2ÛÚ∑“ì∞¢FÜó2ÊFñffñ7V«Gí“vWEFÇáFÜó2Á6WGFñÊw2¬vv÷W∆íÊFñffñ7V«Gír¬FÜó2ÊFñffñ7V«Gíì∞¢–†¢7ñÊ2ˆ«ï6WGFñÊráFÇ¬f«VR¬V÷óB“G'VRí∞¢6WEFÇáFÜó2Á6WGFñÊw2¬FÇ¬f«VRì∞¢FÜó2Âˆ«î66W76ñ&ñ∆óGï6WGFñÊw2Çì∞¢G'í∞¢ñbáGóVˆbFÜó2Á6WGFñÊw4÷ÊvW#ÚÁ6WB””“vgVÊ7Fñˆ‚rívóBFÜó2Á6WGFñÊw4÷ÊvW"Á6WBáFÇ¬f«VRì∞¢V«6RñbáGóVˆbFÜó2Á6WGFñÊw4÷ÊvW#ÚÁ6WE6WGFñÊr””“vgVÊ7Fñˆ‚rí∞¢6ˆÁ7B∂6FVv˜'í¬‚‚Ê∂Wó5““FÇÁ7∆óBÇr‚rì∞¢vóBFÜó2Á6WGFñÊw4÷ÊvW"Á6WE6WGFñÊrÜ6FVv˜'í¬∂Wó2Ê¶ˆñ‚Çr‚rí¬f«VRì∞¢“V«6RñbáGóVˆbFÜó2Á6WGFñÊw4÷ÊvW#ÚÁWFFR””“vgVÊ7Fñˆ‚rí∞¢ñbáFÜó2Á6WGFñÊw4÷ÊvW"ÁWFFRÊ∆VÊwFÇ„“"ívóBFÜó2Á6WGFñÊw4÷ÊvW"ÁWFFRáFÇ¬f«VRì∞¢V«6R≤6ˆÁ7BF6Ç“∑”≤6WEFÇáF6Ç¬FÇ¬f«VRì≤vóBFÜó2Á6WGFñÊw4÷ÊvW"ÁWFFRáF6Çì≤–¢“V«6RñbáGóVˆbFÜó2Á6WGFñÊw4÷ÊvW#ÚÁF6Ç””“vgVÊ7Fñˆ‚rí∞¢6ˆÁ7BF6Ç“∑”≤6WEFÇáF6Ç¬FÇ¬f«VRì≤vóBFÜó2Á6WGFñÊw4÷ÊvW"ÁF6ÇáF6Çì∞¢–¢ñbÜV÷óBíFÜó2ÂˆV÷óBÇwVìß6WGFñÊrr¬FÇ¬f«VR¬≤FÇ¬∂Wì¢FÇ¬f«VR“ì∞¢“6F6ÇÜW'&˜"í∞¢FÜó2Á6Ü˜uFˆ7Bá≤GóS¢wv&ÊñÊrr¬÷W76vS¢	›-Ìù≠›RÌ]›]›¢G∂W'&˜#ÚÊ÷W76vRÛÚW'&˜'÷“ì∞¢–¢–†¢ˆ«î66W76ñ&ñ∆óGï6WGFñÊw2Çí∞¢ñbÇFÜó2Á&ˆ˜Bí&WGW&„∞¢FÜó2Á&ˆ˜BÊ6∆74∆ó7BÁFˆvv∆RÇwVí◊&VGV6VB÷÷˜Fñˆ‚r¬&ˆˆ∆V‚ÜvWEFÇáFÜó2Á6WGFñÊw2¬v66W76ñ&ñ∆óGíÁ&VGV6VD÷˜Fñˆ‚r¬f«6Rííì∞¢FÜó2Á&ˆ˜BÊ6∆74∆ó7BÁFˆvv∆RÇwVí÷ÜñvÇ÷6ˆÁG&7Br¬&ˆˆ∆V‚ÜvWEFÇáFÜó2Á6WGFñÊw2¬v66W76ñ&ñ∆óGíÊÜñvÑ6ˆÁG&7Br¬f«6Rííì∞¢FÜó2Á&ˆ˜BÊFF6WBÊ6ˆ∆˜$÷ˆFR“vWEFÇáFÜó2Á6WGFñÊw2¬v66W76ñ&ñ∆óGíÊ6ˆ∆˜$&∆ñÊD÷ˆFRr¬vÊˆÊRrì∞¢FÜó2Á&ˆ˜BÁ7Gñ∆RÁ6WE&˜W'GíÇr“◊Ví◊66∆Rr¬6∆◊ÜvWEFÇáFÜó2Á6WGFñÊw2¬v66W76ñ&ñ∆óGíÁVï66∆Rr¬í¬„Ç¬„2íì∞¢FÜó2Ê7&˜76Üó#ÚÁ7Gñ∆RÁ6WE&˜W'GíÇr“÷7&˜76Üó"÷6ˆ∆˜"r¬vWEFÇáFÜó2Á6WGFñÊw2¬vv÷W∆íÊ7&˜76Üó$6ˆ∆˜"r¬r3cFcFfbríì∞¢–†¢ˆ66ÜVE&ˆfñ∆RÇí∞¢&WGW&‚FÜó2Á6fT÷ÊvW#ÚÁ&ˆfñ∆RÛÚFÜó2Á6fT÷ÊvW#ÚÊ7W'&VÁE&ˆfñ∆RÛÚÁV∆√∞¢–†¢ˆV÷óBÜWfVÁB¬‚‚Ê&w2í∞¢G'í≤&WGW&‚FÜó2ÊWfVÁD'W3ÚÊV÷óCÚ‚ÜWfVÁB¬‚‚Ê&w2íÛÚ≤–¢6F6ÇÜW'&˜"í∞¢6ˆÁ6ˆ∆RÊW'&˜"ÜµTî÷ÊvW%“	Ìçç≠ÌÌ-}ç≠G∂WfVÁG“Ê¬W'&˜"ì∞¢FÜó2Á6Ü˜uFˆ7Bá≤GóS¢wv&ÊñÊrr¬÷W76vS¢}	≠ÌÕ›M›R˝ç›˝-‚	˝Ì--Ìç-RM]ù--çR‚r“ì∞¢&WGW&‚∞¢–¢–†¢˜6Ü˜u67&VV‚Ü÷&∑W¬fñWrí∞¢FÜó2Á67&VV‚ÊñÊÊW$ÖD‘¬“÷&∑W∞¢FÜó2Á67&VV‚ÊÜñFFV‚“f«6S∞¢FÜó2Á67&VV‚Ê6∆74∆ó7BÁ&V÷˜fRÇvó2÷7FófRrì∞¢FÜó2Á&ˆ˜BÊFF6WBÁfñWr“fñWs∞¢FÜó2Ê7FófUfñWr“fñWs∞¢&WVW7DÊñ÷Fñˆ‰g&÷RÇÇí”‚∞¢FÜó2Á67&VV„ÚÊ6∆74∆ó7BÊFBÇvó2÷7FófRrì∞¢FÜó2Á67&VV„ÚÁVW'ï6V∆V7F˜"Çu∂WFˆfˆ7W5“¬'WGFˆ„¶Ê˜BÖ∂Fó6&∆VE“í¬∑F&ñÊFWÉ“#%“rìÚÊfˆ7W2á≤&WfVÁE67&ˆ∆√¢G'VR“ì∞¢“ì∞¢–†¢ˆÜñFTáVBÇí∞¢ñbÇFÜó2ÊáVBí&WGW&„∞¢FÜó2ÊáVBÊÜñFFV‚“G'VS∞¢FÜó2ÊáVBÊ6∆74∆ó7BÁ&V÷˜fRÇvó2÷7FófRr¬vó2÷7&óFñ6¬rì∞¢ñbáFÜó2Ê7&˜76Üó"íFÜó2Ê7&˜76Üó"ÊÜñFFV‚“G'VS∞¢–†¢˜6WEFWáBÜ∂Wí¬f«VRí∞¢6ˆÁ7BÊˆFR“FÜó2Á&ˆ˜BÁVW'ï6V∆V7F˜"Ü∂FF÷áVC“"G∂∂Wó“%÷ì∞¢ñbÜÊˆFRíÊˆFRÁFWáD6ˆÁFVÁB“7G&ñÊráf«VRÛÚrrì∞¢–†¢˜6WD÷WFW"Ü∂Wí¬f«VRí∞¢6ˆÁ7BÊˆFR“FÜó2Á&ˆ˜BÁVW'ï6V∆V7F˜"Ü∂FF÷÷WFW#“"G∂∂Wó“%÷ì∞¢ñbÇÊˆFRí&WGW&„∞¢6ˆÁ7BÊ˜&÷∆ó¶VB“6∆◊ÑÁV÷&W"áf«VRí‚ÚÁV÷&W"áf«VRíÚ¢ÁV÷&W"áf«VRíì∞¢ÊˆFRÁ7Gñ∆RÁ6WE&˜W'GíÇr“◊f«VRr¬G∂Ê˜&÷∆ó¶VB¢“Vì∞¢ÊˆFRÁ&VÁDV∆V÷VÁCÚÁ6WDGG&ñ'WFRÇv&ñ◊f«VVÊ˜rr¬7G&ñÊrÑ÷FÇÁ&˜VÊBÜÊ˜&÷∆ó¶VB¢ííì∞¢–†¢ˆ6∆V%v&ÊñÊuFñ÷W'2Çí∞¢vñÊF˜rÊ6∆V%Fñ÷V˜WBáFÜó2Áv&ÊñÊuFñ÷W"ì∞¢vñÊF˜rÊ6∆V$ñÁFW'f¬áFÜó2Áv&ÊñÊtñÁFW'f¬ì∞¢FÜó2Áv&ÊñÊuFñ÷W"“ÁV∆√∞¢FÜó2Áv&ÊñÊtñÁFW'f¬“ÁV∆√∞¢–†¢ˆÜñFUv&ÊñÊrÇí∞¢FÜó2Âˆ6∆V%v&ÊñÊuFñ÷W'2Çì∞¢ñbÇFÜó2Áv&ÊñÊrí&WGW&„∞¢FÜó2Áv&ÊñÊrÊ6∆74∆ó7BÁ&V÷˜fRÇvó2÷7FófRrì∞¢FÜó2Áv&ÊñÊrÊ6∆74∆ó7BÊFBÇvó2÷∆VfñÊrrì∞¢FÜó2Â˜G&6µFñ÷W"ávñÊF˜rÁ6WEFñ÷V˜WBÇÇí”‚∞¢ñbÇFÜó2Áv&ÊñÊrí&WGW&„∞¢FÜó2Áv&ÊñÊrÊÜñFFV‚“G'VS∞¢FÜó2Áv&ÊñÊrÊ6∆74∆ó7BÁ&V÷˜fRÇvó2÷∆VfñÊrrì∞¢“¬#cíì∞¢–†¢˜G&6µFñ÷W"áFñ÷W"í∞¢FÜó2ÁFñ÷W'2ÊFBáFñ÷W"ì∞¢vñÊF˜rÁ6WEFñ÷V˜WBÇÇí”‚FÜó2ÁFñ÷W'2ÊFV∆WFRáFñ÷W"í¬ì∞¢&WGW&‚Fñ÷W#∞¢–†¢ˆVÁ7W&TñÊóBÇí∞¢ñbÇFÜó2ÊñÊóFñ∆ó¶VBíFÜó2ÊñÊóBÇì∞¢–ß–†¶Wá˜'BFVfV«BTî÷ÊvW#∞
+        <nav class="secondary-actions" aria-label="–î–æ–ø–æ–ª–Ω–∏—Ç–µ–ª—å–Ω—ã–µ —Ä–∞–∑–¥–µ–ª—ã">
+          <button type="button" data-action="settings"><span>–ù–∞—Å—Ç—Ä–æ–π–∫–∏</span><small>–ì—Ä–∞—Ñ–∏–∫–∞ –∏ –¥–æ—Å—Ç—É–ø–Ω–æ—Å—Ç—å</small></button>
+          <button type="button" data-action="achievements"><span>–î–æ—Å—Ç–∏–∂–µ–Ω–∏—è</span><small>–†–µ–∑—É–ª—å—Ç–∞—Ç—ã –ø—Ä–æ—Ç–æ–∫–æ–ª–æ–≤</small></button>
+          <button type="button" data-action="statistics"><span>–°—Ç–∞—Ç–∏—Å—Ç–∏–∫–∞</span><small>–ê—Ä—Ö–∏–≤ –æ–ø–µ—Ä–∞—Ç–æ—Ä–∞</small></button>
+          <button type="button" data-action="controls"><span>–£–ø—Ä–∞–≤–ª–µ–Ω–∏–µ</span><small>–î–≤–∏–∂–µ–Ω–∏–µ –∏ –±–æ–µ–≤—ã–µ —Å–∏—Å—Ç–µ–º—ã</small></button>
+        </nav>
+      </section>
+      <aside class="profile-card" aria-label="–ü—Ä–æ—Ñ–∏–ª—å –æ–ø–µ—Ä–∞—Ç–æ—Ä–∞"><div class="profile-card__header"><span>–û–ü–ï–†–ê–¢–û–†</span><b>VN-${escapeHTML(String(this.profile?.id ?? '071').slice(-3).toUpperCase())}</b></div><div class="level-orbit"><span>${formatInteger(progression.level ?? 1)}</span><small>–£–†–û–í–ï–ù–¨</small></div><dl class="profile-metrics"><div><dt>–£—Å–ø–µ—à–Ω—ã—Ö –æ–ø–µ—Ä–∞—Ü–∏–π</dt><dd>${formatInteger(stats.wins)}</dd></div><div><dt>–õ—É—á—à–∏–π —Å—á—ë—Ç</dt><dd>${formatInteger(stats.bestScore)}</dd></div></dl><div class="profile-signal"><i></i><span>–ü—Ä–æ—Ñ–∏–ª—å —Å–∏–Ω—Ö—Ä–æ–Ω–∏–∑–∏—Ä–æ–≤–∞–Ω</span></div></aside>
+      <footer class="menu-footer"><span>–°–ï–ê–ù–° 07 // –ü–û–õ–ò–ì–û–ù –ù–ï–°–¢–ê–ë–ò–õ–ï–ù</span><span>–í—ã–±–æ—Ä: <b data-map-selection>${escapeHTML(selectedMap.label)}</b> // <b data-difficulty-selection>${escapeHTML(DIFFICULTIES[this.difficulty]?.[0] ?? DIFFICULTIES.normal[0])}</b></span></footer>
+    </main>`, 'main-menu');
+
+    if (!profile && this.saveManager?.load) {
+      Promise.resolve(this.saveManager.load()).then((loaded) => {
+        if (loaded && this.activeView === 'main-menu' && loaded !== this.profile) this.showMainMenu(loaded);
+      }).catch(() => {});
+    }
+  }
+
+  showHUD() {
+    this._ensureInit();
+    this._hideWarning(true);
+    this.screen.hidden = true;
+    this.screen.innerHTML = '';
+    this.screen.classList.remove('is-active');
+    this.hud.hidden = false;
+    this.hud.classList.add('is-active');
+    this.crosshair.hidden = false;
+    this.root.dataset.view = 'playing';
+    this.activeView = 'playing';
+    return this;
+  }
+
+  updateHUD(data = {}) {
+    this._ensureInit();
+    this.hudState = { ...this.hudState, ...data };
+    const state = this.hudState;
+    const health = finite(state.health ?? state.vitals?.health, 100);
+    const maxHealth = Math.max(1, finite(state.maxHealth ?? state.vitals?.maxHealth, 100));
+    const armor = finite(state.armor ?? state.vitals?.armor, 0);
+    const maxArmor = Math.max(1, finite(state.maxArmor ?? state.vitals?.maxArmor, 100));
+    const ammo = Math.max(0, finite(state.ammo?.current ?? state.ammo));
+    const reserve = Math.max(0, finite(state.ammo?.reserve ?? state.reserve ?? state.reserveAmmo));
+    this._setText('health', Math.ceil(health));
+    this._setMeter('health', health / maxHealth);
+    this._setText('armor', Math.ceil(armor));
+    this._setMeter('armor', armor / maxArmor);
+    this._setText('ammo', Math.floor(ammo));
+    this._setText('reserve', Math.floor(reserve));
+    const weaponName = state.weapon?.name ?? state.weapon?.label ?? state.weapon ?? '–ò–ú–ü–£–õ–¨–°–ù–´–ô –ö–ê–†–ê–ë–ò–ù';
+    this._setText('weapon', weaponName);
+    const weaponLabel = this.root.querySelector('[data-hud="weapon"]');
+    if (weaponLabel) {
+      weaponLabel.title = String(weaponName);
+      weaponLabel.setAttribute('aria-label', `–ê–∫—Ç–∏–≤–Ω–æ–µ –æ—Ä—É–∂–∏–µ: ${weaponName}`);
+    }
+    this.hud.classList.toggle('is-critical', health / maxHealth <= 0.25);
+    const ammoCapacity = Math.max(1, finite(state.ammo?.capacity ?? state.magazine, 24));
+    const reloading = Boolean(state.ammo?.reload ?? state.reload);
+    const reloadProgress = clamp(state.ammo?.reloadProgress ?? state.reloadProgress ?? 0);
+    const ammoPanel = this.root.querySelector('[data-hud-panel="ammo"]');
+    ammoPanel?.classList.toggle('is-low', !reloading && ammo <= Math.max(1, Math.floor(ammoCapacity * 0.2)));
+    ammoPanel?.classList.toggle('is-reloading', reloading);
+    this._setText('reload-status', reloading ? `–ü–ï–†–ï–ó–ê–†–Ø–î–ö–ê ${Math.round(reloadProgress * 100)}%` : '–ü–ï–†–ï–ó–ê–†–Ø–î–ö–ê');
+
+    this._setText('objective', state.objective?.title ?? state.objective?.name ?? state.objective ?? '–û–∂–∏–¥–∞–Ω–∏–µ –ø—Ä–æ—Ç–æ–∫–æ–ª–∞');
+    this._setText('objective-detail', state.objective?.detail ?? state.objectiveDetail ?? '–°–∫–∞–Ω–∏—Ä–æ–≤–∞–Ω–∏–µ –æ–∫—Ä—É–∂–µ–Ω–∏—è');
+    const objectiveProgress = state.objective?.progress ?? state.progress ?? 0;
+    this._setText('objective-progress', `${Math.round(percent(objectiveProgress))}%`);
+    this._setMeter('objective', objectiveProgress);
+    this._setText('phase', state.phase ?? '–§–ê–ó–ê 01');
+
+    const anomaly = state.anomaly;
+    const shift = anomaly?.countdown ?? anomaly?.time ?? state.shiftCountdown;
+    this._setText('anomaly', anomaly?.name ?? anomaly?.title ?? (typeof anomaly === 'string' ? anomaly : '–°–µ—Ç—å —Å—Ç–∞–±–∏–ª—å–Ω–∞'));
+    this._setText('shift-countdown', Number.isFinite(Number(shift)) ? `${Math.max(0, Number(shift)).toFixed(Number(shift) < 10 ? 1 : 0)} —Å` : '–°–ò–ù–•–†–û–ù');
+    const anomalyPanel = this.root.querySelector('[data-hud-panel="anomaly"]');
+    anomalyPanel?.classList.toggle('is-warning', Boolean(anomaly?.warning) || (Number.isFinite(Number(shift)) && Number(shift) <= 5));
+    anomalyPanel?.classList.toggle('is-active', Boolean(anomaly?.active));
+
+    const dash = state.dash;
+    const dashProgress = typeof dash === 'object' ? (dash.ready ? 1 : dash.progress ?? 1 - finite(dash.cooldown) / Math.max(0.001, finite(dash.duration, 1))) : dash;
+    this._setMeter('dash', dashProgress ?? 1);
+    this._setText('dash', percent(dashProgress ?? 1) >= 99 ? '–ì–û–¢–û–í' : `${Math.round(percent(dashProgress ?? 0))}%`);
+    this.root.querySelector('[data-hud-panel="dash"]')?.classList.toggle('is-ready', percent(dashProgress ?? 1) >= 99);
+    this._setText('score', formatInteger(state.score));
+    const combo = Math.max(1, finite(state.combo, 1));
+    this._setText('combo', `√ó${combo.toFixed(combo % 1 ? 1 : 0)}`);
+    this.root.querySelector('[data-hud-panel="combo"]')?.classList.toggle('is-hot', combo > 1);
+
+    if (Array.isArray(state.upgrades)) this._renderHudUpgrades(state.upgrades);
+    this._updateInteract(state.interact);
+    if (state.crosshair !== undefined) this.setCrosshair(state.crosshair);
+    if (state.hitmarker) this.setHitmarker(state.hitmarker);
+    if (state.damageDirection !== undefined) this._showDamageDirection(state.damageDirection);
+    if (state.killfeed !== undefined) this._updateKillfeed(state.killfeed);
+    if (state.warning && typeof state.warning === 'object') {
+      const warningKey = String(state.warning.id ?? `${state.warning.title}:${state.warning.detail}`);
+      if (warningKey !== this.lastWarningKey) {
+        this.lastWarningKey = warningKey;
+        this.showWarning(state.warning.title, state.warning.detail, state.warning.seconds);
+      }
+    } else if (Object.hasOwn(data, 'warning')) {
+      this.lastWarningKey = '';
+    }
+  }
+
+  showPause() {
+    this._ensureInit();
+    this.hud.hidden = false;
+    this.returnView = 'pause';
+    this._showScreen(`<section class="overlay-screen overlay-screen--pause" role="dialog" aria-modal="true" aria-labelledby="pause-title"><article class="dialog-panel pause-panel">
+      <header class="dialog-header"><p class="eyebrow">–ü–†–û–¢–û–ö–û–õ –û–°–¢–ê–ù–û–í–õ–ï–ù</p><h1 id="pause-title">–ü–∞—É–∑–∞</h1><span class="pause-status"><i></i>–°–∏–º—É–ª—è—Ü–∏—è –∑–∞—Ñ–∏–∫—Å–∏—Ä–æ–≤–∞–Ω–∞</span></header>
+      <nav class="dialog-actions" aria-label="–ú–µ–Ω—é –ø–∞—É–∑—ã">
+        ${this._actionButton('01', '–ü—Ä–æ–¥–æ–ª–∂–∏—Ç—å', '–í–µ—Ä–Ω—É—Ç—å—Å—è –≤ —Å–∏–º—É–ª—è—Ü–∏—é', 'resume', true, 'ESC')}
+        ${this._actionButton('02', '–ù–∞—Å—Ç—Ä–æ–π–∫–∏', '–ó–≤—É–∫, –≥—Ä–∞—Ñ–∏–∫–∞ –∏ –¥–æ—Å—Ç—É–ø–Ω–æ—Å—Ç—å', 'settings')}
+        ${this._actionButton('03', '–£–ø—Ä–∞–≤–ª–µ–Ω–∏–µ', '–°—Ö–µ–º–∞ –∫–ª–∞–≤–∏—à –∏ –±–æ–µ–≤—ã—Ö —Å–∏—Å—Ç–µ–º', 'controls')}
+        ${this._actionButton('04', '–ü–µ—Ä–µ–∑–∞–ø—É—Å—Ç–∏—Ç—å –º–∞—Ç—á', '–¢–µ–∫—É—â–∏–π –ø—Ä–æ–≥—Ä–µ—Å—Å –±—É–¥–µ—Ç –ø–æ—Ç–µ—Ä—è–Ω', 'restart', false, '', true)}
+        <button class="text-button" type="button" data-action="menu">–í—ã–π—Ç–∏ –≤ –≥–ª–∞–≤–Ω–æ–µ –º–µ–Ω—é</button>
+      </nav><footer class="dialog-footer"><span>–í—Ä–µ–º—è –∫–æ–º–ø–ª–µ–∫—Å–∞ –æ—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω–æ</span><span>–ê—É–¥–∏–æ–∫–∞–Ω–∞–ª –ø—Ä–∏–≥–ª—É—à—ë–Ω</span></footer>
+    </article></section>`, 'pause');
+  }
+
+  showSettings(returnView = this.activeView === 'pause' ? 'pause' : 'main-menu') {
+    this._ensureInit();
+    this.returnView = returnView;
+    this._readSettings();
+    this._renderSettings();
+  }
+
+  showUpgrade(options = []) {
+    this._ensureInit();
+    this.hud.hidden = false;
+    this.options = Array.isArray(options) ? options.slice(0, 3) : [];
+    const cards = this.options.length ? this.options.map((option, index) => this._upgradeCard(option, index)).join('')
+      : `<div class="empty-state"><b>–ö–∞—Ç–∞–ª–æ–≥ –Ω–µ –æ—Ç–≤–µ—á–∞–µ—Ç</b><p>–ü—Ä–æ–¥–æ–ª–∂–µ–Ω–∏–µ –±—É–¥–µ—Ç –≤–æ–∑–æ–±–Ω–æ–≤–ª–µ–Ω–æ –ø–æ—Å–ª–µ —Å–∏–Ω—Ö—Ä–æ–Ω–∏–∑–∞—Ü–∏–∏ —Å –¥–∏—Ä–µ–∫—Ç–æ—Ä–æ–º.</p></div>`;
+    this._showScreen(`<section class="overlay-screen overlay-screen--upgrade" role="dialog" aria-modal="true" aria-labelledby="upgrade-title"><div class="upgrade-aura" aria-hidden="true"></div><article class="upgrade-panel">
+      <header class="upgrade-header"><p class="eyebrow">–°–ò–ù–•–†–û–ù–ò–ó–ê–¶–ò–Ø // –í–´–ë–û–† –ú–û–î–£–õ–Ø</p><h1 id="upgrade-title">–ü–µ—Ä–µ–Ω–∞–ø—Ä–∞–≤—å—Ç–µ –≤–µ–∫—Ç–æ—Ä</h1><p>–í—ã–±–µ—Ä–∏—Ç–µ –æ–¥–∏–Ω –º–æ–¥—É–ª—å. –ï–≥–æ —ç—Ñ—Ñ–µ–∫—Ç —Å–æ—Ö—Ä–∞–Ω–∏—Ç—Å—è –¥–æ –∫–æ–Ω—Ü–∞ –∑–∞–±–µ–≥–∞.</p></header>
+      <div class="upgrade-grid">${cards}</div><footer class="upgrade-footer"><span>–í—Ä–µ–º—è –∫–æ–º–ø–ª–µ–∫—Å–∞ –∑–∞–º–µ–¥–ª–µ–Ω–æ</span><span>–ö–ª–∞–≤–∏—à–∏ 1‚Äî3 –≤—ã–±–∏—Ä–∞—é—Ç –º–æ–¥—É–ª—å</span></footer>
+    </article></section>`, 'upgrade');
+  }
+
+  showResults(kind = 'defeat', stats = {}) {
+    this._ensureInit();
+    this._hideWarning(true);
+    this._hideHud();
+    const victory = ['victory', 'win', 'success', true].includes(kind);
+    const accuracy = finite(stats.accuracy) <= 1 ? finite(stats.accuracy) * 100 : finite(stats.accuracy);
+    const upgrades = Array.isArray(stats.upgrades) ? stats.upgrades : [];
+    const metric = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
+    this._showScreen(`<main class="results-screen results-screen--${victory ? 'victory' : 'defeat'}" aria-labelledby="results-title"><div class="results-sigil" aria-hidden="true"><i></i><i></i><i></i></div><section class="results-panel">
+      <header class="results-header"><p class="eyebrow">${stats.newBest ? '–ù–û–í–´–ô –†–ï–ö–û–†–î' : victory ? '–ü–†–û–¢–û–ö–û–õ –ó–ê–í–ï–†–®–Å–ù' : '–ü–†–û–¢–û–ö–û–õ –û–ë–û–†–í–ê–ù'}</p><h1 id="results-title">${victory ? '–†–µ—à—ë—Ç–∫–∞ —Å—Ç–∞–±–∏–ª–∏–∑–∏—Ä–æ–≤–∞–Ω–∞' : '–°–∏–≥–Ω–∞–ª –æ–ø–µ—Ä–∞—Ç–æ—Ä–∞ –ø–æ—Ç–µ—Ä—è–Ω'}</h1><p>${victory ? '–¢—Ä–∏ —Ñ–∞–∑–æ–≤—ã—Ö —É–∑–ª–∞ —Å–≤–µ–¥–µ–Ω—ã. –ö–æ—Ä–∏–¥–æ—Ä —ç–≤–∞–∫—É–∞—Ü–∏–∏ –æ—Ç–∫—Ä—ã—Ç.' : '–†–µ—à—ë—Ç–∫–∞ —Å–æ—Ö—Ä–∞–Ω–∏–ª–∞ –¥–∞–Ω–Ω—ã–µ –ø—Ä–æ–≥–æ–Ω–∞. –ö–æ–º–ø–ª–µ–∫—Å –≥–æ—Ç–æ–≤ –∫ –Ω–æ–≤–æ–º—É –∑–∞–ø—É—Å–∫—É.'}</p></header>
+      <div class="result-score"><span>–ò–¢–û–ì–û–í–´–ô –†–ï–ó–£–õ–¨–¢–ê–¢</span><strong>${formatInteger(stats.score)}</strong><small>+${formatInteger(stats.xp)} XP</small></div>
+      <dl class="results-grid">${metric('–í—Ä–µ–º—è –ø—Ä–æ—Ö–æ–∂–¥–µ–Ω–∏—è', formatDuration(stats.duration ?? stats.time))}${metric('–õ–∏–∫–≤–∏–¥–∞—Ü–∏–∏', formatInteger(stats.kills))}${metric('–ü–æ–ø–∞–¥–∞–Ω–∏—è –≤ –≥–æ–ª–æ–≤—É', formatInteger(stats.headshots))}${metric('–¢–æ—á–Ω–æ—Å—Ç—å', `${clamp(accuracy, 0, 100).toFixed(1)}%`)}${metric('–ü–æ–ª—É—á–µ–Ω–æ —É—Ä–æ–Ω–∞', formatInteger(stats.damageTaken))}${metric('–õ—É—á—à–∞—è —Å–µ—Ä–∏—è', `√ó${Math.max(1, finite(stats.bestCombo, 1)).toFixed(finite(stats.bestCombo, 1) % 1 ? 1 : 0)}`)}</dl>
+      <section class="result-upgrades"><h2>–ú–æ–¥—É–ª–∏ –∑–∞–±–µ–≥–∞</h2><div>${upgrades.length ? upgrades.map((upgrade) => `<span>${escapeHTML(upgrade.name ?? upgrade.title ?? upgrade)}</span>`).join('') : '<span class="is-muted">–ú–æ–¥—É–ª–∏ –Ω–µ —É—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω—ã</span>'}</div></section>
+      <div class="results-actions">${this._actionButton('01', '–ù–æ–≤—ã–π –∑–∞–±–µ–≥', '–°—Ñ–æ—Ä–º–∏—Ä–æ–≤–∞—Ç—å –Ω–æ–≤—ã–π –ø—Ä–æ—Ç–æ–∫–æ–ª', 'restart', true)}<button class="text-button" type="button" data-action="menu">–í –≥–ª–∞–≤–Ω–æ–µ –º–µ–Ω—é</button></div>
+    </section></main>`, 'results');
+  }
+
+  showTutorial(step = 0) {
+    this._ensureInit();
+    const index = typeof step === 'object' ? finite(step.index) : finite(step);
+    const source = typeof step === 'object' ? step : {};
+    const preset = TUTORIAL_STEPS[clamp(index, 0, TUTORIAL_STEPS.length - 1)] ?? TUTORIAL_STEPS[0];
+    const kicker = source.kicker ?? preset[0];
+    const title = source.title ?? preset[1];
+    const text = source.text ?? source.detail ?? preset[2];
+    const keys = Array.isArray(source.keys) ? source.keys : preset[3];
+    this.tutorial.innerHTML = `<article class="tutorial-card" role="status" aria-labelledby="tutorial-title"><div class="tutorial-progress" aria-hidden="true"><span style="--step:${percent((index + 1) / TUTORIAL_STEPS.length)}%"></span></div><div><p class="eyebrow">${escapeHTML(kicker)}</p><h2 id="tutorial-title">${escapeHTML(title)}</h2><p>${escapeHTML(text)}</p></div>${keys.length ? `<div class="key-row" aria-label="–ö–ª–∞–≤–∏—à–∏">${keys.map((key) => `<kbd>${escapeHTML(key)}</kbd>`).join('')}</div>` : ''}<button class="text-button" type="button" data-action="skip-tutorial">–ü—Ä–æ–ø—É—Å—Ç–∏—Ç—å –æ–±—É—á–µ–Ω–∏–µ</button></article>`;
+    this.tutorial.hidden = false;
+    requestAnimationFrame(() => this.tutorial.classList.add('is-active'));
+  }
+
+  showWarning(title = '–ü—Ä–µ–¥—É–ø—Ä–µ–∂–¥–µ–Ω–∏–µ', detail = '', seconds = 5) {
+    this._ensureInit();
+    this._clearWarningTimers();
+    const duration = Math.max(0, finite(seconds, 5));
+    this.warning.querySelector('[data-warning-title]').textContent = title;
+    this.warning.querySelector('[data-warning-detail]').textContent = detail;
+    this.warning.querySelector('[data-warning-bar]').style.setProperty('--warning-duration', `${Math.max(0.1, duration)}s`);
+    this.warning.hidden = false;
+    this.warning.classList.remove('is-leaving');
+    requestAnimationFrame(() => this.warning.classList.add('is-active'));
+    const startedAt = performance.now();
+    const output = this.warning.querySelector('[data-warning-countdown]');
+    const update = () => {
+      const remaining = Math.max(0, duration - (performance.now() - startedAt) / 1000);
+      output.textContent = duration > 0 ? remaining.toFixed(remaining < 10 ? 1 : 0) : '–î–ï–ô–°–¢–í–£–ï–¢';
+    };
+    update();
+    if (duration > 0) {
+      this.warningInterval = window.setInterval(update, 100);
+      this.warningTimer = window.setTimeout(() => this._hideWarning(), duration * 1000);
+    }
+  }
+
+  showToast(message, type = 'info', duration = 3200) {
+    this._ensureInit();
+    const data = typeof message === 'object' ? message : { message, type, duration };
+    const tone = ['info', 'success', 'warning', 'upgrade', 'kill'].includes(data.type) ? data.type : 'info';
+    const toast = document.createElement('article');
+    toast.className = `toast toast--${tone}`;
+    toast.setAttribute('role', tone === 'warning' ? 'alert' : 'status');
+    const icon = document.createElement('span');
+    icon.className = 'toast__icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = tone === 'success' || tone === 'kill' ? '–ß' : tone === 'warning' ? '!' : tone === 'upgrade' ? '+' : 'i';
+    const copy = document.createElement('div');
+    if (data.title) { const title = document.createElement('b'); title.textContent = data.title; copy.append(title); }
+    const text = document.createElement('span');
+    text.textContent = data.message ?? data.text ?? '';
+    copy.append(text);
+    toast.append(icon, copy);
+    this.toastRegion.append(toast);
+    requestAnimationFrame(() => toast.classList.add('is-active'));
+    while (this.toastRegion.children.length > 4) this.toastRegion.firstElementChild?.remove();
+    const timer = window.setTimeout(() => {
+      toast.classList.remove('is-active');
+      toast.classList.add('is-leaving');
+      this._trackTimer(window.setTimeout(() => toast.remove(), 260));
+    }, Math.max(1000, finite(data.duration, duration)));
+    this._trackTimer(timer);
+    return toast;
+  }
+
+  showError(error, detail = '') {
+    this._ensureInit();
+    this._hideWarning(true);
+    const payload = error && typeof error === 'object' ? error : null;
+    const title = payload ? payload.title ?? '–û—à–∏–±–∫–∞ –∫–æ–º–ø–ª–µ–∫—Å–∞' : error || '–û—à–∏–±–∫–∞ –∫–æ–º–ø–ª–µ–∫—Å–∞';
+    const message = payload ? payload.detail ?? payload.message ?? detail : detail;
+    const code = payload?.code ?? null;
+    const recoverable = payload?.recoverable === true;
+    const fallbackMessage = recoverable
+      ? '–ú–æ–¥—É–ª—å –±–µ–∑–æ–ø–∞—Å–Ω–æ—Å—Ç–∏ –æ—Å—Ç–∞–Ω–æ–≤–∏–ª —Å–∏–º—É–ª—è—Ü–∏—é. –ü–µ—Ä–µ–∑–∞–ø—É—Å—Ç–∏—Ç–µ –∏–≥—Ä—É –∏–ª–∏ –≤–µ—Ä–Ω–∏—Ç–µ—Å—å –≤ –º–µ–Ω—é.'
+      : '–ú–æ–¥—É–ª—å –±–µ–∑–æ–ø–∞—Å–Ω–æ—Å—Ç–∏ –æ—Å—Ç–∞–Ω–æ–≤–∏–ª —Å–∏–º—É–ª—è—Ü–∏—é. –ü–µ—Ä–µ–∑–∞–ø—É—Å—Ç–∏—Ç–µ –∏–≥—Ä—É.';
+    const menuAction = recoverable
+      ? '<button class="text-button" type="button" data-action="menu">–í–µ—Ä–Ω—É—Ç—å—Å—è –≤ –º–µ–Ω—é</button>'
+      : '';
+    this._hideHud();
+    this._showScreen(`<main class="error-screen" role="alertdialog" aria-modal="true" aria-labelledby="error-title"><article class="dialog-panel error-panel"><div class="error-glyph" aria-hidden="true">!</div><p class="eyebrow">–ù–ï–†–ï–ì–£–õ–Ø–†–ù–û–ï –ó–ê–í–ï–†–®–ï–ù–ò–ï${code ? ` // ${escapeHTML(code)}` : ''}</p><h1 id="error-title">${escapeHTML(title)}</h1><p>${escapeHTML(message || fallbackMessage)}</p><div class="error-actions">${this._actionButton('01', '–ü–µ—Ä–µ–∑–∞–ø—É—Å—Ç–∏—Ç—å –∏–≥—Ä—É', '–ü–æ–ª–Ω–∞—è –ø–µ—Ä–µ–∏–Ω–∏—Ü–∏–∞–ª–∏–∑–∞—Ü–∏—è', 'reload', true)}${menuAction}</div></article></main>`, 'error');
+  }
+
+  hideOverlay() {
+    this._ensureInit();
+    this.screen.hidden = true;
+    this.screen.classList.remove('is-active');
+    this.screen.innerHTML = '';
+    this.tutorial.hidden = true;
+    this.tutorial.classList.remove('is-active');
+    this._hideWarning();
+    this.root.dataset.view = this.hud.hidden ? 'idle' : 'playing';
+    this.activeView = this.hud.hidden ? 'idle' : 'playing';
+  }
+
+  setCrosshair(state = 'default') {
+    this._ensureInit();
+    const data = typeof state === 'object' ? state : { state };
+    const mode = String(data.state ?? data.mode ?? 'default');
+    this.crosshair.dataset.state = mode;
+    this.crosshair.hidden = data.visible === false || ['hidden', 'disabled'].includes(mode);
+    if (data.color) this.crosshair.style.setProperty('--crosshair-color', data.color);
+    if (Number.isFinite(Number(data.size))) this.crosshair.style.setProperty('--crosshair-size', `${clamp(data.size, 6, 42)}px`);
+    if (Number.isFinite(Number(data.spread))) this.crosshair.style.setProperty('--crosshair-spread', `${clamp(data.spread, 0, 32)}px`);
+    this.crosshair.classList.toggle('is-target', Boolean(data.target) || mode === 'enemy');
+    this.crosshair.classList.toggle('is-interact', mode === 'interact');
+  }
+
+  setHitmarker(hit = 'body') {
+    this._ensureInit();
+    const data = typeof hit === 'object' ? hit : { type: hit };
+    const type = String(data.type ?? (data.headshot ? 'headshot' : 'body'));
+    window.clearTimeout(this.hitmarkerTimer);
+    this.hitmarker.dataset.type = type;
+    this.hitmarker.classList.remove('is-active');
+    void this.hitmarker.offsetWidth;
+    this.hitmarker.classList.add('is-active');
+    this.hitmarkerTimer = window.setTimeout(() => this.hitmarker?.classList.remove('is-active'), clamp(data.duration ?? 130, 60, 500));
+  }
+
+  dispose() {
+    if (!this.initialized) return;
+    this._clearWarningTimers();
+    window.clearTimeout(this.hitmarkerTimer);
+    this._cancelBindingCapture();
+    this.timers.forEach((timer) => window.clearTimeout(timer));
+    this.timers.clear();
+    this.disposers.splice(0).forEach((dispose) => { try { dispose(); } catch { /* foreign disposer */ } });
+    this.root.removeEventListener('click', this._onRootClick);
+    this.root.removeEventListener('input', this._onRootInput);
+    this.root.removeEventListener('change', this._onRootChange);
+    this.root.removeEventListener('keydown', this._onRootKeydown);
+    document.removeEventListener('fullscreenchange', this._onFullscreenChange);
+    this.root.innerHTML = '';
+    this.root.classList.remove('ui-root', 'ui-high-contrast', 'ui-reduced-motion');
+    this.root.style.removeProperty('--ui-scale');
+    this.root.removeAttribute('data-view');
+    this.initialized = false;
+  }
+
+  _renderSettings() {
+    const tabs = { graphics: '–ì—Ä–∞—Ñ–∏–∫–∞', controls: '–£–ø—Ä–∞–≤–ª–µ–Ω–∏–µ', audio: '–ó–≤—É–∫', accessibility: '–î–æ—Å—Ç—É–ø–Ω–æ—Å—Ç—å', data: '–î–∞–Ω–Ω—ã–µ' };
+    this._showScreen(`<section class="overlay-screen overlay-screen--settings" role="dialog" aria-modal="true" aria-labelledby="settings-title"><article class="settings-panel">
+      <header class="settings-header"><div><p class="eyebrow">–ö–û–ù–§–ò–ì–£–†–ê–¶–ò–Ø –û–ü–ï–†–ê–¢–û–†–ê</p><h1 id="settings-title">–ù–∞—Å—Ç—Ä–æ–π–∫–∏</h1></div><button class="close-button" type="button" data-action="back" aria-label="–ó–∞–∫—Ä—ã—Ç—å –Ω–∞—Å—Ç—Ä–æ–π–∫–∏"><span aria-hidden="true">√ó</span><small>ESC</small></button></header>
+      <div class="settings-layout"><nav class="settings-tabs" aria-label="–†–∞–∑–¥–µ–ª—ã –Ω–∞—Å—Ç—Ä–æ–µ–∫">${Object.entries(tabs).map(([key, label], index) => `<button type="button" data-settings-tab="${key}" aria-selected="${this.settingsTab === key}"><span>0${index + 1}</span>${label}</button>`).join('')}</nav><div class="settings-content" data-settings-content>${this._settingsTabMarkup(this.settingsTab)}</div></div>
+      <footer class="settings-footer"><button class="text-button" type="button" data-action="reset-settings">–°–±—Ä–æ—Å–∏—Ç—å –Ω–∞—Å—Ç—Ä–æ–π–∫–∏</button><span>–ò–∑–º–µ–Ω–µ–Ω–∏—è —Å–æ—Ö—Ä–∞–Ω—è—é—Ç—Å—è –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–∏</span><button class="button-compact" type="button" data-action="back">–ì–æ—Ç–æ–≤–æ</button></footer>
+    </article></section>`, 'settings');
+  }
+
+  _settingsTabMarkup(tab) {
+    const value = (path) => getPath(this.settings, path, getPath(DEFAULT_SETTINGS, path));
+    if (tab === 'graphics') {
+      return `${this._settingsHeader('VIDEO // RENDER', '–ì—Ä–∞—Ñ–∏–∫–∞', '–ü—Ä–æ—Ñ–∏–ª—å –∫–∞—á–µ—Å—Ç–≤–∞ –≤–ª–∏—è–µ—Ç –Ω–∞ –Ω–∞–≥—Ä—É–∑–∫—É –≤–∏–¥–µ–æ–∫–∞—Ä—Ç—ã. –ò–∑–º–µ–Ω–µ–Ω–∏—è –ø—Ä–∏–º–µ–Ω—è—é—Ç—Å—è –±–µ–∑ –ø–µ—Ä–µ–∑–∞–ø—É—Å–∫–∞.')}
+        <div class="settings-groups"><section class="settings-group"><h3>–†–µ–Ω–¥–µ—Ä</h3>
+          ${this._selectSetting('graphics.quality', '–û–±—â–µ–µ –∫–∞—á–µ—Å—Ç–≤–æ', '–ë–∞–ª–∞–Ω—Å –¥–µ—Ç–∞–ª–∏–∑–∞—Ü–∏–∏ –∏ —Å—Ç–∞–±–∏–ª—å–Ω–æ—Å—Ç–∏ –∫–∞–¥—Ä–æ–≤.', value('graphics.quality'), [['low', '–ù–∏–∑–∫–æ–µ'], ['medium', '–°—Ä–µ–¥–Ω–µ–µ'], ['high', '–í—ã—Å–æ–∫–æ–µ']])}
+          ${this._rangeSetting('graphics.exposure', '–Ø—Ä–∫–æ—Å—Ç—å —Å—Ü–µ–Ω—ã', '–≠–∫—Å–ø–æ–∑–∏—Ü–∏—è —Ç—Ä—ë—Ö–º–µ—Ä–Ω–æ–≥–æ –º–∏—Ä–∞ –±–µ–∑ –∏–∑–º–µ–Ω–µ–Ω–∏—è HUD.', value('graphics.exposure'), 0.7, 1.6, 0.05, 'decimal')}
+          ${this._rangeSetting('graphics.resolutionScale', '–†–∞–∑—Ä–µ—à–µ–Ω–∏–µ —Ä–µ–Ω–¥–µ—Ä–∞', '–í–Ω—É—Ç—Ä–µ–Ω–Ω–µ–µ —Ä–∞–∑—Ä–µ—à–µ–Ω–∏–µ —Ç—Ä—ë—Ö–º–µ—Ä–Ω–æ–π —Å—Ü–µ–Ω—ã.', value('graphics.resolutionScale'), 0.6, 1, 0.05, 'percent')}
+          ${this._rangeSetting('graphics.maxPixelRatio', '–ü–ª–æ—Ç–Ω–æ—Å—Ç—å –ø–∏–∫—Å–µ–ª–µ–π', '–û–≥—Ä–∞–Ω–∏—á–∏–≤–∞–µ—Ç DPR –Ω–∞ –¥–∏—Å–ø–ª–µ—è—Ö –≤—ã—Å–æ–∫–æ–π –ø–ª–æ—Ç–Ω–æ—Å—Ç–∏.', value('graphics.maxPixelRatio'), 1, 2, 0.25, 'ratio')}
+          ${this._selectSetting('graphics.fpsLimit', '–û–≥—Ä–∞–Ω–∏—á–µ–Ω–∏–µ FPS', '–°—Ç–∞–±–∏–ª–∏–∑–∏—Ä—É–µ—Ç –Ω–∞–≥—Ä—É–∑–∫—É –∏ —ç–Ω–µ—Ä–≥–æ–ø–æ—Ç—Ä–µ–±–ª–µ–Ω–∏–µ.', String(value('graphics.fpsLimit')), [['0', '–ë–µ–∑ –æ–≥—Ä–∞–Ω–∏—á–µ–Ω–∏—è'], ['30', '30 FPS'], ['60', '60 FPS'], ['90', '90 FPS'], ['120', '120 FPS'], ['144', '144 FPS']])}
+        </section><section class="settings-group"><h3>–≠—Ñ—Ñ–µ–∫—Ç—ã</h3>
+          ${this._toggleSetting('graphics.shadows', '–¢–µ–Ω–∏', '–î–∏–Ω–∞–º–∏—á–µ—Å–∫–∏–µ —Ç–µ–Ω–∏ –æ–±—ä–µ–∫—Ç–æ–≤ –∏ –ø—Ä–æ—Ç–∏–≤–Ω–∏–∫–æ–≤.', value('graphics.shadows'))}
+          ${this._selectSetting('graphics.shadowQuality', '–ö–∞—á–µ—Å—Ç–≤–æ —Ç–µ–Ω–µ–π', '–†–∞–∑—Ä–µ—à–µ–Ω–∏–µ –∫–∞—Ä—Ç—ã —Ç–µ–Ω–µ–π.', value('graphics.shadowQuality'), [['low', '–ù–∏–∑–∫–æ–µ'], ['medium', '–°—Ä–µ–¥–Ω–µ–µ'], ['high', '–í—ã—Å–æ–∫–æ–µ']])}
+          ${this._toggleSetting('graphics.antialias', '–°–≥–ª–∞–∂–∏–≤–∞–Ω–∏–µ', '–õ—ë–≥–∫–æ–µ —Å–≥–ª–∞–∂–∏–≤–∞–Ω–∏–µ –∫–æ–Ω—Ç—É—Ä–æ–≤.', value('graphics.antialias'))}
+          ${this._toggleSetting('graphics.bloom', 'Bloom', '–ú—è–≥–∫–æ–µ —Å–≤–µ—á–µ–Ω–∏–µ —ç–Ω–µ—Ä–≥–µ—Ç–∏—á–µ—Å–∫–∏—Ö –æ–±—ä–µ–∫—Ç–æ–≤.', value('graphics.bloom'))}
+          ${this._selectSetting('graphics.particles', '–ß–∞—Å—Ç–∏—Ü—ã', '–ü–ª–æ—Ç–Ω–æ—Å—Ç—å –∏—Å–∫—Ä, –≤–∑—Ä—ã–≤–æ–≤ –∏ –∞–Ω–æ–º–∞–ª–∏–π.', value('graphics.particles'), [['low', '–ú–∞–ª–æ'], ['medium', '–°—Ä–µ–¥–Ω–µ'], ['high', '–ú–Ω–æ–≥–æ']])}
+        </section><section class="settings-group"><h3>–û–±–∑–æ—Ä</h3>
+          ${this._rangeSetting('gameplay.fov', '–£–≥–æ–ª –∑—Ä–µ–Ω–∏—è', '–û—Å–Ω–æ–≤–Ω–æ–µ FOV –∫–∞–º–µ—Ä—ã.', value('gameplay.fov'), 65, 105, 1, 'degrees')}
+          ${this._rangeSetting('gameplay.sprintFov', 'FOV –ø—Ä–∏ —Å–ø—Ä–∏–Ω—Ç–µ', '–†–∞—Å—à–∏—Ä–µ–Ω–∏–µ –æ–±–∑–æ—Ä–∞ –Ω–∞ –≤—ã—Å–æ–∫–æ–π —Å–∫–æ—Ä–æ—Å—Ç–∏.', value('gameplay.sprintFov'), 70, 110, 1, 'degrees')}
+          <div class="setting-row"><div><b>–ü–æ–ª–Ω–æ—ç–∫—Ä–∞–Ω–Ω—ã–π —Ä–µ–∂–∏–º</b><p>–ü–µ—Ä–µ–∫–ª—é—á–µ–Ω–∏–µ –±–µ–∑ –ø–µ—Ä–µ–∑–∞–ø—É—Å–∫–∞ —Å—Ç—Ä–∞–Ω–∏—Ü—ã.</p></div><button class="button-compact" type="button" data-action="fullscreen" data-fullscreen-label>${document.fullscreenElement ? '–í—ã–π—Ç–∏' : '–í–∫–ª—é—á–∏—Ç—å'}</button></div>
+        </section></div>`;
+    }
+    if (tab === 'controls') {
+      const bindings = [
+        ['forward', '–î–≤–∏–∂–µ–Ω–∏–µ –≤–ø–µ—Ä—ë–¥'], ['backward', '–î–≤–∏–∂–µ–Ω–∏–µ –Ω–∞–∑–∞–¥'], ['left', '–®–∞–≥ –≤–ª–µ–≤–æ'], ['right', '–®–∞–≥ –≤–ø—Ä–∞–≤–æ'],
+        ['jump', '–ü—Ä—ã–∂–æ–∫'], ['sprint', '–°–ø—Ä–∏–Ω—Ç'], ['crouch', '–ü—Ä–∏—Å–µ—Å—Ç—å'], ['dash', '–†—ã–≤–æ–∫'],
+        ['interact', '–í–∑–∞–∏–º–æ–¥–µ–π—Å—Ç–≤–∏–µ'], ['reload', '–ü–µ—Ä–µ–∑–∞—Ä—è–¥–∫–∞'],
+        ['weapon1', '–û—Ä—É–∂–∏–µ 1'], ['weapon2', '–û—Ä—É–∂–∏–µ 2'], ['weapon3', '–û—Ä—É–∂–∏–µ 3'], ['weapon4', '–û—Ä—É–∂–∏–µ 4'], ['weapon5', '–û—Ä—É–∂–∏–µ 5'],
+      ];
+      return `${this._settingsHeader('INPUT // RESPONSE', '–£–ø—Ä–∞–≤–ª–µ–Ω–∏–µ', '–î–ª—è –Ω–æ–≤–æ–π –∫–ª–∞–≤–∏—à–∏ –Ω–∞–∂–º–∏—Ç–µ ¬´–ò–∑–º–µ–Ω–∏—Ç—å¬ª, –∑–∞—Ç–µ–º –Ω—É–∂–Ω—É—é –∫–ª–∞–≤–∏—à—É. Escape –æ—Ç–º–µ–Ω—è–µ—Ç –∑–∞—Ö–≤–∞—Ç.')}
+        <div class="settings-groups"><section class="settings-group"><h3>–ú—ã—à—å</h3>
+          ${this._rangeSetting('controls.mouseSensitivity', '–ß—É–≤—Å—Ç–≤–∏—Ç–µ–ª—å–Ω–æ—Å—Ç—å', '–°–∫–æ—Ä–æ—Å—Ç—å –ø–æ–≤–æ—Ä–æ—Ç–∞ –∫–∞–º–µ—Ä—ã.', value('controls.mouseSensitivity'), 0.1, 1, 0.01, 'decimal')}
+          ${this._toggleSetting('controls.invertY', '–ò–Ω–≤–µ—Ä—Å–∏—è –æ—Å–∏ Y', '–ú–µ–Ω—è–µ—Ç –Ω–∞–ø—Ä–∞–≤–ª–µ–Ω–∏–µ –≤–µ—Ä—Ç–∏–∫–∞–ª—å–Ω–æ–≥–æ –æ–±–∑–æ—Ä–∞.', value('controls.invertY'))}
+          ${this._toggleSetting('controls.rawInput', '–ü—Ä—è–º–æ–π –≤–≤–æ–¥', '–ú–∏–Ω–∏–º–∏–∑–∏—Ä—É–µ—Ç –æ–±—Ä–∞–±–æ—Ç–∫—É —É–∫–∞–∑–∞—Ç–µ–ª—è –±—Ä–∞—É–∑–µ—Ä–æ–º.', value('controls.rawInput'))}
+          ${this._selectSetting('gameplay.aimMode', '–ü—Ä–∏—Ü–µ–ª–∏–≤–∞–Ω–∏–µ', '–£–¥–µ—Ä–∂–∏–≤–∞—Ç—å –∫–Ω–æ–ø–∫—É –∏–ª–∏ –ø–µ—Ä–µ–∫–ª—é—á–∞—Ç—å —Å–æ—Å—Ç–æ—è–Ω–∏–µ.', value('gameplay.aimMode'), [['hold', '–£–¥–µ—Ä–∂–∞–Ω–∏–µ'], ['toggle', '–ü–µ—Ä–µ–∫–ª—é—á–µ–Ω–∏–µ']])}
+          ${this._selectSetting('gameplay.crouchMode', '–ü—Ä–∏—Å–µ–¥–∞–Ω–∏–µ', '–£–¥–µ—Ä–∂–∏–≤–∞—Ç—å –∫–Ω–æ–ø–∫—É –∏–ª–∏ –ø–µ—Ä–µ–∫–ª—é—á–∞—Ç—å —Å–æ—Å—Ç–æ—è–Ω–∏–µ.', value('gameplay.crouchMode'), [['hold', '–£–¥–µ—Ä–∂–∞–Ω–∏–µ'], ['toggle', '–ü–µ—Ä–µ–∫–ª—é—á–µ–Ω–∏–µ']])}
+        </section><section class="settings-group settings-group--bindings"><h3>–ù–∞–∑–Ω–∞—á–µ–Ω–∏–µ –∫–ª–∞–≤–∏—à</h3>${bindings.map(([key, label]) => this._bindingSetting(`controls.bindings.${key}`, label, value(`controls.bindings.${key}`))).join('')}</section></div>`;
+    }
+    if (tab === 'audio') {
+      return `${this._settingsHeader('AUDIO // MIX', '–ó–≤—É–∫', '–ö–∞–Ω–∞–ª—ã —Å–º–µ—à–∏–≤–∞—é—Ç—Å—è –ø—Ä–æ—Ü–µ–¥—É—Ä–Ω–æ. –†–µ–≥—É–ª–∏—Ä—É–π—Ç–µ –±–∞–ª–∞–Ω—Å –±–æ–µ–≤–æ–π –∏–Ω—Ñ–æ—Ä–º–∞—Ü–∏–∏ –∏ –∞—Ç–º–æ—Å—Ñ–µ—Ä—ã.')}
+        <div class="settings-groups"><section class="settings-group"><h3>–û–±—â–∏–π –º–∏–∫—Å</h3>
+          ${this._toggleSetting('audio.muted', '–ó–∞–≥–ª—É—à–∏—Ç—å –≤—Å—ë', '–ú–≥–Ω–æ–≤–µ–Ω–Ω–æ –æ—Ç–∫–ª—é—á–∞–µ—Ç –≤—Å–µ –∞—É–¥–∏–æ–∫–∞–Ω–∞–ª—ã.', value('audio.muted'))}
+          ${this._rangeSetting('audio.master', '–û–±—â–∞—è –≥—Ä–æ–º–∫–æ—Å—Ç—å', '–ì–ª–∞–≤–Ω—ã–π —É—Ä–æ–≤–µ–Ω—å –≤—Å–µ—Ö –∑–≤—É–∫–æ–≤.', value('audio.master'), 0, 1, 0.01, 'percent')}
+          ${this._rangeSetting('audio.music', '–ú—É–∑—ã–∫–∞', '–ê–¥–∞–ø—Ç–∏–≤–Ω—ã–π –º—É–∑—ã–∫–∞–ª—å–Ω—ã–π —Å–ª–æ–π.', value('audio.music'), 0, 1, 0.01, 'percent')}
+          ${this._rangeSetting('audio.weapons', '–û—Ä—É–∂–∏–µ', '–í—ã—Å—Ç—Ä–µ–ª—ã, –ø–æ–ø–∞–¥–∞–Ω–∏—è –∏ –ø–µ—Ä–µ–∑–∞—Ä—è–¥–∫–∞.', value('audio.weapons'), 0, 1, 0.01, 'percent')}
+        </section><section class="settings-group"><h3>–û–∫—Ä—É–∂–µ–Ω–∏–µ</h3>
+          ${this._rangeSetting('audio.effects', '–≠—Ñ—Ñ–µ–∫—Ç—ã', '–í–∑—Ä—ã–≤—ã, –∞–Ω–æ–º–∞–ª–∏–∏ –∏ –≤–∑–∞–∏–º–æ–¥–µ–π—Å—Ç–≤–∏—è.', value('audio.effects'), 0, 1, 0.01, 'percent')}
+          ${this._rangeSetting('audio.environment', '–û–∫—Ä—É–∂–µ–Ω–∏–µ', '–í–µ–Ω—Ç–∏–ª—è—Ü–∏—è, –º–µ—Ö–∞–Ω–∏–∑–º—ã –∏ –ø—Ä–æ—Å—Ç—Ä–∞–Ω—Å—Ç–≤–µ–Ω–Ω—ã–π —Ñ–æ–Ω.', value('audio.environment'), 0, 1, 0.01, 'percent')}
+          ${this._rangeSetting('audio.ui', '–ò–Ω—Ç–µ—Ä—Ñ–µ–π—Å', '–ö–Ω–æ–ø–∫–∏, —Å–∏–≥–Ω–∞–ª—ã HUD –∏ –º–µ–Ω—é.', value('audio.ui'), 0, 1, 0.01, 'percent')}
+        </section></div>`;
+    }
+    if (tab === 'accessibility') {
+      return `${this._settingsHeader('ACCESS // CLARITY', '–î–æ—Å—Ç—É–ø–Ω–æ—Å—Ç—å', '–ù–∞—Å—Ç—Ä–æ–π—Ç–µ –¥–≤–∏–∂–µ–Ω–∏–µ –∏ –≤–∏–∑—É–∞–ª—å–Ω—ã–µ —Å–∏–≥–Ω–∞–ª—ã –ø–æ–¥ —Å–≤–æ–∏ –ø–æ—Ç—Ä–µ–±–Ω–æ—Å—Ç–∏.')}
+        <div class="settings-groups"><section class="settings-group"><h3>–î–≤–∏–∂–µ–Ω–∏–µ –∏ –∫–∞–º–µ—Ä–∞</h3>
+          ${this._toggleSetting('accessibility.reducedMotion', '–°–Ω–∏–∂–µ–Ω–∏–µ –¥–≤–∏–∂–µ–Ω–∏—è', '–û—Ç–∫–ª—é—á–∞–µ—Ç –¥–µ–∫–æ—Ä–∞—Ç–∏–≤–Ω—ã–µ –∞–Ω–∏–º–∞—Ü–∏–∏ –∏ —Å–æ–∫—Ä–∞—â–∞–µ—Ç –ø–µ—Ä–µ—Ö–æ–¥—ã.', value('accessibility.reducedMotion'))}
+          ${this._rangeSetting('accessibility.uiScale', '–†–∞–∑–º–µ—Ä –∏–Ω—Ç–µ—Ä—Ñ–µ–π—Å–∞', '–ú–∞—Å—à—Ç–∞–± –±–æ–µ–≤–æ–≥–æ HUD –∏ –∫–æ–Ω—Ç–µ–∫—Å—Ç–Ω—ã—Ö –ø–æ–¥—Å–∫–∞–∑–æ–∫.', value('accessibility.uiScale'), 0.8, 1.3, 0.05, 'ratio')}
+          ${this._rangeSetting('gameplay.headBob', '–ü–æ–∫–∞—á–∏–≤–∞–Ω–∏–µ –∫–∞–º–µ—Ä—ã', '–ê–º–ø–ª–∏—Ç—É–¥–∞ –∫–∞–º–µ—Ä—ã –ø—Ä–∏ –¥–≤–∏–∂–µ–Ω–∏–∏.', value('gameplay.headBob'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('gameplay.cameraShake', '–¢—Ä—è—Å–∫–∞ –∫–∞–º–µ—Ä—ã', '–°–∏–ª–∞ –∏–º–ø—É–ª—å—Å–æ–≤ –æ—Ç —É—Ä–æ–Ω–∞ –∏ –≤–∑—Ä—ã–≤–æ–≤.', value('gameplay.cameraShake'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('accessibility.screenFlash', '–≠–∫—Ä–∞–Ω–Ω—ã–µ –≤—Å–ø—ã—à–∫–∏', '–Ø—Ä–∫–æ—Å—Ç—å –≤—Å–ø—ã—à–µ–∫ –∏ —ç—Ñ—Ñ–µ–∫—Ç–æ–≤ –ø–æ–ø–∞–¥–∞–Ω–∏—è.', value('accessibility.screenFlash'), 0, 1, 0.05, 'percent')}
+          ${this._toggleSetting('gameplay.subtitles', '–°—É–±—Ç–∏—Ç—Ä—ã', '–ü–æ–∫–∞–∑—ã–≤–∞–µ—Ç —Ä–µ—á—å –∏ –≤–∞–∂–Ω—ã–µ –∑–≤—É–∫–∏.', value('gameplay.subtitles'))}
+        </section><section class="settings-group"><h3>–ß–∏—Ç–∞–µ–º–æ—Å—Ç—å</h3>
+          ${this._toggleSetting('accessibility.highContrast', '–ü–æ–≤—ã—à–µ–Ω–Ω—ã–π –∫–æ–Ω—Ç—Ä–∞—Å—Ç', '–£—Å–∏–ª–∏–≤–∞–µ—Ç –∏–Ω—Ç–µ—Ä—Ñ–µ–π—Å –∏ –ø—Ä–∏—Ü–µ–ª.', value('accessibility.highContrast'))}
+          ${this._selectSetting('accessibility.colorBlindMode', '–¶–≤–µ—Ç–æ–≤–æ–π —Ä–µ–∂–∏–º', '–ê–¥–∞–ø—Ç–∏—Ä—É–µ—Ç —Å–∏–≥–Ω–∞–ª—å–Ω—ã–µ —Ü–≤–µ—Ç–∞.', value('accessibility.colorBlindMode'), [['none', '–ë–µ–∑ –∫–æ—Ä—Ä–µ–∫—Ü–∏–∏'], ['protanopia', '–ü—Ä–æ—Ç–∞–Ω–æ–ø–∏—è'], ['deuteranopia', '–î–µ–π—Ç–µ—Ä–∞–Ω–æ–ø–∏—è'], ['tritanopia', '–¢—Ä–∏—Ç–∞–Ω–æ–ø–∏—è']])}
+          <label class="setting-row setting-row--color"><div><b>–¶–≤–µ—Ç –ø—Ä–∏—Ü–µ–ª–∞</b><p>–ü—Ä–∏–º–µ–Ω—è–µ—Ç—Å—è —Å—Ä–∞–∑—É –≤ –∏–≥—Ä–µ.</p></div><input type="color" value="${escapeHTML(value('gameplay.crosshairColor'))}" data-setting="gameplay.crosshairColor" aria-label="–¶–≤–µ—Ç –ø—Ä–∏—Ü–µ–ª–∞"></label>
+        </section></div>`;
+    }
+    const updated = this.profile?.updatedAt ? new Date(this.profile.updatedAt).toLocaleString('ru-RU') : '–ø—Ä–∏ —Å–ª–µ–¥—É—é—â–µ–π —Å–∏–Ω—Ö—Ä–æ–Ω–∏–∑–∞—Ü–∏–∏';
+    return `${this._settingsHeader('PROFILE // STORAGE', '–î–∞–Ω–Ω—ã–µ', '–ü—Ä–æ—Ñ–∏–ª—å —Å–æ—Ö—Ä–∞–Ω—è–µ—Ç—Å—è –ª–æ–∫–∞–ª—å–Ω–æ –≤ –±—Ä–∞—É–∑–µ—Ä–µ. –°–±—Ä–æ—Å –Ω–µ–ª—å–∑—è –æ—Ç–º–µ–Ω–∏—Ç—å.')}
+      <div class="settings-groups"><section class="settings-group data-card"><h3>–õ–æ–∫–∞–ª—å–Ω—ã–π –ø—Ä–æ—Ñ–∏–ª—å</h3><dl><div><dt>–ò–¥–µ–Ω—Ç–∏—Ñ–∏–∫–∞—Ç–æ—Ä</dt><dd>${escapeHTML(this.profile?.id ?? 'primary')}</dd></div><div><dt>–°—Ö–µ–º–∞</dt><dd>v${escapeHTML(this.profile?.version ?? '1')}</dd></div><div><dt>–ü–æ—Å–ª–µ–¥–Ω—è—è –∑–∞–ø–∏—Å—å</dt><dd>${escapeHTML(updated)}</dd></div></dl><div class="profile-signal"><i></i><span>–õ–æ–∫–∞–ª—å–Ω–æ–µ —Ö—Ä–∞–Ω–∏–ª–∏—â–µ –¥–æ—Å—Ç—É–ø–Ω–æ</span></div></section>
+      <section class="settings-group danger-zone"><h3>–°–±—Ä–æ—Å –ø—Ä–æ—Ñ–∏–ª—è</h3><p>–£–¥–∞–ª—è–µ—Ç —Å—Ç–∞—Ç–∏—Å—Ç–∏–∫—É, –¥–æ—Å—Ç–∏–∂–µ–Ω–∏—è, –ø—Ä–æ–≥—Ä–µ—Å—Å–∏—é –∏ –æ—Ç–º–µ—Ç–∫—É –æ–± –æ–±—É—á–µ–Ω–∏–∏. –ù–∞—Å—Ç—Ä–æ–π–∫–∏ –≤–µ—Ä–Ω—É—Ç—Å—è –∫ –∑–∞–≤–æ–¥—Å–∫–∏–º.</p><button class="button-danger" type="button" data-action="reset-save">–°–±—Ä–æ—Å–∏—Ç—å –ø—Ä–æ—Ñ–∏–ª—å</button></section></div>`;
+  }
+
+  _settingsHeader(kicker, title, detail) {
+    return `<header class="settings-section-header"><div><p class="eyebrow">${kicker}</p><h2>${title}</h2></div><p>${detail}</p></header>`;
+  }
+
+  _toggleSetting(path, label, detail, checked) {
+    return `<label class="setting-row"><div><b>${label}</b><p>${detail}</p></div><span class="toggle"><input type="checkbox" data-setting="${path}" ${checked ? 'checked' : ''}><i></i><em>${checked ? '–í–ö–õ' : '–í–´–ö–õ'}</em></span></label>`;
+  }
+
+  _rangeSetting(path, label, detail, value, min, max, step, format) {
+    return `<label class="setting-row setting-row--range"><div><b>${label}</b><p>${detail}</p></div><div class="range-control"><input type="range" min="${min}" max="${max}" step="${step}" value="${finite(value, min)}" data-setting="${path}" data-format="${format}"><output>${this._formatSettingValue(value, format)}</output></div></label>`;
+  }
+
+  _selectSetting(path, label, detail, value, options) {
+    return `<label class="setting-row"><div><b>${label}</b><p>${detail}</p></div><span class="select-wrap"><select data-setting="${path}">${options.map(([key, text]) => `<option value="${key}" ${value === key ? 'selected' : ''}>${text}</option>`).join('')}</select></span></label>`;
+  }
+
+  _bindingSetting(path, label, value) {
+    return `<div class="setting-row binding-row"><div><b>${label}</b></div><button type="button" class="key-binding" data-action="bind-key" data-setting-path="${path}"><kbd>${escapeHTML(humanKey(value))}</kbd><span>–ò–∑–º–µ–Ω–∏—Ç—å</span></button></div>`;
+  }
+
+  _formatSettingValue(value, format) {
+    if (format === 'percent') return `${Math.round(finite(value) * 100)}%`;
+    if (format === 'degrees') return `${Math.round(finite(value))}¬∞`;
+    if (format === 'ratio') return `${finite(value).toFixed(2)}√ó`;
+    return finite(value).toFixed(2);
+  }
+
+  _showInfoView(type) {
+    const fromPause = this.activeView === 'pause' || this.returnView === 'pause';
+    this.returnView = fromPause ? 'pause' : 'main-menu';
+    const titles = { statistics: '–°—Ç–∞—Ç–∏—Å—Ç–∏–∫–∞', achievements: '–î–æ—Å—Ç–∏–∂–µ–Ω–∏—è', controls: '–£–ø—Ä–∞–≤–ª–µ–Ω–∏–µ' };
+    const content = type === 'statistics' ? this._statisticsMarkup() : type === 'achievements' ? this._achievementsMarkup() : this._controlsMarkup();
+    this._showScreen(`<section class="overlay-screen overlay-screen--archive" role="dialog" aria-modal="true" aria-labelledby="archive-title"><article class="archive-panel"><header class="settings-header"><div><p class="eyebrow">–ê–†–•–ò–í // –û–ü–ï–†–ê–¢–û–†</p><h1 id="archive-title">${titles[type]}</h1></div><button class="close-button" type="button" data-action="back" aria-label="–ó–∞–∫—Ä—ã—Ç—å"><span aria-hidden="true">√ó</span><small>ESC</small></button></header><div class="archive-content">${content}</div><footer class="settings-footer"><span>–î–∞–Ω–Ω—ã–µ –æ–±–Ω–æ–≤–ª—è—é—Ç—Å—è –ø–æ—Å–ª–µ –∫–∞–∂–¥–æ–≥–æ –∑–∞–±–µ–≥–∞</span><button class="button-compact" type="button" data-action="back">–ù–∞–∑–∞–¥</button></footer></article></section>`, type);
+  }
+
+  _statisticsMarkup() {
+    const stats = this.profile?.stats ?? {};
+    const runs = Math.max(0, finite(stats.runs));
+    const wins = Math.max(0, finite(stats.wins));
+    const cards = [
+      ['–ó–∞–±–µ–≥–∏', formatInteger(runs), '–í—Å–µ–≥–æ –∑–∞–ø—É—â–µ–Ω–æ'], ['–£—Å–ø–µ—à–Ω—ã–µ', formatInteger(wins), `${runs ? Math.round(wins / runs * 100) : 0}% –ø–æ–±–µ–¥`],
+      ['–õ–∏–∫–≤–∏–¥–∞—Ü–∏–∏', formatInteger(stats.kills), '–ó–∞ –≤—Å–µ –ø—Ä–æ—Ç–æ–∫–æ–ª—ã'], ['–õ—É—á—à–∏–π —Å—á—ë—Ç', formatInteger(stats.bestScore), '–õ–∏—á–Ω—ã–π —Ä–µ–∫–æ—Ä–¥'],
+      ['–û–±—â–∏–π —Å—á—ë—Ç', formatInteger(stats.totalScore), '–°—É–º–º–∞ –æ—á–∫–æ–≤'], ['–í—Ä–µ–º—è –≤ –∫–æ–º–ø–ª–µ–∫—Å–µ', formatDuration(stats.playTimeSeconds), '–ê–∫—Ç–∏–≤–Ω–æ–µ –≤—Ä–µ–º—è'],
+    ];
+    return `<div class="stat-grid">${cards.map(([label, value, note]) => `<article><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`).join('')}</div><section class="archive-note"><h2>–ò–Ω—Ç–µ—Ä–ø—Ä–µ—Ç–∞—Ü–∏—è</h2><p>${runs ? `–û–ø–µ—Ä–∞—Ç–æ—Ä –∑–∞–≤–µ—Ä—à–∏–ª ${formatInteger(wins)} –∏–∑ ${formatInteger(runs)} –∑–∞—Ñ–∏–∫—Å–∏—Ä–æ–≤–∞–Ω–Ω—ã—Ö –≤—ã—Ö–æ–¥–æ–≤. –ü–æ–ª–Ω–∞—è —Å—Ç–∞—Ç–∏—Å—Ç–∏–∫–∞ —Ö—Ä–∞–Ω–∏—Ç—Å—è –ª–æ–∫–∞–ª—å–Ω–æ –≤ –ø—Ä–æ—Ñ–∏–ª–µ.` : '–ê—Ä—Ö–∏–≤ –ø–æ–∫–∞ –ø—É—Å—Ç. –ó–∞–≤–µ—Ä—à–∏—Ç–µ –ø–µ—Ä–≤—ã–π –∑–∞–±–µ–≥, —á—Ç–æ–±—ã –æ—Ç–∫—Ä—ã—Ç—å –æ–ø–µ—Ä–∞—Ç–∏–≤–Ω—É—é —Å—Ç–∞—Ç–∏—Å—Ç–∏–∫—É.'}</p></section>`;
+  }
+
+  _achievementsMarkup() {
+    const stats = this.profile?.stats ?? {};
+    const unlocked = this.profile?.progression?.achievements ?? [];
+    const unlockedIds = new Set(unlocked.map((item) => typeof item === 'string' ? item : item.id));
+    const definitions = [
+      ['first-run', '–ü–µ—Ä–≤—ã–π –≤–µ–∫—Ç–æ—Ä', '–ó–∞–≤–µ—Ä—à–∏—Ç—å –ø–µ—Ä–≤—ã–π –∑–∞–±–µ–≥.', finite(stats.runs), 1],
+      ['first-win', '–°—Ç–∞–±–∏–ª—å–Ω—ã–π –∫–æ—Ä–∏–¥–æ—Ä', '–°—Ç–∞–±–∏–ª–∏–∑–∏—Ä–æ–≤–∞—Ç—å –≤—Å–µ —Ç—Ä–∏ —Ñ–∞–∑–æ–≤—ã—Ö —É–∑–ª–∞.', finite(stats.wins), 1],
+      ['hunter', '–û—Ö–æ—Ç–Ω–∏–∫ —Ä–µ—à—ë—Ç–∫–∏', '–£–Ω–∏—á—Ç–æ–∂–∏—Ç—å 100 –ø—Ä–æ—Ç–∏–≤–Ω–∏–∫–æ–≤.', finite(stats.kills), 100],
+      ['veteran', '–í–µ—Ç–µ—Ä–∞–Ω –ø—Ä–æ—Ç–æ–∫–æ–ª–∞', '–ó–∞–≤–µ—Ä—à–∏—Ç—å 10 –∑–∞–±–µ–≥–æ–≤.', finite(stats.runs), 10],
+      ['high-score', '–†–µ–∑–æ–Ω–∞–Ω—Å', '–ù–∞–±—Ä–∞—Ç—å 50 000 –æ—á–∫–æ–≤ –∑–∞ –∑–∞–±–µ–≥.', finite(stats.bestScore), 50000],
+      ['unstoppable', '–ù–µ—É–¥–µ—Ä–∂–∏–º—ã–π', '–ü—è—Ç—å —Ä–∞–∑ —É—Å–ø–µ—à–Ω–æ —Å—Ç–∞–±–∏–ª–∏–∑–∏—Ä–æ–≤–∞—Ç—å —Ä–µ—à—ë—Ç–∫—É.', finite(stats.wins), 5],
+    ];
+    return `<div class="achievement-grid">${definitions.map(([id, name, detail, current, target], index) => {
+      const complete = unlockedIds.has(id) || current >= target;
+      return `<article class="achievement ${complete ? 'is-unlocked' : ''}"><div class="achievement__icon"><span>${String(index + 1).padStart(2, '0')}</span><i style="--progress:${clamp(current / target) * 360}deg"></i></div><div><span>${complete ? '–†–ê–ó–ë–õ–û–ö–ò–†–û–í–ê–ù–û' : `${formatInteger(current)} / ${formatInteger(target)}`}</span><h2>${name}</h2><p>${detail}</p></div></article>`;
+    }).join('')}</div>`;
+  }
+
+  _controlsMarkup() {
+    const binding = (name) => humanKey(getPath(this.settings, `controls.bindings.${name}`, getPath(DEFAULT_SETTINGS, `controls.bindings.${name}`)));
+    const groups = [
+      ['–î–≤–∏–∂–µ–Ω–∏–µ', [binding('forward'), binding('left'), binding('backward'), binding('right')], '–ü–µ—Ä–µ–º–µ—â–∞–π—Ç–µ—Å—å –∏ –Ω–µ –∑–∞–¥–µ—Ä–∂–∏–≤–∞–π—Ç–µ—Å—å –≤ –æ—Ç–∫—Ä—ã—Ç–æ–º –ø—Ä–æ—Å—Ç—Ä–∞–Ω—Å—Ç–≤–µ.'],
+      ['–û–≥–Ω–µ–≤–æ–π –∫–æ–Ω—Ç–∞–∫—Ç', ['–õ–ö–ú', '–ü–ö–ú'], '–õ–µ–≤–∞—è –∫–Ω–æ–ø–∫–∞ —Å—Ç—Ä–µ–ª—è–µ—Ç, –ø—Ä–∞–≤–∞—è –≤–∫–ª—é—á–∞–µ—Ç –ø—Ä–∏—Ü–µ–ª–∏–≤–∞–Ω–∏–µ.'],
+      ['–ú–æ–±–∏–ª—å–Ω–æ—Å—Ç—å', [binding('jump'), binding('sprint'), binding('dash')], '–ü—Ä—ã–∂–æ–∫, —Å–ø—Ä–∏–Ω—Ç –∏ —Ä—ã–≤–æ–∫ –ø–æ–∑–≤–æ–ª—è—é—Ç –º–µ–Ω—è—Ç—å –≤–µ–∫—Ç–æ—Ä –∞—Ç–∞–∫–∏.'],
+      ['–í–∑–∞–∏–º–æ–¥–µ–π—Å—Ç–≤–∏–µ', [binding('interact'), binding('reload')], '–ö–æ–Ω—Ç–µ–∫—Å—Ç–Ω–æ–µ –¥–µ–π—Å—Ç–≤–∏–µ –∏ –ø–µ—Ä–µ–∑–∞—Ä—è–¥–∫–∞ –∞–∫—Ç–∏–≤–Ω–æ–≥–æ –æ—Ä—É–∂–∏—è.'],
+      ['–°–∏—Å—Ç–µ–º–∞', ['ESC', '1', '2', '3', '4', '5'], '–ü–∞—É–∑–∞ –∏ –±—ã—Å—Ç—Ä–∞—è —Å–º–µ–Ω–∞ –æ–¥–Ω–æ–≥–æ –∏–∑ –ø—è—Ç–∏ –≤–∏–¥–æ–≤ –æ—Ä—É–∂–∏—è.'],
+    ];
+    return `<div class="controls-grid">${groups.map(([title, keys, detail]) => `<article><div class="key-row">${keys.map((key) => `<kbd>${escapeHTML(key)}</kbd>`).join('')}</div><h2>${title}</h2><p>${detail}</p></article>`).join('')}</div><section class="archive-note"><h2>–ü–µ—Ä–µ–Ω–∞–∑–Ω–∞—á–µ–Ω–∏–µ</h2><p>–õ—é–±—É—é –∏–≥—Ä–æ–≤—É—é –∫–ª–∞–≤–∏—à—É –º–æ–∂–Ω–æ –∏–∑–º–µ–Ω–∏—Ç—å –≤ —Ä–∞–∑–¥–µ–ª–µ ¬´–£–ø—Ä–∞–≤–ª–µ–Ω–∏–µ¬ª –Ω–∞—Å—Ç—Ä–æ–µ–∫. –ù–æ–≤–∞—è —Å—Ö–µ–º–∞ —Å–æ—Ö—Ä–∞–Ω–∏—Ç—Å—è –≤ –ª–æ–∫–∞–ª—å–Ω–æ–º –ø—Ä–æ—Ñ–∏–ª–µ.</p></section>`;
+  }
+
+  _upgradeCard(upgrade, index) {
+    const rarity = String(upgrade.rarity ?? 'standard').toLowerCase();
+    const rarityLabels = { common: '–°–¢–ê–ù–î–ê–†–¢', standard: '–°–¢–ê–ù–î–ê–†–¢', rare: '–†–ï–î–ö–ò–ô', epic: '–≠–ü–ò–ß–ï–°–ö–ò–ô', legendary: '–ê–ù–û–ú–ê–õ–¨–ù–´–ô' };
+    return `<button class="upgrade-card upgrade-card--${escapeHTML(rarity)}" type="button" data-action="select-upgrade" data-upgrade-id="${escapeHTML(upgrade.id ?? index)}" data-upgrade-index="${index}" ${index === 0 ? 'autofocus' : ''}><span class="upgrade-number">0${index + 1}</span><div class="upgrade-icon" aria-hidden="true"><i></i><b>${escapeHTML(upgrade.glyph ?? ['–ß', '–î', '–ö'][index] ?? '+')}</b></div><div class="upgrade-rarity"><i></i>${escapeHTML(rarityLabels[rarity] ?? rarity.toUpperCase())}</div><h2>${escapeHTML(upgrade.name ?? upgrade.title ?? `–ú–æ–¥—É–ª—å ${index + 1}`)}</h2><p>${escapeHTML(upgrade.description ?? '–°–∏–Ω—Ö—Ä–æ–Ω–∏–∑–∏—Ä—É–µ—Ç –ø–∞—Ä–∞–º–µ—Ç—Ä—ã –æ–ø–µ—Ä–∞—Ç–æ—Ä–∞ –¥–æ –∫–æ–Ω—Ü–∞ –∑–∞–±–µ–≥–∞.')}</p><span class="upgrade-select">–£–°–¢–ê–ù–û–í–ò–¢–¨ –ú–û–î–£–õ–¨ <i>‚Üí</i></span></button>`;
+  }
+
+  _actionButton(index, title, detail, action, autofocus = false, key = '', danger = false) {
+    return `<button class="action-button ${autofocus ? 'action-button--primary' : ''} ${danger ? 'action-button--danger' : ''}" type="button" data-action="${action}" ${autofocus ? 'autofocus' : ''}><span class="action-index">${index}</span><span><b>${title}</b><small>${detail}</small></span>${key ? `<i>${key}</i>` : ''}</button>`;
+  }
+
+  _renderHudUpgrades(upgrades) {
+    const container = this.root.querySelector('[data-hud="upgrades"]');
+    if (!container) return;
+    container.replaceChildren(...upgrades.slice(0, 4).map((upgrade, index) => {
+      const item = document.createElement('div');
+      item.className = 'hud-upgrade';
+      item.title = upgrade.description ?? upgrade.name ?? String(upgrade);
+      const glyph = document.createElement('b'); glyph.textContent = upgrade.glyph ?? String(index + 1).padStart(2, '0');
+      const label = document.createElement('span'); label.textContent = upgrade.name ?? upgrade.title ?? String(upgrade);
+      item.append(glyph, label);
+      return item;
+    }));
+  }
+
+  _updateInteract(interact) {
+    const panel = this.root.querySelector('[data-hud-panel="interact"]');
+    if (!panel) return;
+    if (!interact || interact.visible === false) { panel.hidden = true; return; }
+    const data = typeof interact === 'string' ? { label: interact } : interact;
+    panel.hidden = false;
+    this._setText('interact-key', humanKey(data.key ?? 'KeyE'));
+    this._setText('interact-action', data.action ?? (data.hold ? '–£–î–ï–†–ñ–ò–í–ê–ô–¢–ï' : '–í–ó–ê–ò–ú–û–î–ï–ô–°–¢–í–ò–ï'));
+    this._setText('interact-label', data.label ?? data.text ?? '–ê–∫—Ç–∏–≤–∏—Ä–æ–≤–∞—Ç—å');
+    this._setMeter('interact', data.progress ?? 0);
+    panel.classList.toggle('is-holding', Boolean(data.hold));
+  }
+
+  _showDamageDirection(direction) {
+    const values = Array.isArray(direction) ? direction : [direction];
+    values.filter(Boolean).forEach((value) => {
+      const key = typeof value === 'object' ? value.direction : value;
+      const node = this.root.querySelector(`[data-damage="${String(key).toLowerCase()}"]`);
+      if (!node) return;
+      node.classList.remove('is-active');
+      void node.offsetWidth;
+      node.classList.add('is-active');
+      this._trackTimer(window.setTimeout(() => node.classList.remove('is-active'), finite(value?.duration, 650)));
+    });
+  }
+
+  _updateKillfeed(feed) {
+    const container = this.root.querySelector('[data-hud="killfeed"]');
+    if (!container) return;
+    if (Array.isArray(feed)) {
+      container.replaceChildren();
+      feed.slice(-4).forEach((item) => this._appendKillfeed(container, item));
+      return;
+    }
+    const key = typeof feed === 'object' ? `${feed.id ?? ''}:${feed.enemy ?? feed.target ?? feed.text}:${feed.time ?? ''}` : String(feed);
+    if (key === this.lastKillfeedKey) return;
+    this.lastKillfeedKey = key;
+    this._appendKillfeed(container, feed);
+    while (container.children.length > 4) container.firstElementChild?.remove();
+  }
+
+  _appendKillfeed(container, item) {
+    const data = typeof item === 'object' ? item : { text: item };
+    const node = document.createElement('div');
+    node.className = `killfeed-item${data.headshot ? ' is-headshot' : ''}`;
+    const marker = document.createElement('i'); marker.textContent = data.headshot ? '–•' : '–ß';
+    const text = document.createElement('span'); text.textContent = data.text ?? `${data.enemy ?? data.target ?? '–ü—Ä–æ—Ç–∏–≤–Ω–∏–∫'} ‚Äî –ª–∏–∫–≤–∏–¥–∏—Ä–æ–≤–∞–Ω`;
+    const score = document.createElement('b'); score.textContent = data.score ? `+${formatInteger(data.score)}` : '';
+    node.append(marker, text, score);
+    container.append(node);
+  }
+
+  _onRootClick(event) {
+    const trigger = event.target.closest('[data-action], [data-settings-tab]');
+    if (!trigger || !this.root.contains(trigger)) return;
+    if (trigger.dataset.settingsTab) {
+      this.settingsTab = trigger.dataset.settingsTab;
+      this._renderSettings();
+      return;
+    }
+    const action = trigger.dataset.action;
+    if (action === 'start') this._emit('ui:start', { difficulty: this.difficulty, mapId: this.mapId, map: this.mapId, tutorial: false, mode: 'run' });
+    else if (action === 'tutorial') this._emit('ui:start', { difficulty: this.difficulty, mapId: this.mapId, map: this.mapId, tutorial: true, mode: 'tutorial', continue: true });
+    else if (action === 'difficulty') this._selectDifficulty(trigger.dataset.value);
+    else if (action === 'map') this._selectMap(trigger.dataset.value);
+    else if (action === 'settings') this.showSettings(this.activeView === 'pause' ? 'pause' : 'main-menu');
+    else if (['achievements', 'statistics', 'controls'].includes(action)) this._showInfoView(action);
+    else if (action === 'resume') this._emit('ui:resume');
+    else if (action === 'restart') this._emit('ui:restart');
+    else if (action === 'menu') this._emit('ui:menu');
+    else if (action === 'back') this._returnFromSubview();
+    else if (action === 'select-upgrade') {
+      const index = finite(trigger.dataset.upgradeIndex);
+      const option = this.options[index] ?? { id: trigger.dataset.upgradeId };
+      trigger.closest('.upgrade-grid')?.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+      this._emit('ui:select-upgrade', option.id ?? trigger.dataset.upgradeId, option, index);
+    } else if (action === 'skip-tutorial') {
+      this.tutorial.classList.remove('is-active');
+      this.tutorial.hidden = true;
+      this._emit('ui:skip-tutorial');
+    } else if (action === 'fullscreen') this._toggleFullscreen();
+    else if (action === 'reset-settings') this._resetSettings();
+    else if (action === 'reset-save') this._resetSave();
+    else if (action === 'bind-key') this._captureBinding(trigger, trigger.dataset.settingPath);
+    else if (action === 'reload') window.location.reload();
+  }
+
+  _onRootInput(event) {
+    const input = event.target.closest('[data-setting]');
+    if (!input || input.type !== 'range') return;
+    if (input.nextElementSibling) input.nextElementSibling.textContent = this._formatSettingValue(input.value, input.dataset.format);
+    this._applySetting(input.dataset.setting, Number(input.value));
+  }
+
+  _onRootChange(event) {
+    const input = event.target.closest('[data-setting]');
+    if (!input || input.type === 'range') return;
+    let value = input.type === 'checkbox' ? input.checked : input.value;
+    if (input.dataset.setting === 'graphics.fpsLimit') value = Number(value);
+    if (input.type === 'checkbox') {
+      const label = input.closest('.toggle')?.querySelector('em');
+      if (label) label.textContent = value ? '–í–ö–õ' : '–í–´–ö–õ';
+    }
+    this._applySetting(input.dataset.setting, value);
+  }
+
+  _onRootKeydown(event) {
+    if (event.repeat) return;
+    if (this.activeView === 'upgrade' && ['1', '2', '3'].includes(event.key)) {
+      this.screen.querySelectorAll('[data-action="select-upgrade"]')[Number(event.key) - 1]?.click();
+      return;
+    }
+    if (event.key !== 'Escape' || this.bindingCapture) return;
+    if (['settings', 'statistics', 'achievements', 'controls'].includes(this.activeView)) {
+      event.preventDefault();
+      this._returnFromSubview();
+    } else if (this.activeView === 'pause') {
+      event.preventDefault();
+      this._emit('ui:resume');
+    }
+  }
+
+  _selectDifficulty(value) {
+    if (!DIFFICULTIES[value]) return;
+    this.difficulty = value;
+    this._applySetting('gameplay.difficulty', value, false);
+    this.screen.querySelectorAll('[data-action="difficulty"]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.value === value)));
+    const detail = this.screen.querySelector('[data-difficulty-detail]');
+    if (detail) detail.textContent = DIFFICULTIES[value][1];
+    const footer = this.screen.querySelector('[data-difficulty-selection]');
+    if (footer) footer.textContent = DIFFICULTIES[value][0];
+    this._emit('ui:difficulty', value, { difficulty: value });
+  }
+
+  _selectMap(value) {
+    if (!MAPS[value]) return;
+    this.mapId = value;
+    this.screen.querySelectorAll('[data-action="map"]').forEach((button) => {
+      button.setAttribute('aria-checked', String(button.dataset.value === value));
+    });
+    const detail = this.screen.querySelector('[data-map-detail]');
+    if (detail) detail.textContent = MAPS[value].detail;
+    const footer = this.screen.querySelector('[data-map-selection]');
+    if (footer) footer.textContent = MAPS[value].label;
+  }
+
+  _captureBinding(button, path) {
+    this._cancelBindingCapture();
+    button.classList.add('is-listening');
+    const label = button.querySelector('span');
+    if (label) label.textContent = '–ù–∞–∂–º–∏—Ç–µ –∫–ª–∞–≤–∏—à—É‚Ä¶';
+    const onKey = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key !== 'Escape') this._applySetting(path, event.code || event.key);
+      this._cancelBindingCapture();
+      this._renderSettings();
+    };
+    this.bindingCapture = { button, onKey };
+    window.addEventListener('keydown', onKey, { capture: true, once: true });
+  }
+
+  _cancelBindingCapture() {
+    if (!this.bindingCapture) return;
+    window.removeEventListener('keydown', this.bindingCapture.onKey, { capture: true });
+    this.bindingCapture.button?.classList.remove('is-listening');
+    this.bindingCapture = null;
+  }
+
+  _toggleFullscreen() {
+    const request = document.fullscreenElement ? document.exitFullscreen?.() : document.documentElement.requestFullscreen?.();
+    Promise.resolve(request).then(() => this._emit('ui:fullscreen', Boolean(document.fullscreenElement))).catch((error) => {
+      this.showToast({ type: 'warning', title: '–ü–æ–ª–Ω—ã–π —ç–∫—Ä–∞–Ω', message: error?.message ?? '–ë—Ä–∞—É–∑–µ—Ä –æ—Ç–∫–ª–æ–Ω–∏–ª –∑–∞–ø—Ä–æ—Å.' });
+    });
+  }
+
+  _onFullscreenChange() {
+    this.root.querySelectorAll('[data-fullscreen-label]').forEach((node) => { node.textContent = document.fullscreenElement ? '–í—ã–π—Ç–∏' : '–í–∫–ª—é—á–∏—Ç—å'; });
+  }
+
+  async _resetSettings() {
+    if (!window.confirm('–í–µ—Ä–Ω—É—Ç—å –≤—Å–µ –Ω–∞—Å—Ç—Ä–æ–π–∫–∏ –∫ –∑–∞–≤–æ–¥—Å–∫–∏–º?')) return;
+    try {
+      await this.settingsManager?.reset?.();
+      this.settings = deepMerge(DEFAULT_SETTINGS, this.settingsManager?.getSettings?.() ?? this.settingsManager?.settings ?? {});
+      this.difficulty = getPath(this.settings, 'gameplay.difficulty', 'normal');
+      this._applyAccessibilitySettings();
+      this._emit('ui:setting', 'reset', null, { reset: true });
+      this._renderSettings();
+      this.showToast({ type: 'success', message: '–ù–∞—Å—Ç—Ä–æ–π–∫–∏ –≤–æ–∑–≤—Ä–∞—â–µ–Ω—ã –∫ –∑–∞–≤–æ–¥—Å–∫–∏–º.' });
+    } catch (error) {
+      this.showToast({ type: 'warning', message: `–ù–µ —É–¥–∞–ª–æ—Å—å —Å–±—Ä–æ—Å–∏—Ç—å –Ω–∞—Å—Ç—Ä–æ–π–∫–∏: ${error?.message ?? error}` });
+    }
+  }
+
+  _resetSave() {
+    if (!window.confirm('–£–¥–∞–ª–∏—Ç—å –≤–µ—Å—å –ø—Ä–æ–≥—Ä–µ—Å—Å –ø—Ä–æ—Ñ–∏–ª—è? –≠—Ç–æ –¥–µ–π—Å—Ç–≤–∏–µ –Ω–µ–ª—å–∑—è –æ—Ç–º–µ–Ω–∏—Ç—å.')) return;
+    this._emit('ui:reset-save', { id: this.profile?.id ?? 'primary' });
+  }
+
+  _returnFromSubview() {
+    if (this.returnView === 'pause') this.showPause();
+    else this.showMainMenu(this.profile);
+  }
+
+  _readSettings() {
+    let loaded;
+    try { loaded = this.settingsManager?.getSettings?.() ?? this.settingsManager?.get?.() ?? this.settingsManager?.settings; }
+    catch { loaded = this.settingsManager?.settings; }
+    this.settings = deepMerge(DEFAULT_SETTINGS, loaded ?? this.profile?.settings ?? {});
+    this.difficulty = getPath(this.settings, 'gameplay.difficulty', this.difficulty);
+  }
+
+  async _applySetting(path, value, emit = true) {
+    setPath(this.settings, path, value);
+    this._applyAccessibilitySettings();
+    try {
+      if (typeof this.settingsManager?.set === 'function') await this.settingsManager.set(path, value);
+      else if (typeof this.settingsManager?.setSetting === 'function') {
+        const [category, ...keys] = path.split('.');
+        await this.settingsManager.setSetting(category, keys.join('.'), value);
+      } else if (typeof this.settingsManager?.update === 'function') {
+        if (this.settingsManager.update.length >= 2) await this.settingsManager.update(path, value);
+        else { const patch = {}; setPath(patch, path, value); await this.settingsManager.update(patch); }
+      } else if (typeof this.settingsManager?.patch === 'function') {
+        const patch = {}; setPath(patch, path, value); await this.settingsManager.patch(patch);
+      }
+      if (emit) this._emit('ui:setting', path, value, { path, key: path, value });
+    } catch (error) {
+      this.showToast({ type: 'warning', message: `–ù–∞—Å—Ç—Ä–æ–π–∫–∞ –Ω–µ —Å–æ—Ö—Ä–∞–Ω–µ–Ω–∞: ${error?.message ?? error}` });
+    }
+  }
+
+  _applyAccessibilitySettings() {
+    if (!this.root) return;
+    this.root.classList.toggle('ui-reduced-motion', Boolean(getPath(this.settings, 'accessibility.reducedMotion', false)));
+    this.root.classList.toggle('ui-high-contrast', Boolean(getPath(this.settings, 'accessibility.highContrast', false)));
+    this.root.dataset.colorMode = getPath(this.settings, 'accessibility.colorBlindMode', 'none');
+    this.root.style.setProperty('--ui-scale', clamp(getPath(this.settings, 'accessibility.uiScale', 1), 0.8, 1.3));
+    this.crosshair?.style.setProperty('--crosshair-color', getPath(this.settings, 'gameplay.crosshairColor', '#64f4ff'));
+  }
+
+  _cachedProfile() {
+    return this.saveManager?.profile ?? this.saveManager?.currentProfile ?? null;
+  }
+
+  _emit(event, ...args) {
+    try { return this.eventBus?.emit?.(event, ...args) ?? 0; }
+    catch (error) {
+      console.error(`[UIManager] –û—à–∏–±–∫–∞ –æ–±—Ä–∞–±–æ—Ç—á–∏–∫–∞ ${event}.`, error);
+      this.showToast({ type: 'warning', message: '–ö–æ–º–∞–Ω–¥–∞ –Ω–µ –ø—Ä–∏–Ω—è—Ç–∞. –ü–æ–≤—Ç–æ—Ä–∏—Ç–µ –¥–µ–π—Å—Ç–≤–∏–µ.' });
+      return 0;
+    }
+  }
+
+  _showScreen(markup, view) {
+    this.screen.innerHTML = markup;
+    this.screen.hidden = false;
+    this.screen.classList.remove('is-active');
+    this.root.dataset.view = view;
+    this.activeView = view;
+    requestAnimationFrame(() => {
+      this.screen?.classList.add('is-active');
+      this.screen?.querySelector('[autofocus], button:not([disabled]), [tabindex="0"]')?.focus({ preventScroll: true });
+    });
+  }
+
+  _hideHud() {
+    if (!this.hud) return;
+    this.hud.hidden = true;
+    this.hud.classList.remove('is-active', 'is-critical');
+    if (this.crosshair) this.crosshair.hidden = true;
+  }
+
+  _setText(key, value) {
+    const node = this.root.querySelector(`[data-hud="${key}"]`);
+    if (node) node.textContent = String(value ?? '');
+  }
+
+  _setMeter(key, value) {
+    const node = this.root.querySelector(`[data-meter="${key}"]`);
+    if (!node) return;
+    const normalized = clamp(Number(value) > 1 ? Number(value) / 100 : Number(value));
+    node.style.setProperty('--value', `${normalized * 100}%`);
+    node.parentElement?.setAttribute('aria-valuenow', String(Math.round(normalized * 100)));
+  }
+
+  _clearWarningTimers() {
+    window.clearTimeout(this.warningTimer);
+    window.clearInterval(this.warningInterval);
+    window.clearTimeout(this.warningHideTimer);
+    if (this.warningHideTimer !== null) this.timers.delete(this.warningHideTimer);
+    this.warningTimer = null;
+    this.warningInterval = null;
+    this.warningHideTimer = null;
+  }
+
+  _hideWarning(immediate = false) {
+    this._clearWarningTimers();
+    if (!this.warning) return;
+    this.warning.classList.remove('is-active');
+    if (immediate) {
+      this.warning.hidden = true;
+      this.warning.classList.remove('is-leaving');
+      return;
+    }
+    this.warning.classList.add('is-leaving');
+    const hideTimer = window.setTimeout(() => {
+      this.timers.delete(hideTimer);
+      if (this.warningHideTimer === hideTimer) this.warningHideTimer = null;
+      if (!this.warning) return;
+      this.warning.hidden = true;
+      this.warning.classList.remove('is-leaving');
+    }, 260);
+    this.warningHideTimer = this._trackTimer(hideTimer);
+  }
+
+  _trackTimer(timer) {
+    this.timers.add(timer);
+    window.setTimeout(() => this.timers.delete(timer), 10000);
+    return timer;
+  }
+
+  _ensureInit() {
+    if (!this.initialized) this.init();
+  }
+}
+
+export default UIManager;
