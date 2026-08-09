@@ -61,6 +61,11 @@ export class Arena {
     this.scene?.add(this.root);
 
     this.staticBodies = [];
+    // cannon-es only honors the player's zero-friction material when both
+    // colliding bodies have materials; otherwise the sticky world default wins.
+    this.collisionMaterial = new CANNON.Material('arena-surface');
+    this.collisionMaterial.friction = 0.8;
+    this.collisionMaterial.restitution = 0;
     this.spawnPoints = [];
     this.enemySpawnPoints = [];
     this.waypoints = [];
@@ -733,6 +738,7 @@ export class Arena {
     const body = new CANNON.Body({
       mass: 0,
       type: CANNON.Body.STATIC,
+      material: this.collisionMaterial,
       shape: new CANNON.Box(new CANNON.Vec3(size.x / 2, size.y / 2, size.z / 2)),
       position: new CANNON.Vec3(position.x, position.y, position.z),
       quaternion: new CANNON.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w),
@@ -752,6 +758,7 @@ export class Arena {
     const body = new CANNON.Body({
       mass: 0,
       type: CANNON.Body.STATIC,
+      material: this.collisionMaterial,
       shape: new CANNON.Cylinder(radius, radius, height, 16),
       position: new CANNON.Vec3(position.x, position.y, position.z),
       quaternion: upright,
