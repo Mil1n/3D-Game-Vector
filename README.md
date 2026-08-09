@@ -7,7 +7,7 @@
     <img alt="Playable" src="https://img.shields.io/badge/STATUS-PLAYABLE-58ffc7?style=for-the-badge&amp;labelColor=111827">
     <img alt="3 arenas" src="https://img.shields.io/badge/ARENAS-3-67f5ff?style=for-the-badge&amp;labelColor=111827">
     <img alt="5 weapons" src="https://img.shields.io/badge/WEAPONS-5-d66cff?style=for-the-badge&amp;labelColor=111827">
-    <img alt="32 tests" src="https://img.shields.io/badge/TESTS-32%2F32-ffb638?style=for-the-badge&amp;labelColor=111827">
+    <img alt="41 tests" src="https://img.shields.io/badge/TESTS-41%2F41-ffb638?style=for-the-badge&amp;labelColor=111827">
   </p>
 
   <p>
@@ -89,7 +89,7 @@
 
 ## 🔫 Собери свой арсенал
 
-Все пять видов оружия доступны в каждом забеге. У каждого — собственный процедурный силуэт от первого лица, прицельный профиль и анимированные энергетические детали. Переключайся клавишами `1`—`5` или колесом мыши.
+Все пять видов оружия доступны в каждом забеге. У каждого — собственный процедурный силуэт от первого лица и прицельный профиль, а энергетические узлы ARX, PX-7 и HMX-1 дополнительно анимированы. Переключайся клавишами `1`—`5` или колесом мыши.
 
 | Оружие | Роль | Лучший сценарий |
 |---|---|---|
