@@ -246,8 +246,8 @@ export class RunDirector {
     this.animateObjective(dt);
     this.hudTimer -= dt;
     if (this.hudTimer <= 0) {
-      this.hudTimer = 0.08;
       this.pushHUD();
+      this.hudTimer = 0.08;
     }
     if ((this.player.health ?? 1) <= 0) this.end(false, this.player.lastDamageCause ?? 'Критическое повреждение');
   }

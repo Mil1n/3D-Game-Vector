@@ -14,80 +14,189 @@ function resolveConfig(id) {
 function createWeaponModel(config) {
   const group = new THREE.Group();
   group.name = `Viewmodel ${config.id}`;
-  const shell = new THREE.MeshStandardMaterial({ color: 0x17252b, roughness: 0.34, metalness: 0.82 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x05090c, roughness: 0.5, metalness: 0.65 });
-  const glow = new THREE.MeshBasicMaterial({ color: config.color ?? 0x5ee7ff });
+  const weaponColor = config.color ?? 0x5ee7ff;
+  const shell = new THREE.MeshStandardMaterial({
+    color: 0x263a43,
+    emissive: 0x0b1418,
+    emissiveIntensity: 0.9,
+    roughness: 0.38,
+    metalness: 0.68,
+  });
+  const shellLight = new THREE.MeshStandardMaterial({
+    color: 0x455c66,
+    emissive: 0x18272d,
+    emissiveIntensity: 0.78,
+    roughness: 0.44,
+    metalness: 0.56,
+  });
+  const dark = new THREE.MeshStandardMaterial({
+    color: 0x0c1419,
+    emissive: 0x020405,
+    emissiveIntensity: 0.65,
+    roughness: 0.52,
+    metalness: 0.58,
+  });
+  const accent = new THREE.MeshStandardMaterial({
+    color: weaponColor,
+    emissive: weaponColor,
+    emissiveIntensity: 0.42,
+    roughness: 0.28,
+    metalness: 0.58,
+  });
+  const glow = new THREE.MeshBasicMaterial({ color: weaponColor, toneMapped: false });
   const details = [];
-  const addBox = (size, position, material = shell, rotation = [0, 0, 0]) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+  const pulseParts = [];
+  const spinParts = [];
+  const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const addMesh = (geometry, position, material = shell, rotation = [0, 0, 0], scale = [1, 1, 1]) => {
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(...position);
     mesh.rotation.set(...rotation);
+    mesh.scale.set(...scale);
     group.add(mesh);
     details.push(mesh);
     return mesh;
   };
+  const addBox = (size, position, material = shell, rotation = [0, 0, 0]) => (
+    addMesh(boxGeometry, position, material, rotation, size)
+  );
+  const addCylinder = (
+    radiusTop,
+    radiusBottom,
+    length,
+    position,
+    material = shell,
+    rotation = [Math.PI / 2, 0, 0],
+    segments = 10,
+  ) => addMesh(
+    new THREE.CylinderGeometry(radiusTop, radiusBottom, length, segments, 1, false),
+    position,
+    material,
+    rotation,
+  );
+  const addSphere = (radius, position, material = glow, scale = [1, 1, 1]) => (
+    addMesh(new THREE.SphereGeometry(radius, 12, 8), position, material, [0, 0, 0], scale)
+  );
   const addTorus = (radius, tube, position, material = glow, rotation = [0, 0, 0]) => {
-    const mesh = new THREE.Mesh(new THREE.TorusGeometry(radius, tube, 7, 18), material);
-    mesh.position.set(...position);
-    mesh.rotation.set(...rotation);
-    group.add(mesh);
-    details.push(mesh);
+    return addMesh(new THREE.TorusGeometry(radius, tube, 7, 18), position, material, rotation);
+  };
+  const pulse = (mesh, { amplitude = 0.06, speed = 4, phase = 0 } = {}) => {
+    pulseParts.push({ mesh, amplitude, speed, phase, baseScale: mesh.scale.clone() });
+    return mesh;
+  };
+  const spin = (mesh, speed = 1) => {
+    spinParts.push({ mesh, speed, baseRotation: mesh.rotation.clone() });
     return mesh;
   };
 
   const modelStyle = config.model ?? config.id;
+  let defaultMuzzleZ = -1.4;
   if (modelStyle === 'scatter') {
-    addBox([0.18, 0.19, 0.92], [0.02, -0.01, -0.4]);
-    addBox([0.08, 0.08, 0.72], [-0.07, 0.08, -0.74], dark);
-    addBox([0.08, 0.08, 0.72], [0.07, 0.08, -0.74], dark);
-    addBox([0.22, 0.08, 0.29], [0, -0.13, -0.18], dark, [-0.28, 0, 0]);
-    addBox([0.24, 0.018, 0.42], [0, 0.12, -0.49], glow);
+    defaultMuzzleZ = -1.23;
+    addBox([0.27, 0.22, 0.46], [0, 0, -0.28]);
+    addBox([0.25, 0.035, 0.61], [0, 0.145, -0.62], accent);
+    addCylinder(0.048, 0.048, 0.78, [-0.073, 0.07, -0.77], dark);
+    addCylinder(0.048, 0.048, 0.78, [0.073, 0.07, -0.77], dark);
+    addCylinder(0.066, 0.066, 0.62, [0, -0.055, -0.67], shellLight);
+    addCylinder(0.068, 0.068, 0.09, [-0.073, 0.07, -1.18], accent);
+    addCylinder(0.068, 0.068, 0.09, [0.073, 0.07, -1.18], accent);
+    addBox([0.28, 0.14, 0.24], [0, -0.045, -0.7], shellLight);
+    for (let groove = 0; groove < 3; groove += 1) {
+      addBox([0.292, 0.026, 0.022], [0, 0.02, -0.62 - groove * 0.075], dark);
+    }
+    addBox([0.15, 0.3, 0.16], [0, -0.2, -0.17], dark, [-0.24, 0, 0]);
+    addBox([0.19, 0.09, 0.18], [0, -0.13, -0.4], shellLight, [0.12, 0, 0]);
+    addBox([0.035, 0.075, 0.045], [0, 0.205, -0.35], glow);
   } else if (modelStyle === 'rail') {
-    addBox([0.16, 0.2, 1.24], [0, 0, -0.56]);
-    addBox([0.28, 0.05, 0.92], [0, 0.13, -0.68], dark);
-    addBox([0.035, 0.035, 1.1], [-0.12, 0.13, -0.72], glow);
-    addBox([0.035, 0.035, 1.1], [0.12, 0.13, -0.72], glow);
-    addBox([0.17, 0.2, 0.27], [0, -0.17, -0.18], dark, [-0.2, 0, 0]);
+    defaultMuzzleZ = -1.59;
+    addBox([0.2, 0.21, 0.86], [0, -0.005, -0.48]);
+    addBox([0.055, 0.075, 1.18], [-0.14, 0.09, -0.77], shellLight);
+    addBox([0.055, 0.075, 1.18], [0.14, 0.09, -0.77], shellLight);
+    addBox([0.026, 0.032, 1.08], [-0.14, 0.15, -0.78], accent);
+    addBox([0.026, 0.032, 1.08], [0.14, 0.15, -0.78], accent);
+    addCylinder(0.032, 0.032, 0.72, [0, 0.05, -1.19], dark, [Math.PI / 2, 0, 0], 8);
+    for (let coil = 0; coil < 3; coil += 1) {
+      spin(addTorus(0.105 - coil * 0.008, 0.014, [0, 0.05, -0.81 - coil * 0.2], accent), 0.7 + coil * 0.22);
+    }
+    addCylinder(0.064, 0.064, 0.32, [0, 0.225, -0.39], dark);
+    pulse(addCylinder(0.052, 0.052, 0.018, [0, 0.225, -0.56], glow), { amplitude: 0.045, speed: 3.2 });
+    addBox([0.18, 0.065, 0.36], [0, 0.15, -0.35], shellLight);
+    addBox([0.16, 0.28, 0.18], [0, -0.2, -0.18], dark, [-0.2, 0, 0]);
+    addCylinder(0.062, 0.044, 0.13, [0, 0.05, -1.52], accent);
   } else if (modelStyle === 'plasma-smg') {
-    addBox([0.22, 0.18, 0.62], [0, 0.01, -0.34]);
-    addBox([0.12, 0.1, 0.46], [0, 0.055, -0.68], dark);
-    addBox([0.035, 0.12, 0.48], [-0.135, 0.055, -0.42], glow);
-    addBox([0.035, 0.12, 0.48], [0.135, 0.055, -0.42], glow);
-    addBox([0.15, 0.25, 0.16], [0, -0.17, -0.2], glow, [-0.2, 0, 0]);
-    addTorus(0.09, 0.018, [0, 0.055, -0.81], glow);
+    defaultMuzzleZ = -1.04;
+    addBox([0.27, 0.22, 0.48], [0, 0.005, -0.3]);
+    addBox([0.31, 0.12, 0.32], [0, 0.075, -0.46], shellLight);
+    pulse(addSphere(0.115, [0, 0.055, -0.38], accent, [0.82, 0.82, 1.18]), { amplitude: 0.08, speed: 5.2 });
+    addBox([0.035, 0.13, 0.44], [-0.155, 0.055, -0.42], accent);
+    addBox([0.035, 0.13, 0.44], [0.155, 0.055, -0.42], accent);
+    addCylinder(0.092, 0.078, 0.4, [0, 0.055, -0.73], dark);
+    spin(addTorus(0.103, 0.018, [0, 0.055, -0.58], glow), 1.35);
+    spin(addTorus(0.087, 0.015, [0, 0.055, -0.88], glow), -1.55);
+    addCylinder(0.105, 0.092, 0.12, [0, 0.055, -0.97], accent);
+    addBox([0.145, 0.27, 0.16], [0, -0.19, -0.18], dark, [-0.2, 0, 0]);
+    addBox([0.19, 0.22, 0.12], [0, -0.17, -0.43], accent, [0.12, 0, 0]);
+    addTorus(0.055, 0.011, [0, 0.205, -0.32], glow);
   } else if (modelStyle === 'nova-cannon') {
-    addBox([0.28, 0.25, 0.92], [0, -0.005, -0.45]);
-    addBox([0.2, 0.17, 0.5], [0, 0.045, -0.93], dark);
-    addBox([0.3, 0.08, 0.72], [0, 0.15, -0.55], dark);
-    addBox([0.22, 0.3, 0.24], [0, -0.2, -0.2], dark, [-0.18, 0, 0]);
-    addTorus(0.15, 0.026, [0, 0.045, -0.76], glow);
-    addTorus(0.14, 0.024, [0, 0.045, -0.93], glow);
-    addTorus(0.12, 0.021, [0, 0.045, -1.09], glow);
+    defaultMuzzleZ = -1.44;
+    addBox([0.36, 0.31, 0.58], [0, -0.005, -0.31]);
+    addBox([0.42, 0.1, 0.72], [0, 0.16, -0.58], shellLight);
+    addBox([0.08, 0.24, 0.66], [-0.2, 0.02, -0.61], dark, [0, 0, -0.14]);
+    addBox([0.08, 0.24, 0.66], [0.2, 0.02, -0.61], dark, [0, 0, 0.14]);
+    pulse(addSphere(0.16, [0, 0.05, -0.57], accent, [0.88, 0.88, 1.15]), { amplitude: 0.09, speed: 3.6 });
+    addCylinder(0.105, 0.095, 0.72, [0, 0.05, -0.95], dark, [Math.PI / 2, 0, 0], 12);
+    for (let coil = 0; coil < 3; coil += 1) {
+      spin(addTorus(0.16 - coil * 0.017, 0.025 - coil * 0.002, [0, 0.05, -0.78 - coil * 0.2], glow), 0.8 + coil * 0.35);
+    }
+    addCylinder(0.15, 0.125, 0.18, [0, 0.05, -1.34], accent, [Math.PI / 2, 0, 0], 12);
+    addCylinder(0.13, 0.13, 0.27, [0, -0.17, -0.39], dark, [0, 0, Math.PI / 2], 12);
+    addBox([0.21, 0.32, 0.21], [0, -0.23, -0.17], dark, [-0.18, 0, 0]);
+    addBox([0.25, 0.045, 0.38], [0, 0.245, -0.38], accent);
   } else {
-    addBox([0.17, 0.21, 0.82], [0, 0, -0.36]);
-    addBox([0.075, 0.075, 0.62], [0, 0.06, -0.82], dark);
-    addBox([0.18, 0.28, 0.18], [0, -0.19, -0.18], dark, [-0.18, 0, 0]);
-    addBox([0.2, 0.025, 0.5], [0, 0.125, -0.42], glow);
-    addBox([0.12, 0.1, 0.14], [0, 0.19, -0.12], dark);
+    defaultMuzzleZ = -1.4;
+    addBox([0.23, 0.2, 0.64], [0, 0, -0.36]);
+    addBox([0.18, 0.09, 0.74], [0, 0.13, -0.5], shellLight);
+    addBox([0.2, 0.16, 0.42], [0, 0.025, -0.82], dark);
+    addCylinder(0.037, 0.037, 0.43, [0, 0.055, -1.12], dark, [Math.PI / 2, 0, 0], 8);
+    addCylinder(0.066, 0.052, 0.14, [0, 0.055, -1.32], accent);
+    addBox([0.028, 0.065, 0.7], [-0.125, 0.1, -0.59], accent);
+    addBox([0.028, 0.065, 0.7], [0.125, 0.1, -0.59], accent);
+    addBox([0.15, 0.3, 0.17], [0, -0.21, -0.17], dark, [-0.22, 0, 0]);
+    addBox([0.17, 0.29, 0.13], [0, -0.2, -0.45], shellLight, [0.15, 0, 0]);
+    addBox([0.16, 0.05, 0.33], [0, 0.205, -0.33], dark);
+    pulse(addCylinder(0.048, 0.048, 0.02, [0, 0.205, -0.51], glow), { amplitude: 0.05, speed: 4.3 });
+    addBox([0.035, 0.08, 0.045], [0, 0.235, -0.16], accent);
   }
 
   const muzzle = new THREE.Object3D();
   muzzle.position.set(
     0,
     0.06,
-    config.viewModel?.muzzleZ ?? (config.id === 'rail' ? -1.22 : config.id === 'scatter' ? -0.83 : -0.91),
+    config.viewModel?.muzzleZ ?? defaultMuzzleZ,
   );
   group.add(muzzle);
   group.userData.muzzle = muzzle;
-  group.userData.materials = [shell, dark, glow];
+  group.userData.materials = [shell, shellLight, dark, accent, glow];
+  group.userData.modelStyle = modelStyle;
+  group.userData.partCount = details.length;
+  group.userData.pulseParts = pulseParts;
+  group.userData.spinParts = spinParts;
+  group.userData.animationTime = 0;
   group.userData.basePosition = new THREE.Vector3(...(config.viewModel?.basePosition ?? [0.43, -0.36, -0.72]));
   group.userData.adsPosition = new THREE.Vector3(...(config.viewModel?.adsPosition ?? [0, -0.245, -0.62]));
+  group.userData.baseYaw = config.viewModel?.baseYaw ?? 0.12;
   group.position.copy(group.userData.basePosition);
+  group.rotation.y = group.userData.baseYaw;
   group.scale.setScalar(config.viewModel?.scale ?? 0.92);
   group.traverse((child) => {
     child.frustumCulled = false;
-    child.renderOrder = 10;
-    if (child.isMesh) child.material.depthTest = false;
+    // Viewmodels ignore world depth, so paint their own far parts first to
+    // preserve a readable internal silhouette without wall clipping.
+    child.renderOrder = 100 + Math.round((child.position.z + 2) * 100);
+    if (child.isMesh) {
+      child.material.depthTest = false;
+      child.material.depthWrite = false;
+    }
   });
   return group;
 }
@@ -123,6 +232,7 @@ export class WeaponSystem {
     this.tempUp = new THREE.Vector3();
     this.tempEnd = new THREE.Vector3();
     this.tempMuzzle = new THREE.Vector3();
+    this.tempModelPosition = new THREE.Vector3();
 
     for (const id of this.weaponOrder) {
       const config = resolveConfig(id);
@@ -132,7 +242,7 @@ export class WeaponSystem {
       this.camera.add(model);
       this.models.set(id, model);
     }
-    this.currentModel.visible = true;
+    this.currentModel.visible = this.enabled;
   }
 
   defaultModifiers() {
@@ -179,6 +289,7 @@ export class WeaponSystem {
     this.recoilKick = 0;
     this.modelKick = 0;
     this.adsAmount = 0;
+    this.triggerReleased = true;
     this.index = 0;
     this.shotsFired = 0;
     this.shotsHit = 0;
@@ -186,7 +297,13 @@ export class WeaponSystem {
     for (const id of this.weaponOrder) {
       const config = resolveConfig(id);
       this.ammo.set(id, { magazine: config.magazine, reserve: config.reserve });
-      this.models.get(id).visible = false;
+      const model = this.models.get(id);
+      model.visible = false;
+      model.position.copy(model.userData.basePosition);
+      model.rotation.set(0, model.userData.baseYaw, 0);
+      model.userData.animationTime = 0;
+      for (const part of model.userData.pulseParts ?? []) part.mesh.scale.copy(part.baseScale);
+      for (const part of model.userData.spinParts ?? []) part.mesh.rotation.copy(part.baseRotation);
     }
     this.currentModel.visible = this.enabled;
     this.emitState();
@@ -238,16 +355,26 @@ export class WeaponSystem {
 
   animateModel(dt) {
     const model = this.currentModel;
-    const target = this.adsAmount > 0.01 ? model.userData.adsPosition : model.userData.basePosition;
-    const blended = model.userData.basePosition.clone().lerp(model.userData.adsPosition, this.adsAmount);
-    model.position.lerp(blended, 1 - Math.exp(-dt * 15));
     const bob = this.player?.getViewBob?.() ?? { x: 0, y: 0 };
-    model.position.x += (bob.x ?? 0) * (1 - this.adsAmount * 0.75);
-    model.position.y += (bob.y ?? 0) * (1 - this.adsAmount * 0.75) - this.modelKick * 0.025;
+    const bobScale = 1 - this.adsAmount * 0.75;
+    this.tempModelPosition
+      .copy(model.userData.basePosition)
+      .lerp(model.userData.adsPosition, this.adsAmount);
+    this.tempModelPosition.x += (bob.x ?? 0) * bobScale;
+    this.tempModelPosition.y += (bob.y ?? 0) * bobScale - this.modelKick * 0.025;
+    model.position.lerp(this.tempModelPosition, 1 - Math.exp(-dt * 15));
     model.rotation.x = -this.modelKick * 0.055;
-    model.rotation.y = this.modelKick * 0.018;
+    model.rotation.y = THREE.MathUtils.lerp(model.userData.baseYaw, 0, this.adsAmount)
+      + this.modelKick * 0.018;
+    model.userData.animationTime += dt;
+    for (const part of model.userData.pulseParts ?? []) {
+      const amount = 1 + Math.sin(model.userData.animationTime * part.speed + part.phase) * part.amplitude;
+      part.mesh.scale.copy(part.baseScale).multiplyScalar(amount);
+    }
+    for (const part of model.userData.spinParts ?? []) {
+      part.mesh.rotation.z = (part.mesh.rotation.z + dt * part.speed) % (Math.PI * 2);
+    }
     model.visible = this.enabled;
-    void target;
   }
 
   switchTo(index) {
@@ -500,13 +627,17 @@ export class WeaponSystem {
   }
 
   dispose() {
+    const geometries = new Set();
+    const materials = new Set();
     for (const model of this.models.values()) {
       this.camera.remove(model);
       model.traverse((object) => {
-        if (object.isMesh) object.geometry.dispose();
+        if (object.isMesh) geometries.add(object.geometry);
       });
-      for (const material of model.userData.materials ?? []) material.dispose();
+      for (const material of model.userData.materials ?? []) materials.add(material);
     }
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of materials) material.dispose();
     this.models.clear();
   }
 }

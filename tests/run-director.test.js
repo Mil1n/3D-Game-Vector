@@ -26,21 +26,22 @@ function createHarness({ choices = [], runConfig = GAME_CONFIG.run, random = () 
     setAnomaly() {},
     getDashState: () => ({ progress: 1 }),
   };
+  const weaponState = {
+    ammo: 30,
+    reserve: 120,
+    magazine: 30,
+    name: 'Test weapon',
+    id: 'test',
+    reload: false,
+    reloadProgress: 0,
+  };
   const weaponSystem = {
     modifiers: {},
     shotsFired: 0,
     shotsHit: 0,
     addAmmo() {},
     getAccuracy: () => 0,
-    getState: () => ({
-      ammo: 30,
-      reserve: 120,
-      magazine: 30,
-      name: 'Test weapon',
-      id: 'test',
-      reload: false,
-      reloadProgress: 0,
-    }),
+    getState: () => ({ ...weaponState }),
   };
   const enemySystem = {
     activeCount: 0,
@@ -88,8 +89,24 @@ function createHarness({ choices = [], runConfig = GAME_CONFIG.run, random = () 
     runConfig,
   });
 
-  return { director, enemySystem, events, spawned, shifts, upgradeSystem };
+  return { director, enemySystem, events, spawned, shifts, upgradeSystem, weaponState };
 }
+
+test('periodic HUD refresh publishes the currently selected weapon', (t) => {
+  const harness = createHarness();
+  const { director, events, weaponState } = harness;
+  t.after(() => director.dispose());
+  director.start();
+  events.length = 0;
+
+  Object.assign(weaponState, { id: 'plasma', name: 'PX-7 Поток', ammo: 48, reserve: 288, magazine: 48 });
+  director.update(0.081, idleInput);
+
+  const hud = events.filter((event) => event.name === 'director:hud').at(-1)?.payload;
+  assert.equal(hud?.weaponId, 'plasma');
+  assert.equal(hud?.weapon, 'PX-7 Поток');
+  assert.equal(hud?.ammo, 48);
+});
 
 test('early objectives become spawning survive interludes and respect every phase gate', (t) => {
   const harness = createHarness();
