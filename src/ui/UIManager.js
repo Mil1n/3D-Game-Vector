@@ -114,6 +114,7 @@ export class UIManager {
     this.timers = new Set();
     this.warningTimer = null;
     this.warningInterval = null;
+    this.warningHideTimer = null;
     this.hitmarkerTimer = null;
     this.bindingCapture = null;
     this._onRootClick = this._onRootClick.bind(this);
@@ -190,6 +191,7 @@ export class UIManager {
 
   showMainMenu(profile = this.profile) {
     this._ensureInit();
+    this._hideWarning(true);
     this.profile = profile ?? this.profile ?? this._cachedProfile();
     if (MAPS[this.profile?.mapId]) this.mapId = this.profile.mapId;
     this._readSettings();
@@ -237,6 +239,7 @@ export class UIManager {
 
   showHUD() {
     this._ensureInit();
+    this._hideWarning(true);
     this.screen.hidden = true;
     this.screen.innerHTML = '';
     this.screen.classList.remove('is-active');
@@ -359,6 +362,7 @@ export class UIManager {
 
   showResults(kind = 'defeat', stats = {}) {
     this._ensureInit();
+    this._hideWarning(true);
     this._hideHud();
     const victory = ['victory', 'win', 'success', true].includes(kind);
     const accuracy = finite(stats.accuracy) <= 1 ? finite(stats.accuracy) * 100 : finite(stats.accuracy);
@@ -441,11 +445,20 @@ export class UIManager {
 
   showError(error, detail = '') {
     this._ensureInit();
-    const title = typeof error === 'object' ? error.title ?? 'Ошибка комплекса' : error || 'Ошибка комплекса';
-    const message = typeof error === 'object' ? error.detail ?? error.message ?? detail : detail;
-    const code = typeof error === 'object' ? error.code : null;
+    this._hideWarning(true);
+    const payload = error && typeof error === 'object' ? error : null;
+    const title = payload ? payload.title ?? 'Ошибка комплекса' : error || 'Ошибка комплекса';
+    const message = payload ? payload.detail ?? payload.message ?? detail : detail;
+    const code = payload?.code ?? null;
+    const recoverable = payload?.recoverable === true;
+    const fallbackMessage = recoverable
+      ? 'Модуль безопасности остановил симуляцию. Перезапустите игру или вернитесь в меню.'
+      : 'Модуль безопасности остановил симуляцию. Перезапустите игру.';
+    const menuAction = recoverable
+      ? '<button class="text-button" type="button" data-action="menu">Вернуться в меню</button>'
+      : '';
     this._hideHud();
-    this._showScreen(`<main class="error-screen" role="alertdialog" aria-modal="true" aria-labelledby="error-title"><article class="dialog-panel error-panel"><div class="error-glyph" aria-hidden="true">!</div><p class="eyebrow">НЕРЕГУЛЯРНОЕ ЗАВЕРШЕНИЕ${code ? ` // ${escapeHTML(code)}` : ''}</p><h1 id="error-title">${escapeHTML(title)}</h1><p>${escapeHTML(message || 'Модуль безопасности остановил симуляцию. Перезагрузите комплекс или вернитесь в меню.')}</p><div class="error-actions">${this._actionButton('01', 'Повторить загрузку', 'Полная переинициализация', 'reload', true)}<button class="text-button" type="button" data-action="menu">Вернуться в меню</button></div></article></main>`, 'error');
+    this._showScreen(`<main class="error-screen" role="alertdialog" aria-modal="true" aria-labelledby="error-title"><article class="dialog-panel error-panel"><div class="error-glyph" aria-hidden="true">!</div><p class="eyebrow">НЕРЕГУЛЯРНОЕ ЗАВЕРШЕНИЕ${code ? ` // ${escapeHTML(code)}` : ''}</p><h1 id="error-title">${escapeHTML(title)}</h1><p>${escapeHTML(message || fallbackMessage)}</p><div class="error-actions">${this._actionButton('01', 'Перезапустить игру', 'Полная переинициализация', 'reload', true)}${menuAction}</div></article></main>`, 'error');
   }
 
   hideOverlay() {
@@ -977,20 +990,31 @@ export class UIManager {
   _clearWarningTimers() {
     window.clearTimeout(this.warningTimer);
     window.clearInterval(this.warningInterval);
+    window.clearTimeout(this.warningHideTimer);
+    if (this.warningHideTimer !== null) this.timers.delete(this.warningHideTimer);
     this.warningTimer = null;
     this.warningInterval = null;
+    this.warningHideTimer = null;
   }
 
-  _hideWarning() {
+  _hideWarning(immediate = false) {
     this._clearWarningTimers();
     if (!this.warning) return;
     this.warning.classList.remove('is-active');
+    if (immediate) {
+      this.warning.hidden = true;
+      this.warning.classList.remove('is-leaving');
+      return;
+    }
     this.warning.classList.add('is-leaving');
-    this._trackTimer(window.setTimeout(() => {
+    const hideTimer = window.setTimeout(() => {
+      this.timers.delete(hideTimer);
+      if (this.warningHideTimer === hideTimer) this.warningHideTimer = null;
       if (!this.warning) return;
       this.warning.hidden = true;
       this.warning.classList.remove('is-leaving');
-    }, 260));
+    }, 260);
+    this.warningHideTimer = this._trackTimer(hideTimer);
   }
 
   _trackTimer(timer) {

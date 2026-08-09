@@ -13,6 +13,13 @@ test('game timing and difficulty configs are complete and balanced', () => {
   positive(GAME_CONFIG.fixedTimeStep, 'fixedTimeStep');
   assert.ok(GAME_CONFIG.maxFrameDelta >= GAME_CONFIG.fixedTimeStep);
   assert.equal(GAME_CONFIG.run.phases.length, 5);
+  positive(GAME_CONFIG.run.targetDurationSeconds, 'run.targetDurationSeconds');
+  positive(GAME_CONFIG.run.maxDurationSeconds, 'run.maxDurationSeconds');
+  positive(GAME_CONFIG.run.ambientShiftGateBufferSeconds, 'run.ambientShiftGateBufferSeconds');
+  assert.ok(GAME_CONFIG.run.maxDurationSeconds >= GAME_CONFIG.run.targetDurationSeconds);
+  const phaseStarts = GAME_CONFIG.run.phases.map(({ start }) => start);
+  assert.deepEqual(phaseStarts, [...phaseStarts].sort((a, b) => a - b));
+  assert.ok(GAME_CONFIG.run.maxDurationSeconds > phaseStarts.at(-1));
   assert.deepEqual(Object.keys(DIFFICULTY_CONFIGS), ['easy', 'normal', 'hard']);
 
   for (const [id, config] of Object.entries(DIFFICULTY_CONFIGS)) {
