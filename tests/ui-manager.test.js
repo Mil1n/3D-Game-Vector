@@ -66,6 +66,44 @@ test('HUD startup synchronously clears a stale shift warning', () => {
   assert.equal(ui.crosshair.hidden, false);
 });
 
+test('input activation prompt is an accessible non-blocking persistent shell element', () => {
+  const ui = Object.create(UIManager.prototype);
+  const markup = ui._shellMarkup();
+
+  assert.match(markup, /data-ui-input-activation/);
+  assert.match(markup, /role="status"/);
+  assert.match(markup, /aria-live="polite"/);
+  assert.match(markup, /Кликните по сцене, чтобы активировать управление/);
+  assert.match(markup, /data-ui-input-activation hidden/);
+});
+
+test('input activation prompt only displays over active gameplay and can be dismissed', () => {
+  const ui = Object.create(UIManager.prototype);
+  const toggles = [];
+  ui._ensureInit = () => {};
+  ui.activeView = 'playing';
+  ui.hud = { hidden: false };
+  ui.screen = { hidden: true };
+  ui.inputActivation = {
+    hidden: true,
+    classList: { toggle: (...args) => toggles.push(args) },
+  };
+
+  ui.showInputActivation();
+  assert.equal(ui.inputActivationRequested, true);
+  assert.equal(ui.inputActivation.hidden, false);
+  assert.deepEqual(toggles.at(-1), ['is-active', true]);
+
+  ui.activeView = 'pause';
+  ui._syncInputActivation();
+  assert.equal(ui.inputActivation.hidden, true);
+  assert.deepEqual(toggles.at(-1), ['is-active', false]);
+
+  ui.hideInputActivation();
+  assert.equal(ui.inputActivationRequested, false);
+  assert.equal(ui.inputActivation.hidden, true);
+});
+
 test('immediate warning cleanup cancels timers without a delayed fade', () => {
   const ui = Object.create(UIManager.prototype);
   const removed = [];

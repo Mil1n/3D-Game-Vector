@@ -498,6 +498,12 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 @keyframes damageFlash { 0% { opacity: 0; scale: .7; } 18% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: 1.15; } }
 
 /* Context layers */
+.input-activation { position: absolute; z-index: 20; left: 50%; top: calc(50% + 42px); display: grid; justify-items: center; width: min(430px, calc(100vw - 32px)); padding: 10px 18px 11px; translate: -50% 8px; opacity: 0; border: 1px solid rgba(255,190,74,.42); border-inline: 0; background: linear-gradient(90deg, transparent, rgba(7,17,20,.9) 16% 84%, transparent); color: var(--text); text-align: center; pointer-events: none; transition: opacity .2s ease, translate .2s var(--ease-out); }
+.input-activation.is-active { translate: -50% 0; opacity: 1; }
+.input-activation > span { display: flex; align-items: center; gap: 7px; color: var(--amber); font-size: 6px; font-weight: 750; letter-spacing: .18em; }
+.input-activation > span i { width: 5px; height: 5px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 9px var(--amber); animation: signal 1.2s steps(2) infinite; }
+.input-activation strong { margin-top: 4px; font-size: 11px; letter-spacing: .035em; }
+.input-activation small { margin-top: 3px; color: var(--muted); font-size: 7px; letter-spacing: .04em; }
 .tutorial-layer { position: absolute; z-index: 16; left: 50%; bottom: max(105px, calc(var(--safe-bottom) + 72px)); width: min(580px, calc(100vw - 32px)); translate: -50% 15px; opacity: 0; transition: .25s var(--ease-out); }
 .tutorial-layer.is-active { translate: -50% 0; opacity: 1; }
 .ui-root:not([data-view="playing"]) .tutorial-layer { opacity: 0; pointer-events: none; }

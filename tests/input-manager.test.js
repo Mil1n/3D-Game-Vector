@@ -106,3 +106,42 @@ test('losing Pointer Lock preserves held keys and hands control to drag fallback
   assert.equal(lostPayload?.mode, 'drag');
   input.dispose();
 });
+
+test('mousedown on the canvas focuses it and reports element activation', () => {
+  const environment = createEnvironment();
+  const eventBus = new EventBus();
+  let activatedPayload = null;
+  eventBus.on('input:element-activated', (payload) => { activatedPayload = payload; });
+  const input = new InputManager({ ...environment, element: environment.canvas, eventBus });
+
+  environment.document.dispatch('mousedown', {
+    target: environment.canvas,
+    button: 0,
+    clientX: 18,
+    clientY: 24,
+  });
+
+  assert.equal(environment.document.activeElement, environment.canvas);
+  assert.equal(activatedPayload?.element, environment.canvas);
+  assert.equal(activatedPayload?.mode, 'drag');
+  input.dispose();
+});
+
+test('mousedown outside the canvas does not report element activation', () => {
+  const environment = createEnvironment();
+  const eventBus = new EventBus();
+  let activationCount = 0;
+  eventBus.on('input:element-activated', () => { activationCount += 1; });
+  const input = new InputManager({ ...environment, element: environment.canvas, eventBus });
+
+  environment.document.dispatch('mousedown', {
+    target: { nodeType: 1 },
+    button: 0,
+    clientX: 18,
+    clientY: 24,
+  });
+
+  assert.equal(environment.document.activeElement, null);
+  assert.equal(activationCount, 0);
+  input.dispose();
+});

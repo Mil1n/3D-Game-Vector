@@ -117,6 +117,7 @@ export class UIManager {
     this.warningHideTimer = null;
     this.hitmarkerTimer = null;
     this.bindingCapture = null;
+    this.inputActivationRequested = false;
     this._onRootClick = this._onRootClick.bind(this);
     this._onRootInput = this._onRootInput.bind(this);
     this._onRootChange = this._onRootChange.bind(this);
@@ -137,6 +138,7 @@ export class UIManager {
     this.toastRegion = this.root.querySelector('[data-ui-toasts]');
     this.crosshair = this.root.querySelector('[data-ui-crosshair]');
     this.hitmarker = this.root.querySelector('[data-ui-hitmarker]');
+    this.inputActivation = this.root.querySelector('[data-ui-input-activation]');
     this.root.addEventListener('click', this._onRootClick);
     this.root.addEventListener('input', this._onRootInput);
     this.root.addEventListener('change', this._onRootChange);
@@ -174,6 +176,7 @@ export class UIManager {
         <div class="hitmarker" data-ui-hitmarker data-type="body" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
       </section>
       <section class="tutorial-layer" data-ui-tutorial hidden></section>
+      <section class="input-activation" data-ui-input-activation hidden role="status" aria-live="polite" aria-atomic="true"><span aria-hidden="true"><i></i>КАНАЛ ВВОДА</span><strong>Кликните по сцене, чтобы активировать управление</strong><small>После активации доступны WASD и обзор мышью</small></section>
       <section class="warning-banner" data-ui-warning hidden role="alert" aria-live="assertive"><div class="warning-chevron" aria-hidden="true">///</div><div><p>ВНИМАНИЕ // НЕСТАБИЛЬНАЯ ГЕОМЕТРИЯ</p><h2 data-warning-title>СДВИГ РЕАЛЬНОСТИ</h2><span data-warning-detail>Освободите опасную зону</span><i class="warning-progress" data-warning-bar></i></div><output data-warning-countdown>5.0</output></section>
       <section class="toast-region" data-ui-toasts aria-live="polite" aria-label="Уведомления"></section>`;
   }
@@ -248,6 +251,21 @@ export class UIManager {
     this.crosshair.hidden = false;
     this.root.dataset.view = 'playing';
     this.activeView = 'playing';
+    this._syncInputActivation();
+    return this;
+  }
+
+  showInputActivation() {
+    this._ensureInit();
+    this.inputActivationRequested = true;
+    this._syncInputActivation();
+    return this;
+  }
+
+  hideInputActivation() {
+    this._ensureInit();
+    this.inputActivationRequested = false;
+    this._setInputActivationDisplayed(false);
     return this;
   }
 
@@ -956,6 +974,7 @@ export class UIManager {
   }
 
   _showScreen(markup, view) {
+    this._setInputActivationDisplayed(false);
     this.screen.innerHTML = markup;
     this.screen.hidden = false;
     this.screen.classList.remove('is-active');
@@ -969,9 +988,25 @@ export class UIManager {
 
   _hideHud() {
     if (!this.hud) return;
+    this.inputActivationRequested = false;
+    this._setInputActivationDisplayed(false);
     this.hud.hidden = true;
     this.hud.classList.remove('is-active', 'is-critical');
     if (this.crosshair) this.crosshair.hidden = true;
+  }
+
+  _syncInputActivation() {
+    const visible = this.inputActivationRequested
+      && this.activeView === 'playing'
+      && this.hud?.hidden === false
+      && this.screen?.hidden === true;
+    this._setInputActivationDisplayed(visible);
+  }
+
+  _setInputActivationDisplayed(visible) {
+    if (!this.inputActivation) return;
+    this.inputActivation.hidden = !visible;
+    this.inputActivation.classList.toggle('is-active', visible);
   }
 
   _setText(key, value) {

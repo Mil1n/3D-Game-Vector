@@ -352,6 +352,14 @@ export class InputManager {
     const input = `Mouse${event.button}`;
     if (!this.#down.has(input)) this.#pressed.add(input);
     this.#down.add(input);
+    if (onElement) {
+      this.eventBus.emit('input:element-activated', {
+        element: this.element,
+        mode: this.inputMode,
+        pointerLocked: this.isPointerLocked,
+        fallbackActive: this.isFallbackActive,
+      });
+    }
     if (this.preventDefaults && (this.isPointerLocked || onElement) && this.#isBoundInput(input)) event.preventDefault();
   }
 

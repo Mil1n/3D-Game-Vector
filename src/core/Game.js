@@ -152,7 +152,7 @@ export class Game {
     this.adaptiveQualityReduced = false;
     this.lastHud = {};
     this.profileSaveTimer = 0;
-    this.fallbackToastTimer = 0;
+    this.pointerLockWarningShown = false;
     this.unsubscribers = [];
     this._frame = (timestamp) => this.frame(timestamp);
   }
@@ -305,27 +305,22 @@ export class Game {
       if (PLAYING_STATES.has(this.state.state) && !fallbackActive) this.pause('pointer-lock');
     });
     on('input:pointer-lock-acquired', () => {
-      window.clearTimeout(this.fallbackToastTimer);
+      this.ui.hideInputActivation?.();
     });
     on('input:fallback-enabled', () => {
-      window.clearTimeout(this.fallbackToastTimer);
-      this.fallbackToastTimer = window.setTimeout(() => {
-        if (!this.input.isFallbackActive || !PLAYING_STATES.has(this.state.state)) return;
-        this.ui.showToast({
-          type: 'info',
-          title: 'Режим мыши без захвата',
-          message: 'WASD работает после клика по игре. Для обзора зажмите кнопку мыши и тяните курсор.',
-          duration: 6200,
-        });
-      }, 450);
+      if (PLAYING_STATES.has(this.state.state)) this.ui.showInputActivation?.({ fallback: true });
     });
-    on('input:pointer-lock-error', (error) => {
-      window.clearTimeout(this.fallbackToastTimer);
+    on('input:element-activated', () => {
+      this.ui.hideInputActivation?.();
+    });
+    on('input:pointer-lock-error', () => {
+      if (this.pointerLockWarningShown || !PLAYING_STATES.has(this.state.state)) return;
+      this.pointerLockWarningShown = true;
       this.ui.showToast({
         type: 'warning',
-        title: 'Включён запасной режим мыши',
-        message: `${error?.message ?? 'Pointer Lock недоступен.'} Кликните по игре: WASD будет работать, обзор — перетаскиванием мыши.`,
-        duration: 7200,
+        title: 'УПРАВЛЕНИЕ БЕЗ ЗАХВАТА МЫШИ',
+        message: 'Кликните по сцене: WASD — движение, обзор — перетаскиванием мыши.',
+        duration: 5200,
       });
     });
     on('input:blur', () => {
@@ -427,6 +422,8 @@ export class Game {
 
   async startMatch({ difficulty = this.matchDifficulty, tutorial = false, mapId = null, map = null } = {}) {
     if (this.disposed) return;
+    this.input.clear();
+    this.pointerLockWarningShown = false;
     this.audio.stopAll('weapons');
     this.audio.stopAll('effects');
     void this.audio.unlock().then((ready) => {
@@ -471,6 +468,8 @@ export class Game {
     this.tutorialMovement = 0;
     this.tutorialComplete = !this.matchTutorial;
     this.ui.showHUD();
+    this.ui.showInputActivation?.({ fallback: this.input.isFallbackActive });
+    if (this.input.isPointerLocked) this.ui.hideInputActivation?.();
     this.director.start();
     const nextState = this.matchTutorial ? GAME_STATES.TUTORIAL : GAME_STATES.PLAYING;
     this.state.transition(nextState, { difficulty: this.matchDifficulty, tutorial: this.matchTutorial });
@@ -501,6 +500,8 @@ export class Game {
     if (resumed) {
       this.audio.setVolume('master', this.settings.get('audio.master', 0.8));
       this.ui.showHUD();
+      this.ui.showInputActivation?.({ fallback: this.input.isFallbackActive });
+      if (this.input.isPointerLocked) this.ui.hideInputActivation?.();
       if (this.director?.shift?.stage === 'warning') {
         this.ui.showWarning(
           'СДВИГ РЕАЛЬНОСТИ',
@@ -532,6 +533,8 @@ export class Game {
     this.state.transition(GAME_STATES.PLAYING, { reason: 'upgrade-selected', id });
     this.audio.setVolume('master', this.settings.get('audio.master', 0.8));
     this.ui.showHUD();
+    this.ui.showInputActivation?.({ fallback: this.input.isFallbackActive });
+    if (this.input.isPointerLocked) this.ui.hideInputActivation?.();
     if (this.matchTutorial && !this.tutorialComplete) this.showTutorialStep();
     this.input.focusElement();
     return true;
@@ -850,7 +853,6 @@ export class Game {
     this.running = false;
     cancelAnimationFrame(this.raf);
     window.clearTimeout(this.profileSaveTimer);
-    window.clearTimeout(this.fallbackToastTimer);
     for (const unsubscribe of this.unsubscribers) unsubscribe?.();
     this.unsubscribers.length = 0;
     this.clearDebugVisuals();
