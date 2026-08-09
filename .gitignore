@@ -2,6 +2,7 @@ node_modules/
 .pnpm-store/
 dist/
 .vite/
+.vs/
 coverage/
 *.log
 .DS_Store
