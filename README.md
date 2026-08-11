@@ -7,7 +7,7 @@
     <img alt="Playable" src="https://img.shields.io/badge/STATUS-PLAYABLE-58ffc7?style=for-the-badge&amp;labelColor=111827">
     <img alt="3 arenas" src="https://img.shields.io/badge/ARENAS-3-67f5ff?style=for-the-badge&amp;labelColor=111827">
     <img alt="5 weapons" src="https://img.shields.io/badge/WEAPONS-5-d66cff?style=for-the-badge&amp;labelColor=111827">
-    <img alt="41 tests" src="https://img.shields.io/badge/TESTS-41%2F41-ffb638?style=for-the-badge&amp;labelColor=111827">
+    <img alt="47 tests" src="https://img.shields.io/badge/TESTS-47%2F47-ffb638?style=for-the-badge&amp;labelColor=111827">
   </p>
 
   <p>
@@ -108,6 +108,8 @@
 | 🪖 **Контурный стрелок** | держит среднюю дистанцию, меняет позицию и атакует короткими телеграфированными очередями |
 | 🗡️ **Фазовый охотник** | обходит с фланга, быстро сближается и наказывает за неподвижность |
 | 👑 **Страж Разлома** | многофазовый элитный противник со щитом, веером энергетических сфер и опасными зонами |
+
+У каждого типа свой процедурный силуэт и риг: винтовка с последовательными индикаторами очереди у Стрелка, парные клинки и фазовые плавники у Охотника, реактор, пилоны и вращающаяся корона у Стража. Телеграфы атак анимируют именно оружие и энергетические узлы, а снаряды появляются из авторских muzzle/core-якорей.
 
 При выборе точки появления приоритет отдаётся позициям вне прямой видимости игрока. Система жетонов атаки ограничивает число одновременно атакующих обычных врагов, поэтому давление остаётся высоким, но читаемым.
 
@@ -238,7 +240,7 @@ src/
 ### 👾 Противник
 
 1. Добавь data-driven конфигурацию в `src/configs/enemyConfigs.js`.
-2. Создай читаемый силуэт в `makeEnemyVisual()`.
+2. Создай читаемый силуэт и именованный анимационный риг в `src/combat/enemyVisuals.js`.
 3. Реализуй принятие решений через общие perception, navigation, attack tokens и projectile/hazard pools.
 4. Подключи тип в `RunDirector.updateSpawning()` и проверь safe spawn / LOS.
 
@@ -277,7 +279,7 @@ npm run preview
 ```
 
 > [!NOTE]
-> Текущий набор: **41/41 тест** — конфигурации, состояния, ввод, карты, движение, директор матча, error UI, пулы и оружие. Production-сборка Vite также проходит.
+> Текущий набор: **47/47 тестов** — конфигурации, состояния, ввод, карты, движение, директор матча, error UI, пулы, оружие и модели противников. Production-сборка Vite также проходит.
 
 <details>
 <summary><strong>✅ Ручной smoke-check</strong></summary>

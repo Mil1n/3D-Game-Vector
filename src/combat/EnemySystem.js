@@ -1,5 +1,11 @@
 import * as THREE from 'three';
 import { ENEMY_CONFIGS } from '../configs/enemyConfigs.js';
+import {
+  disposeEnemyVisual,
+  getEnemyAnchorPosition,
+  makeEnemyVisual,
+  updateEnemyVisual,
+} from './enemyVisuals.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const FORWARD = new THREE.Vector3(0, 0, 1);
@@ -15,86 +21,6 @@ function configFor(type) {
     : ENEMY_CONFIGS[type];
   if (!config) throw new Error(`[EnemySystem] Missing enemy config: ${type}`);
   return config;
-}
-
-function makeEnemyVisual(type, config) {
-  const root = new THREE.Group();
-  root.name = `${config.name ?? type}`;
-  const accentColor = config.color ?? ENEMY_COLORS[type] ?? 0xff684d;
-  const armor = new THREE.MeshStandardMaterial({
-    color: type === 'warden' ? 0x4b3862 : 0x34434b,
-    emissive: accentColor,
-    emissiveIntensity: type === 'hunter' ? 0.5 : 0.34,
-    roughness: 0.48,
-    metalness: 0.62,
-  });
-  const glow = new THREE.MeshStandardMaterial({
-    color: accentColor,
-    emissive: accentColor,
-    emissiveIntensity: 1.65,
-    roughness: 0.22,
-    metalness: 0.25,
-  });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x182228, roughness: 0.72, metalness: 0.32 });
-  const scale = type === 'warden' ? 1.35 : type === 'hunter' ? 0.88 : 1;
-  const body = new THREE.Mesh(
-    type === 'hunter' ? new THREE.ConeGeometry(0.52, 1.3, 7) : new THREE.BoxGeometry(0.82, 1.2, 0.48),
-    armor,
-  );
-  body.position.y = 1.08 * scale;
-  body.scale.setScalar(scale);
-  body.userData.hitZone = 'body';
-  root.add(body);
-
-  const head = new THREE.Mesh(
-    type === 'warden' ? new THREE.OctahedronGeometry(0.34) : new THREE.BoxGeometry(0.45, 0.38, 0.42),
-    glow,
-  );
-  head.position.y = 1.92 * scale;
-  head.scale.setScalar(scale);
-  head.userData.hitZone = 'head';
-  root.add(head);
-
-  const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.82, 0.26), dark);
-  leftLeg.position.set(-0.24 * scale, 0.42 * scale, 0);
-  leftLeg.scale.setScalar(scale);
-  leftLeg.userData.hitZone = 'limb';
-  root.add(leftLeg);
-  const rightLeg = leftLeg.clone();
-  rightLeg.position.x *= -1;
-  rightLeg.userData.hitZone = 'limb';
-  root.add(rightLeg);
-
-  if (type !== 'hunter') {
-    const weapon = new THREE.Mesh(new THREE.BoxGeometry(type === 'warden' ? 1.15 : 0.78, 0.16, 0.18), dark);
-    weapon.position.set(0.35 * scale, 1.15 * scale, 0.36 * scale);
-    weapon.rotation.y = -0.15;
-    weapon.scale.setScalar(scale);
-    weapon.userData.hitZone = 'limb';
-    root.add(weapon);
-  } else {
-    for (const side of [-1, 1]) {
-      const blade = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.78, 5), glow);
-      blade.position.set(side * 0.55, 1.05, 0.23);
-      blade.rotation.z = side * -0.7;
-      blade.userData.hitZone = 'limb';
-      root.add(blade);
-    }
-  }
-
-  let shield = null;
-  if (type === 'warden') {
-    shield = new THREE.Mesh(
-      new THREE.SphereGeometry(1.25, 18, 12),
-      new THREE.MeshBasicMaterial({ color: 0xae63ff, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }),
-    );
-    shield.position.y = 1.2;
-    root.add(shield);
-  }
-
-  root.userData.materials = [armor, glow, dark, shield?.material].filter(Boolean);
-  root.userData.shield = shield;
-  return { root, hitMeshes: [body, head, leftLeg, rightLeg, ...root.children.filter((child) => child.userData.hitZone && ![body, head, leftLeg, rightLeg].includes(child))] };
 }
 
 function createProjectilePool(scene, size = 46) {
@@ -205,6 +131,7 @@ export class EnemySystem {
     this.attackTokenAccumulator = 0;
     this.maxAttackers = difficulty === 'easy' ? 2 : difficulty === 'hard' ? 4 : 3;
     this.aiFrozen = false;
+    this.disposed = false;
     this.raycaster = new THREE.Raycaster();
     this.projectiles = createProjectilePool(scene);
     this.hazards = createHazardPool(scene);
@@ -244,8 +171,8 @@ export class EnemySystem {
       hitMeshes: visual.hitMeshes,
       health: maxHealth,
       maxHealth,
-      shield: type === 'warden' ? (config.shield ?? 140) : 0,
-      maxShield: type === 'warden' ? (config.shield ?? 140) : 0,
+      shield: config.shield ?? 0,
+      maxShield: config.shield ?? 0,
       state: options.state ?? 'patrol',
       stateTime: 0,
       thinkIn: this.random() * 0.12,
@@ -264,6 +191,8 @@ export class EnemySystem {
       flankSign: this.random() < 0.5 ? -1 : 1,
       hasAttackToken: false,
       elitePhase: 1,
+      visualTime: 0,
+      visualRecovery: null,
       dead: false,
       deathTime: 0,
       bobOffset: this.random() * Math.PI * 2,
@@ -313,9 +242,7 @@ export class EnemySystem {
       }
       this.moveEnemy(enemy, dt);
       this.updateAttack(enemy, dt);
-      enemy.root.children.forEach((child, index) => {
-        if (child.userData.hitZone === 'limb') child.rotation.x = Math.sin(enemy.stateTime * 7 + index) * 0.14 * Math.min(1, enemy.velocity.length());
-      });
+      updateEnemyVisual(enemy, dt);
     }
   }
 
@@ -417,7 +344,7 @@ export class EnemySystem {
     if (nextPhase !== enemy.elitePhase) {
       enemy.elitePhase = nextPhase;
       enemy.shield = Math.min(enemy.maxShield * 0.55, enemy.shield + enemy.maxShield * 0.38);
-      if (enemy.root.userData.shield) enemy.root.userData.shield.visible = true;
+      this.updateShieldVisual(enemy);
       this.effects.spawnShiftPulse(enemy.root.position, 9);
       this.eventBus?.emit?.('enemy:elite-phase', { phase: nextPhase, health: enemy.health, maxHealth: enemy.maxHealth });
     }
@@ -470,8 +397,6 @@ export class EnemySystem {
     enemy.root.position.z = THREE.MathUtils.clamp(enemy.root.position.z, -34, 34);
     enemy.forward.lerp(enemy.velocity.clone().setY(0).normalize(), 1 - Math.exp(-dt * 10)).normalize();
     enemy.root.rotation.y = Math.atan2(enemy.forward.x, enemy.forward.z);
-    enemy.root.position.y = Math.sin(enemy.stateTime * 4 + enemy.bobOffset) * (enemy.type === 'hunter' ? 0.035 : 0.012);
-
     const moved = enemy.root.position.distanceToSquared(enemy.lastPosition);
     enemy.stuckTime = moved < 0.0004 ? enemy.stuckTime + dt : 0;
     if (enemy.stuckTime > 1) {
@@ -483,10 +408,8 @@ export class EnemySystem {
   }
 
   beginAttack(enemy, kind, telegraph) {
-    enemy.pendingAttack = { kind, remaining: telegraph, lockMovement: kind === 'hazard' || kind === 'melee' };
+    enemy.pendingAttack = { kind, remaining: telegraph, duration: telegraph, lockMovement: kind === 'hazard' || kind === 'melee' };
     enemy.telegraph = telegraph;
-    const head = enemy.hitMeshes.find((mesh) => mesh.userData.hitZone === 'head');
-    if (head?.material?.emissive) head.material.emissiveIntensity = 4;
     this.audio?.playEffect?.('enemyTelegraph', { position: enemy.root.position, pitch: kind === 'hazard' ? 0.58 : 1.05 });
     this.eventBus?.emit?.('enemy:telegraph', { id: enemy.id, type: enemy.type, attack: kind, duration: telegraph });
   }
@@ -498,8 +421,8 @@ export class EnemySystem {
     if (enemy.pendingAttack.remaining > 0) return;
     const kind = enemy.pendingAttack.kind;
     enemy.pendingAttack = null;
-    const head = enemy.hitMeshes.find((mesh) => mesh.userData.hitZone === 'head');
-    if (head?.material?.emissive) head.material.emissiveIntensity = 1.65;
+    const recoveryDuration = kind === 'melee' ? 0.26 : kind === 'hazard' ? 0.38 : 0.18;
+    enemy.visualRecovery = { kind, duration: recoveryDuration, remaining: recoveryDuration };
     if (kind === 'melee') this.executeMelee(enemy);
     else if (kind === 'burst') this.executeBurst(enemy);
     else if (kind === 'orbVolley') this.executeOrbVolley(enemy);
@@ -516,7 +439,7 @@ export class EnemySystem {
   }
 
   executeBurst(enemy) {
-    const origin = enemy.root.position.clone().add(new THREE.Vector3(0, 1.35, 0));
+    const origin = getEnemyAnchorPosition(enemy, 'muzzle', 1.35);
     const target = this.player.position.clone().add(new THREE.Vector3(0, 1, 0));
     const accuracy = (enemy.config.accuracy ?? 0.78) * (this.difficulty === 'easy' ? 0.72 : this.difficulty === 'hard' ? 1.08 : 1);
     for (let shot = 0; shot < 3; shot += 1) {
@@ -530,7 +453,7 @@ export class EnemySystem {
   }
 
   executeOrbVolley(enemy) {
-    const origin = enemy.root.position.clone().add(new THREE.Vector3(0, 1.65, 0));
+    const origin = getEnemyAnchorPosition(enemy, 'orbAnchor', 1.65);
     const base = this.player.position.clone().add(new THREE.Vector3(0, 0.9, 0)).sub(origin).normalize();
     const count = enemy.elitePhase >= 3 ? 7 : 5;
     for (let index = 0; index < count; index += 1) {
@@ -722,6 +645,17 @@ export class EnemySystem {
     return null;
   }
 
+  updateShieldVisual(enemy) {
+    const shield = enemy.root.userData.shield;
+    if (!shield) return;
+    const shieldMaterial = shield.material;
+    const minOpacity = shieldMaterial.userData.minOpacity ?? 0.08;
+    const maxOpacity = shieldMaterial.userData.maxOpacity ?? 0.37;
+    const ratio = enemy.maxShield > 0 ? THREE.MathUtils.clamp(enemy.shield / enemy.maxShield, 0, 1) : 0;
+    shieldMaterial.opacity = minOpacity + ratio * (maxOpacity - minOpacity);
+    shield.visible = enemy.shield > 0;
+  }
+
   damage(enemyOrId, amount, context = {}) {
     const enemy = typeof enemyOrId === 'string' ? this.byId.get(enemyOrId) : enemyOrId;
     if (!enemy || enemy.dead || !Number.isFinite(amount) || amount <= 0) return { applied: 0, killed: false };
@@ -730,10 +664,7 @@ export class EnemySystem {
       const absorbed = Math.min(enemy.shield, remaining);
       enemy.shield -= absorbed;
       remaining -= absorbed;
-      if (enemy.root.userData.shield) {
-        enemy.root.userData.shield.material.opacity = 0.15 + (enemy.shield / enemy.maxShield) * 0.22;
-        enemy.root.userData.shield.visible = enemy.shield > 0;
-      }
+      this.updateShieldVisual(enemy);
       this.effects.spawnImpact(context.point ?? enemy.root.position, context.direction?.clone?.().negate?.() ?? UP, 0xb56cff, 7);
     }
     if (remaining > 0) enemy.health -= remaining;
@@ -817,8 +748,7 @@ export class EnemySystem {
   reset() {
     for (const enemy of this.enemies) {
       this.group.remove(enemy.root);
-      enemy.root.traverse((object) => object.geometry?.dispose?.());
-      for (const material of enemy.root.userData.materials ?? []) material.dispose?.();
+      disposeEnemyVisual(enemy.root);
     }
     this.enemies.length = 0;
     this.hitMeshes.length = 0;
@@ -836,6 +766,8 @@ export class EnemySystem {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
     this.reset();
     this.scene.remove(this.group);
     for (const unsubscribe of this.unsubscribers) unsubscribe?.();
