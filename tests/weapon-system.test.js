@@ -38,11 +38,34 @@ test('WeaponSystem creates and switches across the five configured weapons', () 
     const meshes = [];
     model.traverse((object) => { if (object.isMesh) meshes.push(object); });
     assert.equal(model.userData.partCount, meshes.length);
-    assert.ok(meshes.length >= 10, `${id} needs a readable procedural silhouette`);
-    assert.ok(meshes.length <= 16, `${id} viewmodel should stay within the draw-call budget`);
+    assert.equal(
+      model.userData.weaponPartCount + model.userData.armPartCount,
+      meshes.length,
+      `${id} must account for weapon and operator meshes separately`,
+    );
+    assert.ok(model.userData.weaponPartCount >= 16, `${id} needs a premium procedural silhouette`);
+    assert.equal(model.userData.armPartCount, 10, `${id} needs two complete procedural arms`);
+    assert.ok(meshes.length <= 30, `${id} viewmodel should stay within the draw-call budget`);
     assert.ok(model.userData.muzzle?.isObject3D, `${id} needs a muzzle anchor`);
     assert.ok(model.userData.basePosition?.isVector3);
     assert.ok(model.userData.adsPosition?.isVector3);
+
+    const armParts = model.userData.armParts;
+    assert.equal(armParts.length, 10);
+    for (const side of ['left', 'right']) {
+      const sideParts = armParts.filter((part) => part.userData.armSide === side);
+      assert.equal(sideParts.length, 5, `${id} needs a sleeve, cuff and complete ${side} glove`);
+      assert.ok(sideParts.some((part) => part.userData.viewModelRole === 'sleeve'));
+      assert.ok(sideParts.some((part) => part.userData.viewModelRole === 'cuff'));
+      assert.equal(sideParts.filter((part) => part.userData.viewModelRole === 'hand').length, 2);
+      assert.ok(model.userData.hands[side]?.isMesh);
+      assert.ok(
+        model.userData.hands[side].position.equals(model.userData.gripAnchors[side]),
+        `${id} ${side} hand must stay centered on its configured grip`,
+      );
+    }
+    assert.ok(model.userData.materials.some((material) => material.name === 'operator-sleeve'));
+    assert.ok(model.userData.materials.some((material) => material.name === 'operator-glove'));
 
     assert.equal(model.userData.muzzle.parent, model);
     assert.ok(model.userData.muzzle.position.toArray().every(Number.isFinite));
@@ -157,6 +180,44 @@ test('viewmodel bob settles to the same pose at different frame rates', () => {
   assert.ok(at60.position.distanceTo(at144.position) < 0.001);
 });
 
+test('equip and reload poses move the complete arm rig without leaving floating parts', () => {
+  const player = { getViewBob: () => ({ x: 0, y: 0 }), setAiming() {} };
+  const weapons = createWeapons(player);
+  const idleInput = { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 };
+  weapons.setEnabled(true);
+
+  const model = weapons.currentModel;
+  assert.equal(model.userData.equipAmount, 1);
+  weapons.update(1 / 60, idleInput);
+  assert.ok(model.position.y < model.userData.basePosition.y, 'equip should raise the weapon from below frame');
+  for (let frame = 0; frame < 120; frame += 1) weapons.update(1 / 60, idleInput);
+  assert.ok(model.userData.equipAmount < 0.001);
+  assert.ok(Math.abs(model.rotation.z) < 0.001);
+
+  weapons.currentAmmo.magazine = 0;
+  assert.equal(weapons.startReload(), true);
+  const magazinePart = model.userData.motionParts.find((part) => part.mesh.name.includes('magazine'));
+  assert.ok(magazinePart, 'carbine needs a removable reload magazine');
+  const leftHand = model.userData.hands.left;
+  weapons.update(weapons.currentConfig.reloadTime / 2, idleInput);
+  assert.ok(leftHand.position.distanceTo(model.userData.gripAnchors.left) > 0.1);
+  assert.ok(magazinePart.mesh.position.distanceTo(magazinePart.basePosition) > 0.2);
+  assert.ok(model.rotation.z > 0.15, 'reload should visibly roll the full weapon and arms');
+
+  weapons.update(weapons.currentConfig.reloadTime / 2 + 0.01, idleInput);
+  assert.equal(weapons.reloadRemaining, 0);
+  for (const part of model.userData.motionParts) {
+    assert.ok(part.mesh.position.equals(part.basePosition));
+    assert.ok(part.mesh.quaternion.equals(part.baseQuaternion));
+  }
+  assert.ok(leftHand.position.equals(model.userData.gripAnchors.left));
+
+  weapons.switchTo(1);
+  assert.equal(weapons.currentModel.userData.equipAmount, 1);
+  assert.equal([...weapons.models.values()].filter((entry) => entry.visible).length, 1);
+  weapons.dispose();
+});
+
 test('reset restores procedural viewmodel poses for a fresh run', () => {
   const player = { getViewBob: () => ({ x: 0, y: 0 }), setAiming() {} };
   const weapons = createWeapons(player);
@@ -178,6 +239,11 @@ test('reset restores procedural viewmodel poses for a fresh run', () => {
     assert.equal(model.rotation.y, model.userData.baseYaw);
     assert.equal(model.rotation.z, 0);
     assert.equal(model.userData.animationTime, 0);
+    assert.equal(model.userData.equipAmount, 0);
+    for (const part of model.userData.motionParts) {
+      assert.ok(part.mesh.position.equals(part.basePosition));
+      assert.ok(part.mesh.quaternion.equals(part.baseQuaternion));
+    }
     for (const part of model.userData.pulseParts) assert.ok(part.mesh.scale.equals(part.baseScale));
     for (const part of model.userData.spinParts) assert.ok(part.mesh.rotation.equals(part.baseRotation));
   }

@@ -44,21 +44,65 @@ function createWeaponModel(config) {
     metalness: 0.58,
   });
   const glow = new THREE.MeshBasicMaterial({ color: weaponColor, toneMapped: false });
+  const sleeve = new THREE.MeshStandardMaterial({
+    color: 0x173047,
+    emissive: 0x07131f,
+    emissiveIntensity: 0.72,
+    roughness: 0.72,
+    metalness: 0.22,
+  });
+  const glove = new THREE.MeshStandardMaterial({
+    color: 0x111820,
+    emissive: 0x030608,
+    emissiveIntensity: 0.62,
+    roughness: 0.82,
+    metalness: 0.18,
+  });
+  const armor = new THREE.MeshStandardMaterial({
+    color: 0x587384,
+    emissive: 0x14242d,
+    emissiveIntensity: 0.65,
+    roughness: 0.46,
+    metalness: 0.54,
+  });
+  shell.name = 'weapon-shell';
+  shellLight.name = 'weapon-shell-light';
+  dark.name = 'weapon-dark';
+  accent.name = 'weapon-accent';
+  glow.name = 'weapon-glow';
+  sleeve.name = 'operator-sleeve';
+  glove.name = 'operator-glove';
+  armor.name = 'operator-armor';
   const details = [];
+  const armParts = [];
   const pulseParts = [];
   const spinParts = [];
+  const motionParts = [];
   const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const addMesh = (geometry, position, material = shell, rotation = [0, 0, 0], scale = [1, 1, 1]) => {
+  const addMesh = (
+    geometry,
+    position,
+    material = shell,
+    rotation = [0, 0, 0],
+    scale = [1, 1, 1],
+    metadata = {},
+  ) => {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(...position);
     mesh.rotation.set(...rotation);
     mesh.scale.set(...scale);
+    mesh.name = metadata.name ?? `${config.id} weapon part`;
+    mesh.userData.viewModelRole = metadata.role ?? 'weapon';
+    if (metadata.armSide) {
+      mesh.userData.armSide = metadata.armSide;
+      armParts.push(mesh);
+    }
     group.add(mesh);
     details.push(mesh);
     return mesh;
   };
-  const addBox = (size, position, material = shell, rotation = [0, 0, 0]) => (
-    addMesh(boxGeometry, position, material, rotation, size)
+  const addBox = (size, position, material = shell, rotation = [0, 0, 0], metadata = {}) => (
+    addMesh(boxGeometry, position, material, rotation, size, metadata)
   );
   const addCylinder = (
     radiusTop,
@@ -68,11 +112,14 @@ function createWeaponModel(config) {
     material = shell,
     rotation = [Math.PI / 2, 0, 0],
     segments = 10,
+    metadata = {},
   ) => addMesh(
     new THREE.CylinderGeometry(radiusTop, radiusBottom, length, segments, 1, false),
     position,
     material,
     rotation,
+    [1, 1, 1],
+    metadata,
   );
   const addSphere = (radius, position, material = glow, scale = [1, 1, 1]) => (
     addMesh(new THREE.SphereGeometry(radius, 12, 8), position, material, [0, 0, 0], scale)
@@ -88,6 +135,41 @@ function createWeaponModel(config) {
     spinParts.push({ mesh, speed, baseRotation: mesh.rotation.clone() });
     return mesh;
   };
+  const motion = (mesh, {
+    reloadOffset = [0, 0, 0],
+    reloadRotation = [0, 0, 0],
+    recoilOffset = [0, 0, 0],
+  } = {}) => {
+    const baseQuaternion = mesh.quaternion.clone();
+    const targetQuaternion = baseQuaternion.clone().multiply(
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(...reloadRotation)),
+    );
+    motionParts.push({
+      mesh,
+      basePosition: mesh.position.clone(),
+      baseQuaternion,
+      targetQuaternion,
+      reloadOffset: new THREE.Vector3(...reloadOffset),
+      recoilOffset: new THREE.Vector3(...recoilOffset),
+    });
+    return mesh;
+  };
+  const addLimb = ({ start, end, radiusStart, radiusEnd, material, name, side, role }) => {
+    const from = new THREE.Vector3(...start);
+    const to = new THREE.Vector3(...end);
+    const direction = to.clone().sub(from);
+    const length = direction.length();
+    const mesh = addMesh(
+      new THREE.CylinderGeometry(radiusEnd, radiusStart, length, 8, 1, false),
+      from.clone().add(to).multiplyScalar(0.5).toArray(),
+      material,
+      [0, 0, 0],
+      [1, 1, 1],
+      { name, role, armSide: side },
+    );
+    mesh.quaternion.setFromUnitVectors(WORLD_UP, direction.normalize());
+    return mesh;
+  };
 
   const modelStyle = config.model ?? config.id;
   let defaultMuzzleZ = -1.4;
@@ -100,13 +182,19 @@ function createWeaponModel(config) {
     addCylinder(0.066, 0.066, 0.62, [0, -0.055, -0.67], shellLight);
     addCylinder(0.068, 0.068, 0.09, [-0.073, 0.07, -1.18], accent);
     addCylinder(0.068, 0.068, 0.09, [0.073, 0.07, -1.18], accent);
-    addBox([0.28, 0.14, 0.24], [0, -0.045, -0.7], shellLight);
+    motion(addBox([0.28, 0.14, 0.24], [0, -0.045, -0.7], shellLight, [0, 0, 0], {
+      name: 'SG-4 reciprocating pump',
+    }), { reloadOffset: [0, -0.015, 0.2], recoilOffset: [0, 0, 0.08] });
     for (let groove = 0; groove < 3; groove += 1) {
       addBox([0.292, 0.026, 0.022], [0, 0.02, -0.62 - groove * 0.075], dark);
     }
     addBox([0.15, 0.3, 0.16], [0, -0.2, -0.17], dark, [-0.24, 0, 0]);
     addBox([0.19, 0.09, 0.18], [0, -0.13, -0.4], shellLight, [0.12, 0, 0]);
     addBox([0.035, 0.075, 0.045], [0, 0.205, -0.35], glow);
+    addBox([0.052, 0.115, 0.24], [-0.155, 0.07, -0.36], dark, [0, 0, -0.08]);
+    addBox([0.052, 0.115, 0.24], [0.155, 0.07, -0.36], dark, [0, 0, 0.08]);
+    addCylinder(0.024, 0.024, 0.2, [-0.166, 0.085, -0.5], accent, [Math.PI / 2, 0, 0], 8);
+    addCylinder(0.024, 0.024, 0.2, [0.166, 0.085, -0.5], accent, [Math.PI / 2, 0, 0], 8);
   } else if (modelStyle === 'rail') {
     defaultMuzzleZ = -1.59;
     addBox([0.2, 0.21, 0.86], [0, -0.005, -0.48]);
@@ -123,6 +211,12 @@ function createWeaponModel(config) {
     addBox([0.18, 0.065, 0.36], [0, 0.15, -0.35], shellLight);
     addBox([0.16, 0.28, 0.18], [0, -0.2, -0.18], dark, [-0.2, 0, 0]);
     addCylinder(0.062, 0.044, 0.13, [0, 0.05, -1.52], accent);
+    motion(addBox([0.17, 0.24, 0.13], [0, -0.205, -0.44], accent, [0.12, 0, 0], {
+      name: 'ARX charge cassette',
+    }), { reloadOffset: [0, -0.32, 0.08], reloadRotation: [0.12, 0, 0.16] });
+    addBox([0.055, 0.17, 0.34], [-0.185, 0.015, -0.45], dark, [0, 0, -0.12]);
+    addBox([0.055, 0.17, 0.34], [0.185, 0.015, -0.45], dark, [0, 0, 0.12]);
+    addTorus(0.075, 0.012, [0, 0.225, -0.59], glow, [0, 0, 0]);
   } else if (modelStyle === 'plasma-smg') {
     defaultMuzzleZ = -1.04;
     addBox([0.27, 0.22, 0.48], [0, 0.005, -0.3]);
@@ -135,8 +229,14 @@ function createWeaponModel(config) {
     spin(addTorus(0.087, 0.015, [0, 0.055, -0.88], glow), -1.55);
     addCylinder(0.105, 0.092, 0.12, [0, 0.055, -0.97], accent);
     addBox([0.145, 0.27, 0.16], [0, -0.19, -0.18], dark, [-0.2, 0, 0]);
-    addBox([0.19, 0.22, 0.12], [0, -0.17, -0.43], accent, [0.12, 0, 0]);
+    motion(addBox([0.19, 0.22, 0.12], [0, -0.17, -0.43], accent, [0.12, 0, 0], {
+      name: 'PX-7 plasma cell',
+    }), { reloadOffset: [0, -0.27, 0.06], reloadRotation: [0.08, 0, -0.18] });
     addTorus(0.055, 0.011, [0, 0.205, -0.32], glow);
+    addBox([0.04, 0.16, 0.23], [-0.19, 0.045, -0.63], shellLight, [0.08, 0, -0.08]);
+    addBox([0.04, 0.16, 0.23], [0.19, 0.045, -0.63], shellLight, [0.08, 0, 0.08]);
+    addBox([0.025, 0.08, 0.18], [-0.225, 0.04, -0.66], glow);
+    addBox([0.025, 0.08, 0.18], [0.225, 0.04, -0.66], glow);
   } else if (modelStyle === 'nova-cannon') {
     defaultMuzzleZ = -1.44;
     addBox([0.36, 0.31, 0.58], [0, -0.005, -0.31]);
@@ -152,6 +252,13 @@ function createWeaponModel(config) {
     addCylinder(0.13, 0.13, 0.27, [0, -0.17, -0.39], dark, [0, 0, Math.PI / 2], 12);
     addBox([0.21, 0.32, 0.21], [0, -0.23, -0.17], dark, [-0.18, 0, 0]);
     addBox([0.25, 0.045, 0.38], [0, 0.245, -0.38], accent);
+    motion(addCylinder(0.105, 0.105, 0.26, [0, -0.255, -0.48], accent, [0, 0, Math.PI / 2], 12, {
+      name: 'HMX-1 implosion cartridge',
+    }), { reloadOffset: [0, -0.3, 0.1], reloadRotation: [0, 0.24, 0.1] });
+    addCylinder(0.07, 0.07, 0.38, [-0.235, 0.11, -0.53], shellLight, [Math.PI / 2, 0, 0], 10);
+    addCylinder(0.07, 0.07, 0.38, [0.235, 0.11, -0.53], shellLight, [Math.PI / 2, 0, 0], 10);
+    addBox([0.032, 0.09, 0.48], [-0.28, 0.135, -0.56], glow, [0, 0, -0.08]);
+    addBox([0.032, 0.09, 0.48], [0.28, 0.135, -0.56], glow, [0, 0, 0.08]);
   } else {
     defaultMuzzleZ = -1.4;
     addBox([0.23, 0.2, 0.64], [0, 0, -0.36]);
@@ -162,11 +269,90 @@ function createWeaponModel(config) {
     addBox([0.028, 0.065, 0.7], [-0.125, 0.1, -0.59], accent);
     addBox([0.028, 0.065, 0.7], [0.125, 0.1, -0.59], accent);
     addBox([0.15, 0.3, 0.17], [0, -0.21, -0.17], dark, [-0.22, 0, 0]);
-    addBox([0.17, 0.29, 0.13], [0, -0.2, -0.45], shellLight, [0.15, 0, 0]);
+    motion(addBox([0.17, 0.29, 0.13], [0, -0.2, -0.45], shellLight, [0.15, 0, 0], {
+      name: 'VX-9 pulse magazine',
+    }), { reloadOffset: [0, -0.31, 0.07], reloadRotation: [0.08, 0, -0.16] });
     addBox([0.16, 0.05, 0.33], [0, 0.205, -0.33], dark);
     pulse(addCylinder(0.048, 0.048, 0.02, [0, 0.205, -0.51], glow), { amplitude: 0.05, speed: 4.3 });
     addBox([0.035, 0.08, 0.045], [0, 0.235, -0.16], accent);
+    addBox([0.045, 0.12, 0.34], [-0.15, 0.015, -0.42], shellLight, [0, 0, -0.08]);
+    addBox([0.045, 0.12, 0.34], [0.15, 0.015, -0.42], shellLight, [0, 0, 0.08]);
+    addBox([0.022, 0.055, 0.24], [-0.178, 0.035, -0.47], glow);
+    addBox([0.022, 0.055, 0.24], [0.178, 0.035, -0.47], glow);
   }
+
+  const armRig = config.viewModel?.armRig ?? {
+    rightOrigin: [0.26, -0.72, 0.28],
+    rightGrip: [0.03, -0.22, -0.13],
+    leftOrigin: [-0.42, -0.72, 0.22],
+    leftGrip: [-0.08, -0.13, -0.52],
+    rightRotation: [-0.18, 0, -0.05],
+    leftRotation: [0.12, 0, 0.06],
+  };
+  const handMeshes = {};
+  const buildArm = (side, origin, grip, rotation) => {
+    const originVector = new THREE.Vector3(...origin);
+    const gripVector = new THREE.Vector3(...grip);
+    const direction = gripVector.clone().sub(originVector).normalize();
+    const forearmEnd = gripVector.clone().addScaledVector(direction, -0.08);
+    const cuffStart = gripVector.clone().addScaledVector(direction, -0.16);
+    const cuffEnd = gripVector.clone().addScaledVector(direction, -0.045);
+    const pieces = [];
+    pieces.push(addLimb({
+      start: origin,
+      end: forearmEnd.toArray(),
+      radiusStart: 0.115,
+      radiusEnd: 0.078,
+      material: sleeve,
+      name: `${side} armored sleeve`,
+      side,
+      role: 'sleeve',
+    }));
+    pieces.push(addLimb({
+      start: cuffStart.toArray(),
+      end: cuffEnd.toArray(),
+      radiusStart: 0.09,
+      radiusEnd: 0.085,
+      material: armor,
+      name: `${side} wrist guard`,
+      side,
+      role: 'cuff',
+    }));
+    const palm = addBox(
+      [0.14, 0.1, 0.19],
+      grip,
+      glove,
+      rotation,
+      { name: `${side} grip hand`, role: 'hand', armSide: side },
+    );
+    pieces.push(palm);
+    pieces.push(addBox(
+      [0.115, 0.07, 0.105],
+      [gripVector.x, gripVector.y - 0.025, gripVector.z - 0.095],
+      glove,
+      rotation,
+      { name: `${side} curled fingers`, role: 'hand', armSide: side },
+    ));
+    pieces.push(addBox(
+      [0.115, 0.028, 0.12],
+      [gripVector.x, gripVector.y + 0.058, gripVector.z - 0.012],
+      side === 'left' ? armor : accent,
+      rotation,
+      { name: `${side} knuckle plate`, role: 'hand-armor', armSide: side },
+    ));
+    if (side === 'left') {
+      for (const piece of pieces) {
+        motion(piece, {
+          reloadOffset: [-0.055, -0.14, 0.095],
+          reloadRotation: [0.03, 0, -0.08],
+        });
+      }
+    }
+    handMeshes[side] = palm;
+    return pieces;
+  };
+  buildArm('right', armRig.rightOrigin, armRig.rightGrip, armRig.rightRotation ?? [-0.18, 0, -0.05]);
+  buildArm('left', armRig.leftOrigin, armRig.leftGrip, armRig.leftRotation ?? [0.12, 0, 0.06]);
 
   const muzzle = new THREE.Object3D();
   muzzle.position.set(
@@ -176,12 +362,22 @@ function createWeaponModel(config) {
   );
   group.add(muzzle);
   group.userData.muzzle = muzzle;
-  group.userData.materials = [shell, shellLight, dark, accent, glow];
+  group.userData.materials = [shell, shellLight, dark, accent, glow, sleeve, glove, armor];
   group.userData.modelStyle = modelStyle;
   group.userData.partCount = details.length;
+  group.userData.weaponPartCount = details.length - armParts.length;
+  group.userData.armPartCount = armParts.length;
+  group.userData.armParts = armParts;
+  group.userData.hands = handMeshes;
+  group.userData.gripAnchors = {
+    right: new THREE.Vector3(...armRig.rightGrip),
+    left: new THREE.Vector3(...armRig.leftGrip),
+  };
   group.userData.pulseParts = pulseParts;
   group.userData.spinParts = spinParts;
+  group.userData.motionParts = motionParts;
   group.userData.animationTime = 0;
+  group.userData.equipAmount = 0;
   group.userData.basePosition = new THREE.Vector3(...(config.viewModel?.basePosition ?? [0.43, -0.36, -0.72]));
   group.userData.adsPosition = new THREE.Vector3(...(config.viewModel?.adsPosition ?? [0, -0.245, -0.62]));
   group.userData.baseYaw = config.viewModel?.baseYaw ?? 0.12;
@@ -279,8 +475,26 @@ export class WeaponSystem {
   }
 
   setEnabled(enabled) {
-    this.enabled = enabled;
-    this.currentModel.visible = enabled;
+    const wasEnabled = this.enabled;
+    this.enabled = Boolean(enabled);
+    if (this.enabled && !wasEnabled) this.primeEquipPose(this.currentModel);
+    this.currentModel.visible = this.enabled;
+  }
+
+  restoreModelParts(model) {
+    for (const part of model.userData.motionParts ?? []) {
+      part.mesh.position.copy(part.basePosition);
+      part.mesh.quaternion.copy(part.baseQuaternion);
+    }
+  }
+
+  primeEquipPose(model) {
+    model.userData.equipAmount = 1;
+    model.position.copy(model.userData.basePosition);
+    model.position.x += 0.13;
+    model.position.y -= 0.42;
+    model.position.z += 0.08;
+    model.rotation.set(0.16, model.userData.baseYaw + 0.24, 0.2);
   }
 
   reset() {
@@ -302,6 +516,8 @@ export class WeaponSystem {
       model.position.copy(model.userData.basePosition);
       model.rotation.set(0, model.userData.baseYaw, 0);
       model.userData.animationTime = 0;
+      model.userData.equipAmount = 0;
+      this.restoreModelParts(model);
       for (const part of model.userData.pulseParts ?? []) part.mesh.scale.copy(part.baseScale);
       for (const part of model.userData.spinParts ?? []) part.mesh.rotation.copy(part.baseRotation);
     }
@@ -355,34 +571,76 @@ export class WeaponSystem {
 
   animateModel(dt) {
     const model = this.currentModel;
+    const config = this.currentConfig;
     const bob = this.player?.getViewBob?.() ?? { x: 0, y: 0 };
-    const bobScale = 1 - this.adsAmount * 0.75;
+    const reloadDuration = config.reloadTime * this.modifiers.reloadMultiplier;
+    const reloadProgress = this.reloadRemaining > 0 && reloadDuration > 0
+      ? THREE.MathUtils.clamp(1 - this.reloadRemaining / reloadDuration, 0, 1)
+      : 0;
+    const reloadArc = this.reloadRemaining > 0 ? Math.sin(reloadProgress * Math.PI) : 0;
+    const equipAmount = model.userData.equipAmount ?? 0;
+    model.userData.equipAmount = THREE.MathUtils.damp(
+      equipAmount,
+      0,
+      4 / Math.max(0.12, config.equipTime ?? 0.3),
+      dt,
+    );
+    const poseAds = this.adsAmount * (1 - reloadArc);
+    const bobScale = 1 - poseAds * 0.75;
     this.tempModelPosition
       .copy(model.userData.basePosition)
-      .lerp(model.userData.adsPosition, this.adsAmount);
+      .lerp(model.userData.adsPosition, poseAds);
     this.tempModelPosition.x += (bob.x ?? 0) * bobScale;
-    this.tempModelPosition.y += (bob.y ?? 0) * bobScale - this.modelKick * 0.025;
+    this.tempModelPosition.x += reloadArc * 0.11 + equipAmount * 0.13;
+    this.tempModelPosition.y += (bob.y ?? 0) * bobScale
+      - this.modelKick * 0.025
+      - reloadArc * 0.18
+      - equipAmount * 0.42;
+    this.tempModelPosition.z += reloadArc * 0.06 + equipAmount * 0.08;
     model.position.lerp(this.tempModelPosition, 1 - Math.exp(-dt * 15));
-    model.rotation.x = -this.modelKick * 0.055;
-    model.rotation.y = THREE.MathUtils.lerp(model.userData.baseYaw, 0, this.adsAmount)
-      + this.modelKick * 0.018;
+    model.rotation.x = -this.modelKick * 0.055 + reloadArc * 0.3 + equipAmount * 0.16;
+    model.rotation.y = THREE.MathUtils.lerp(model.userData.baseYaw, 0, poseAds)
+      + this.modelKick * 0.018
+      + reloadArc * 0.4
+      + equipAmount * 0.24;
+    model.rotation.z = reloadArc * 0.3 + equipAmount * 0.2;
     model.userData.animationTime += dt;
     for (const part of model.userData.pulseParts ?? []) {
       const amount = 1 + Math.sin(model.userData.animationTime * part.speed + part.phase) * part.amplitude;
       part.mesh.scale.copy(part.baseScale).multiplyScalar(amount);
     }
     for (const part of model.userData.spinParts ?? []) {
-      part.mesh.rotation.z = (part.mesh.rotation.z + dt * part.speed) % (Math.PI * 2);
+      part.mesh.rotation.copy(part.baseRotation);
+      part.mesh.rotation.z = (
+        part.baseRotation.z + model.userData.animationTime * part.speed
+      ) % (Math.PI * 2);
+    }
+    const recoilAmount = THREE.MathUtils.clamp(this.modelKick, 0, 1);
+    for (const part of model.userData.motionParts ?? []) {
+      part.mesh.position
+        .copy(part.basePosition)
+        .addScaledVector(part.reloadOffset, reloadArc)
+        .addScaledVector(part.recoilOffset, recoilAmount);
+      part.mesh.quaternion.copy(part.baseQuaternion).slerp(part.targetQuaternion, reloadArc);
     }
     model.visible = this.enabled;
   }
 
   switchTo(index) {
     if (index < 0 || index >= this.weaponOrder.length || index === this.index) return false;
-    this.currentModel.visible = false;
+    const previousModel = this.currentModel;
+    this.restoreModelParts(previousModel);
+    previousModel.position.copy(previousModel.userData.basePosition);
+    previousModel.rotation.set(0, previousModel.userData.baseYaw, 0);
+    previousModel.userData.equipAmount = 0;
+    previousModel.visible = false;
     this.index = index;
-    this.currentModel.visible = this.enabled;
+    const nextModel = this.currentModel;
+    this.restoreModelParts(nextModel);
+    this.primeEquipPose(nextModel);
+    nextModel.visible = this.enabled;
     this.reloadRemaining = 0;
+    this.modelKick = 0;
     this.cooldown = Math.max(this.cooldown, 0.18);
     this.audio?.playUI?.('switch');
     this.eventBus?.emit?.('weapon:changed', this.getState());

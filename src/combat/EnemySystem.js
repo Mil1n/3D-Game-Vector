@@ -2,13 +2,22 @@ import * as THREE from 'three';
 import { ENEMY_CONFIGS } from '../configs/enemyConfigs.js';
 import {
   disposeEnemyVisual,
+  ENEMY_GROUND_OFFSET,
   getEnemyAnchorPosition,
   makeEnemyVisual,
   updateEnemyVisual,
 } from './enemyVisuals.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
-const FORWARD = new THREE.Vector3(0, 0, 1);
+const DOWN = new THREE.Vector3(0, -1, 0);
+const SURFACE_PROBE_ABOVE = 1.6;
+const SURFACE_PROBE_BELOW = 2.4;
+// Broad ramp colliders overlap their adjoining route boxes. Cannon may report
+// the higher overlap face at the seam, so allow that authored surface step and
+// damp it visually; unsupported space is still rejected independently.
+const MAX_STEP_UP = 1.3;
+const MAX_STEP_DOWN = 1.3;
+const OBSTACLE_PADDING = 0.12;
 const ENEMY_COLORS = Object.freeze({
   trooper: 0xffa43a,
   hunter: 0xff477e,
@@ -21,6 +30,27 @@ function configFor(type) {
     : ENEMY_CONFIGS[type];
   if (!config) throw new Error(`[EnemySystem] Missing enemy config: ${type}`);
   return config;
+}
+
+function finiteVector(vector) {
+  return vector && Number.isFinite(vector.x) && Number.isFinite(vector.y) && Number.isFinite(vector.z);
+}
+
+function rayHit(result) {
+  if (!result || result.hit === false || result.hasHit === false) return false;
+  return result.hit === true
+    || result.hasHit === true
+    || Number.isFinite(result.distance)
+    || finiteVector(result.point);
+}
+
+function userDataFromAncestors(object, key) {
+  let current = object;
+  while (current) {
+    if (current.userData?.[key] != null) return current.userData[key];
+    current = current.parent;
+  }
+  return undefined;
 }
 
 function createProjectilePool(scene, size = 46) {
@@ -141,6 +171,11 @@ export class EnemySystem {
     this.tempMove = new THREE.Vector3();
     this.tempFrom = new THREE.Vector3();
     this.tempPrevious = new THREE.Vector3();
+    this.tempCandidate = new THREE.Vector3();
+    this.tempSide = new THREE.Vector3();
+    this.tempAvoid = new THREE.Vector3();
+    this.tempProbeOrigin = new THREE.Vector3();
+    this.tempPlanarVelocity = new THREE.Vector3();
     this.tempProjectileToPlayer = new THREE.Vector3();
     this.tempProjectileClosest = new THREE.Vector3();
     this.unsubscribers = [
@@ -187,6 +222,9 @@ export class EnemySystem {
       forward: new THREE.Vector3(0, 0, 1),
       velocity: new THREE.Vector3(),
       lastPosition: spawnPosition.clone(),
+      groundOffset: visual.root.userData.groundOffset ?? ENEMY_GROUND_OFFSET,
+      surfaceY: null,
+      hasSurfaceSupport: false,
       stuckTime: 0,
       flankSign: this.random() < 0.5 ? -1 : 1,
       hasAttackToken: false,
@@ -198,6 +236,10 @@ export class EnemySystem {
       bobOffset: this.random() * Math.PI * 2,
     };
     visual.root.position.copy(spawnPosition);
+    this.snapEnemyToSurface(enemy, true);
+    enemy.target.copy(visual.root.position);
+    enemy.lastKnown.copy(visual.root.position);
+    enemy.lastPosition.copy(visual.root.position);
     visual.root.userData.enemyId = id;
     for (const mesh of visual.hitMeshes) {
       mesh.userData.enemyId = id;
@@ -206,8 +248,9 @@ export class EnemySystem {
     this.enemies.push(enemy);
     this.byId.set(id, enemy);
     this.group.add(visual.root);
-    this.audio?.playEffect?.('spawn', { position: spawnPosition, pitch: type === 'warden' ? 0.55 : 0.9 + this.random() * 0.2 });
-    this.eventBus?.emit?.('enemy:spawned', { id, type, position: spawnPosition.clone(), elite: type === 'warden' });
+    const actualSpawn = visual.root.position.clone();
+    this.audio?.playEffect?.('spawn', { position: actualSpawn, pitch: type === 'warden' ? 0.55 : 0.9 + this.random() * 0.2 });
+    this.eventBus?.emit?.('enemy:spawned', { id, type, position: actualSpawn, elite: type === 'warden' });
     return enemy;
   }
 
@@ -367,37 +410,222 @@ export class EnemySystem {
     return result?.position ?? result ?? destination;
   }
 
+  getMovementBounds(enemy) {
+    const margin = Math.max(0.2, enemy.config.radius ?? 0.45) + OBSTACLE_PADDING;
+    const provided = this.arena?.getMovementBounds?.(margin);
+    if (provided) return provided;
+
+    const bounds = this.arena?.mapConfig?.bounds ?? this.arena?.bounds;
+    if (!bounds) return null;
+    if (Number.isFinite(bounds.radius)) {
+      return {
+        shape: 'disc',
+        centerX: bounds.centerX ?? bounds.center?.x ?? 0,
+        centerZ: bounds.centerZ ?? bounds.center?.z ?? 0,
+        radius: Math.max(0, bounds.radius - margin),
+      };
+    }
+    const minX = bounds.minX ?? bounds.min?.x;
+    const maxX = bounds.maxX ?? bounds.max?.x;
+    const minZ = bounds.minZ ?? bounds.min?.z;
+    const maxZ = bounds.maxZ ?? bounds.max?.z;
+    if ([minX, maxX, minZ, maxZ].every(Number.isFinite)) {
+      return {
+        shape: 'box',
+        minX: minX + margin,
+        maxX: maxX - margin,
+        minZ: minZ + margin,
+        maxZ: maxZ - margin,
+      };
+    }
+    return null;
+  }
+
+  constrainToMovementBounds(enemy, position) {
+    const bounds = this.getMovementBounds(enemy);
+    if (!bounds) return position;
+    if (bounds.shape === 'box') {
+      if (Number.isFinite(bounds.minX) && Number.isFinite(bounds.maxX)) {
+        position.x = THREE.MathUtils.clamp(position.x, bounds.minX, bounds.maxX);
+      }
+      if (Number.isFinite(bounds.minZ) && Number.isFinite(bounds.maxZ)) {
+        position.z = THREE.MathUtils.clamp(position.z, bounds.minZ, bounds.maxZ);
+      }
+      return position;
+    }
+
+    const radius = bounds.radius;
+    if (!Number.isFinite(radius) || radius <= 0) return position;
+    const centerX = Number.isFinite(bounds.centerX) ? bounds.centerX : 0;
+    const centerZ = Number.isFinite(bounds.centerZ) ? bounds.centerZ : 0;
+    const dx = position.x - centerX;
+    const dz = position.z - centerZ;
+    const distanceSq = dx * dx + dz * dz;
+    if (distanceSq > radius * radius) {
+      const scale = radius / Math.sqrt(distanceSq);
+      position.x = centerX + dx * scale;
+      position.z = centerZ + dz * scale;
+    }
+    return position;
+  }
+
+  getSurfaceHeight(enemy, position, force = false) {
+    if (typeof this.arena?.getSurfaceHeight === 'function') {
+      const provided = this.arena.getSurfaceHeight(position, force ? {} : {
+        above: SURFACE_PROBE_ABOVE,
+        below: SURFACE_PROBE_BELOW,
+        currentY: position.y - enemy.groundOffset,
+      });
+      if (Number.isFinite(provided)) return provided;
+      if (Number.isFinite(provided?.height)) return provided.height;
+      if (Number.isFinite(provided?.y)) return provided.y;
+      if (Number.isFinite(provided?.point?.y)) return provided.point.y;
+      return null;
+    }
+    if (!this.arena?.raycastWorld) return null;
+
+    this.tempProbeOrigin.copy(position);
+    const mapMaxY = this.arena?.mapConfig?.bounds?.maxY;
+    const probeAbove = force && Number.isFinite(mapMaxY)
+      ? Math.max(SURFACE_PROBE_ABOVE, mapMaxY + 1 - position.y)
+      : SURFACE_PROBE_ABOVE;
+    this.tempProbeOrigin.y += probeAbove;
+    const result = this.arena.raycastWorld(
+      this.tempProbeOrigin,
+      DOWN,
+      probeAbove + enemy.groundOffset + SURFACE_PROBE_BELOW,
+    );
+    if (!rayHit(result)) return null;
+    const surfaceData = result.body?.userData ?? {};
+    if (surfaceData.arenaWall && !surfaceData.arenaSurface) return null;
+    if (finiteVector(result.normal) && result.normal.y < 0.42) return null;
+    if (Number.isFinite(result.point?.y)) return result.point.y;
+    if (Number.isFinite(result.distance)) return this.tempProbeOrigin.y - result.distance;
+    return null;
+  }
+
+  snapEnemyToSurface(enemy, force = false, dt = 1 / 60, position = enemy.root.position) {
+    const surfaceY = this.getSurfaceHeight(enemy, position, force);
+    if (!Number.isFinite(surfaceY)) return false;
+    const desiredRootY = surfaceY + enemy.groundOffset;
+    const delta = desiredRootY - enemy.root.position.y;
+    if (!force && enemy.hasSurfaceSupport && (delta > MAX_STEP_UP || delta < -MAX_STEP_DOWN)) return false;
+
+    if (force || !enemy.hasSurfaceSupport || Math.abs(delta) < 0.16) position.y = desiredRootY;
+    else position.y = THREE.MathUtils.damp(enemy.root.position.y, desiredRootY, 18, Math.max(0, dt));
+    enemy.surfaceY = surfaceY;
+    enemy.hasSurfaceSupport = true;
+    return true;
+  }
+
+  probeObstacle(enemy, direction, maxDistance) {
+    if (!this.arena?.raycastWorld || !finiteVector(direction) || direction.lengthSq() < 1e-8) return null;
+    const radius = Math.max(0.2, enemy.config.radius ?? 0.45);
+    this.tempSide.set(-direction.z, 0, direction.x).normalize();
+    let closest = null;
+    for (const offset of [-0.72, 0, 0.72]) {
+      this.tempProbeOrigin.copy(enemy.root.position).addScaledVector(this.tempSide, radius * offset);
+      this.tempProbeOrigin.y = enemy.root.position.y - Math.min(0.18, enemy.groundOffset * 0.18);
+      const hit = this.arena.raycastWorld(this.tempProbeOrigin, direction, maxDistance);
+      if (!rayHit(hit) || (Number.isFinite(hit.distance) && hit.distance > maxDistance + 1e-4)) continue;
+      const hitData = hit.body?.userData ?? {};
+      // Walkable route boxes expose vertical side faces too. Treating those as
+      // walls makes an actor dodge the mouth of every ramp; surface support and
+      // the step-height guard below already keep it from walking off a ledge.
+      if (hitData.arenaSurface && !hitData.arenaWall) continue;
+      if (finiteVector(hit.normal) && hit.normal.y > 0.62 && !hitData.arenaWall) continue;
+      if (!closest || (hit.distance ?? 0) < (closest.distance ?? 0)) closest = hit;
+    }
+    return closest;
+  }
+
+  avoidObstacle(enemy, desiredDirection, obstacle) {
+    const radius = Math.max(0.2, enemy.config.radius ?? 0.45);
+    const normal = obstacle?.normal;
+    this.tempAvoid.copy(desiredDirection);
+    if (finiteVector(normal)) {
+      this.tempSide.copy(normal).setY(0);
+      if (this.tempSide.lengthSq() > 1e-8) {
+        this.tempSide.normalize();
+        const inwardSpeed = enemy.velocity.dot(this.tempSide);
+        if (inwardSpeed < 0) enemy.velocity.addScaledVector(this.tempSide, -inwardSpeed);
+        this.tempAvoid.addScaledVector(this.tempSide, -this.tempAvoid.dot(this.tempSide));
+      }
+    }
+    if (this.tempAvoid.lengthSq() < 0.04) {
+      this.tempAvoid.set(-desiredDirection.z * enemy.flankSign, 0, desiredDirection.x * enemy.flankSign);
+    }
+    this.tempAvoid.setY(0).normalize();
+
+    if (this.probeObstacle(enemy, this.tempAvoid, radius + 0.42)) {
+      this.tempAvoid.multiplyScalar(-1);
+      if (this.probeObstacle(enemy, this.tempAvoid, radius + 0.42)) this.tempAvoid.set(0, 0, 0);
+    }
+    return this.tempAvoid;
+  }
+
   moveEnemy(enemy, dt) {
+    if (!Number.isFinite(dt) || dt <= 0 || !finiteVector(enemy.root.position)) return;
+    if (!finiteVector(enemy.target)) enemy.target.copy(enemy.root.position);
+    if (!finiteVector(enemy.velocity)) enemy.velocity.set(0, 0, 0);
     if (enemy.pendingAttack?.lockMovement) {
       enemy.velocity.multiplyScalar(Math.max(0, 1 - dt * 10));
+      enemy.velocity.y = 0;
+      this.snapEnemyToSurface(enemy, false, dt);
+      enemy.lastPosition.copy(enemy.root.position);
       return;
     }
     const direction = this.tempMove.subVectors(enemy.target, enemy.root.position).setY(0);
     const distance = direction.length();
     if (distance < 0.1) {
       enemy.velocity.multiplyScalar(Math.max(0, 1 - dt * 9));
+      enemy.velocity.y = 0;
+      this.snapEnemyToSurface(enemy, false, dt);
+      enemy.lastPosition.copy(enemy.root.position);
       return;
     }
     direction.normalize();
-    const obstacle = this.arena?.raycastWorld?.(
-      this.tempFrom.copy(enemy.root.position).add(new THREE.Vector3(0, 0.7, 0)),
-      direction,
-      1.2,
-    );
-    if (obstacle?.distance < 0.9) {
-      const sign = enemy.flankSign;
-      direction.set(-direction.z * sign, 0, direction.x * sign);
-    }
     const baseSpeed = enemy.config.speed ?? (enemy.type === 'hunter' ? 7.4 : enemy.type === 'warden' ? 3.4 : 4.2);
     const stateMultiplier = enemy.state === 'retreat' ? 1.12 : enemy.state === 'flank' ? 1.15 : 1;
-    const targetVelocity = direction.multiplyScalar(baseSpeed * stateMultiplier);
+    const radius = Math.max(0.2, enemy.config.radius ?? 0.45);
+    const lookAhead = Math.max(1.05, radius + OBSTACLE_PADDING + baseSpeed * dt * 2.2);
+    const obstacle = this.probeObstacle(enemy, direction, lookAhead);
+    if (obstacle) direction.copy(this.avoidObstacle(enemy, direction, obstacle));
+
+    const targetVelocity = this.tempDirection.copy(direction).multiplyScalar(baseSpeed * stateMultiplier);
     enemy.velocity.lerp(targetVelocity, 1 - Math.exp(-dt * 7));
-    enemy.root.position.addScaledVector(enemy.velocity, dt);
-    enemy.root.position.x = THREE.MathUtils.clamp(enemy.root.position.x, -34, 34);
-    enemy.root.position.z = THREE.MathUtils.clamp(enemy.root.position.z, -34, 34);
-    enemy.forward.lerp(enemy.velocity.clone().setY(0).normalize(), 1 - Math.exp(-dt * 10)).normalize();
-    enemy.root.rotation.y = Math.atan2(enemy.forward.x, enemy.forward.z);
-    const moved = enemy.root.position.distanceToSquared(enemy.lastPosition);
+    enemy.velocity.y = 0;
+
+    const displacement = this.tempPlanarVelocity.copy(enemy.velocity).multiplyScalar(dt).setY(0);
+    const displacementLength = displacement.length();
+    if (displacementLength > 1e-6) {
+      const moveDirection = this.tempFrom.copy(displacement).multiplyScalar(1 / displacementLength);
+      const sweep = this.probeObstacle(enemy, moveDirection, displacementLength + radius + OBSTACLE_PADDING);
+      if (sweep && Number.isFinite(sweep.distance)) {
+        const allowed = Math.max(0, sweep.distance - radius - OBSTACLE_PADDING);
+        if (allowed < displacementLength) displacement.multiplyScalar(allowed / displacementLength);
+      }
+    }
+
+    const candidate = this.tempCandidate.copy(enemy.root.position).add(displacement);
+    this.constrainToMovementBounds(enemy, candidate);
+    const hadSurfaceSupport = enemy.hasSurfaceSupport;
+    const supported = this.snapEnemyToSurface(enemy, false, dt, candidate);
+    if (!supported && hadSurfaceSupport) {
+      candidate.copy(enemy.root.position);
+      enemy.velocity.multiplyScalar(Math.max(0, 1 - dt * 18));
+    }
+    enemy.root.position.copy(candidate);
+
+    this.tempPlanarVelocity.copy(enemy.velocity).setY(0);
+    if (this.tempPlanarVelocity.lengthSq() > 1e-6) {
+      this.tempPlanarVelocity.normalize();
+      enemy.forward.lerp(this.tempPlanarVelocity, 1 - Math.exp(-dt * 10)).normalize();
+      enemy.root.rotation.y = Math.atan2(enemy.forward.x, enemy.forward.z);
+    }
+    const dx = enemy.root.position.x - enemy.lastPosition.x;
+    const dz = enemy.root.position.z - enemy.lastPosition.z;
+    const moved = dx * dx + dz * dz;
     enemy.stuckTime = moved < 0.0004 ? enemy.stuckTime + dt : 0;
     if (enemy.stuckTime > 1) {
       enemy.flankSign *= -1;
@@ -628,17 +856,22 @@ export class EnemySystem {
     // during fixed updates, so multiple simulation steps can happen before the
     // renderer gets a chance to refresh those matrices.
     this.group.updateMatrixWorld(true);
-    this.raycaster.set(origin, direction);
-    this.raycaster.far = maxDistance;
-    const intersections = this.raycaster.intersectObjects(this.hitMeshes, false);
+    if (!finiteVector(origin) || !finiteVector(direction) || direction.lengthSq() < 1e-8) return null;
+    this.tempDirection.copy(direction).normalize();
+    this.raycaster.set(origin, this.tempDirection);
+    this.raycaster.near = 0;
+    this.raycaster.far = Number.isFinite(maxDistance) ? Math.max(0, maxDistance) : Infinity;
+    const intersections = this.raycaster.intersectObjects(this.hitMeshes, true);
     for (const intersection of intersections) {
-      const enemy = this.byId.get(intersection.object.userData.enemyId);
+      if (!Number.isFinite(intersection.distance) || !finiteVector(intersection.point)) continue;
+      const enemyId = userDataFromAncestors(intersection.object, 'enemyId');
+      const enemy = this.byId.get(enemyId);
       if (!enemy || enemy.dead || !enemy.root.visible) continue;
       return {
         enemy,
         point: intersection.point,
         distance: intersection.distance,
-        zone: intersection.object.userData.hitZone ?? 'body',
+        zone: userDataFromAncestors(intersection.object, 'hitZone') ?? 'body',
         normal: intersection.face?.normal?.clone?.(),
       };
     }

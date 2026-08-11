@@ -6,6 +6,12 @@ const FALLBACK_COLORS = Object.freeze({
   warden: 0xf34c8f,
 });
 
+// Arena spawn/navigation points use the same body-centre convention as the
+// player capsule: their Y coordinate sits one metre above the supporting
+// surface. Keep that gameplay root stable and lower only the authored rig so
+// the feet, shields and death animation meet the actual floor.
+export const ENEMY_GROUND_OFFSET = 1;
+
 const clamp01 = (value) => THREE.MathUtils.clamp(value, 0, 1);
 
 function rememberTransform(object) {
@@ -114,8 +120,8 @@ function addShield(type, config, visualRoot, materials, builder) {
   materials.all.push(shieldMaterial);
   return builder.mesh(visualRoot, new THREE.SphereGeometry(1, 18, 12), shieldMaterial, {
     name: `${type}-shield`,
-    position: type === 'warden' ? [0, 1.45, 0] : [0, 0.98, 0],
-    scale: type === 'warden' ? [1.58, 1.62, 1.35] : [0.82, 1.22, 0.74],
+    position: type === 'warden' ? [0, 1.72, 0] : [0, 1.13, 0],
+    scale: type === 'warden' ? [1.58, 1.7, 1.35] : [0.82, 1.1, 0.74],
     castShadow: false,
   });
 }
@@ -287,6 +293,7 @@ export function makeEnemyVisual(type, config) {
   root.name = `${config.name ?? type}`;
   const visualRoot = new THREE.Group();
   visualRoot.name = `${type}-visual-root`;
+  visualRoot.position.y = -ENEMY_GROUND_OFFSET;
   rememberTransform(visualRoot);
   root.add(visualRoot);
   const hitMeshes = [];
@@ -305,6 +312,7 @@ export function makeEnemyVisual(type, config) {
   root.userData.shield = shield;
   root.userData.visualParts = visualParts;
   root.userData.glowMaterial = materials.glow;
+  root.userData.groundOffset = ENEMY_GROUND_OFFSET;
   return { root, hitMeshes };
 }
 

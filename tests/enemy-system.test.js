@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
 
 import { EnemySystem } from '../src/combat/EnemySystem.js';
 import { getEnemyAnchorPosition, updateEnemyVisual } from '../src/combat/enemyVisuals.js';
 import { ENEMY_CONFIGS } from '../src/configs/enemyConfigs.js';
+import { Arena } from '../src/world/Arena.js';
 
 const noopEffects = {
   spawnImpact() {},
@@ -12,8 +14,7 @@ const noopEffects = {
   spawnShiftPulse() {},
 };
 
-function createEnemies() {
-  const scene = new THREE.Scene();
+function createEnemies({ arena = null, scene = new THREE.Scene() } = {}) {
   const player = {
     position: new THREE.Vector3(0, 0, 12),
     forward: new THREE.Vector3(0, 0, -1),
@@ -27,10 +28,63 @@ function createEnemies() {
     eventBus: { emit() {}, on() { return () => {}; } },
     audioManager: { playEffect() {}, playUI() {} },
     effects: noopEffects,
-    arena: null,
+    arena,
     random: () => 0.5,
   });
   return { system, scene, player };
+}
+
+function createSurfaceArena({
+  heightAt = () => 0,
+  bounds = { shape: 'disc', centerX: 0, centerZ: 0, radius: 40 },
+  obstacleRaycast = null,
+} = {}) {
+  return {
+    mapConfig: { bounds: bounds.shape === 'disc' ? { radius: bounds.radius } : { ...bounds } },
+    getMovementBounds(margin = 0) {
+      if (bounds.shape === 'box') {
+        return {
+          shape: 'box',
+          minX: bounds.minX + margin,
+          maxX: bounds.maxX - margin,
+          minZ: bounds.minZ + margin,
+          maxZ: bounds.maxZ - margin,
+        };
+      }
+      return {
+        shape: 'disc',
+        centerX: bounds.centerX ?? 0,
+        centerZ: bounds.centerZ ?? 0,
+        radius: bounds.radius - margin,
+      };
+    },
+    getSurfaceHeight(position, { above = 1.6, below = 2.4, currentY = position.y - 1 } = {}) {
+      const height = heightAt(position.x, position.z);
+      if (!Number.isFinite(height) || height > currentY + above || height < currentY - below) return null;
+      return height;
+    },
+    raycastWorld(origin, direction, maxDistance) {
+      if (direction.y < -0.9) {
+        const height = heightAt(origin.x, origin.z);
+        const distance = origin.y - height;
+        if (!Number.isFinite(height) || distance < 0 || distance > maxDistance) {
+          return { hit: false, hasHit: false, distance: Infinity };
+        }
+        return {
+          hit: true,
+          hasHit: true,
+          distance,
+          point: new THREE.Vector3(origin.x, height, origin.z),
+          normal: new THREE.Vector3(0, 1, 0),
+          body: { userData: { arenaSurface: true } },
+        };
+      }
+      return obstacleRaycast?.(origin, direction, maxDistance)
+        ?? { hit: false, hasHit: false, distance: Infinity };
+    },
+    hasLineOfSight() { return true; },
+    getNavigationTarget(from, to) { return to?.clone?.() ?? from.clone(); },
+  };
 }
 
 function round(value) {
@@ -262,4 +316,134 @@ test('enemy projectiles originate from authored weapon and reactor anchors', (t)
   const volley = system.projectiles.items.filter((projectile) => projectile.active).slice(burst.length);
   assert.equal(volley.length, 5);
   volley.forEach((projectile) => assert.ok(projectile.previous.distanceTo(expectedCore) < 1e-6));
+});
+
+test('gameplay roots stay at navigation height while rigs and shields meet the floor', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  const [trooper, hunter, warden] = [
+    system.spawn('trooper', new THREE.Vector3(-3, 1.05, 0)),
+    system.spawn('hunter', new THREE.Vector3(0, 1.05, 0)),
+    system.spawn('warden', new THREE.Vector3(3, 1.05, 0)),
+  ];
+
+  for (const enemy of [trooper, hunter, warden]) {
+    const parts = enemy.root.userData.visualParts;
+    assert.equal(enemy.root.position.y, 1.05, `${enemy.type} gameplay root must retain navigation Y`);
+    assert.equal(parts.visualRoot.position.y, -1, `${enemy.type} rig must be lowered from its gameplay root`);
+    enemy.root.updateMatrixWorld(true);
+    const feet = new THREE.Box3().setFromObject(parts.legs[0]);
+    assert.ok(feet.min.y >= 0.04 && feet.min.y <= 0.16, `${enemy.type} feet must meet the floor, got ${feet.min.y}`);
+    if (parts.shield) {
+      const shieldBounds = new THREE.Box3().setFromObject(parts.shield);
+      assert.ok(shieldBounds.min.y >= 0.03, `${enemy.type} shield must not clip below the floor`);
+    }
+  }
+});
+
+test('enemy movement follows elevated and sloped arena surfaces', (t) => {
+  const arena = createSurfaceArena({ heightAt: (x) => x * 0.22 });
+  const { system } = createEnemies({ arena });
+  t.after(() => system.dispose());
+  const enemy = system.spawn('trooper', new THREE.Vector3(0, 1, 0));
+  enemy.target.set(5, 1, 0);
+
+  for (let index = 0; index < 100; index += 1) system.moveEnemy(enemy, 1 / 60);
+
+  assert.ok(enemy.root.position.x > 3, 'enemy must make horizontal progress up the ramp');
+  assert.ok(
+    Math.abs(enemy.root.position.y - (arena.getSurfaceHeight(enemy.root.position) + enemy.groundOffset)) < 0.03,
+    'gameplay root must track the supporting surface instead of preserving spawn Y',
+  );
+  enemy.root.updateMatrixWorld(true);
+  const feet = new THREE.Box3().setFromObject(enemy.root.userData.visualParts.legs[0]);
+  assert.ok(Math.abs(feet.min.y - arena.getSurfaceHeight(enemy.root.position)) < 0.12);
+});
+
+test('enemy crosses the real null-grid ramp seam without losing floor support', (t) => {
+  const scene = new THREE.Scene();
+  const world = new CANNON.World();
+  const arena = new Arena({ scene, mapId: 'null-grid' }).build(world);
+  const { system } = createEnemies({ arena, scene });
+  t.after(() => {
+    system.dispose();
+    arena.dispose();
+  });
+  const enemy = system.spawn('trooper', new THREE.Vector3(12, 1.05, 0));
+  enemy.target.set(27, 3.55, 0);
+
+  for (let index = 0; index < 300; index += 1) system.moveEnemy(enemy, 1 / 60);
+
+  assert.ok(enemy.root.position.x > 24, 'enemy must cross the collider overlap at the ramp entrance');
+  assert.ok(Math.abs(enemy.root.position.y - 3.55) < 0.04, 'enemy must arrive on the elevated ring');
+  assert.equal(enemy.hasSurfaceSupport, true);
+  assert.ok(Math.abs(enemy.surfaceY - 2.55) < 0.04);
+});
+
+test('enemy movement respects map-specific disc bounds and refuses unsupported steps', (t) => {
+  const arena = createSurfaceArena({
+    bounds: { shape: 'disc', centerX: 0, centerZ: 0, radius: 10 },
+    heightAt: (x) => (x <= 8.6 ? 0 : null),
+  });
+  const { system } = createEnemies({ arena });
+  t.after(() => system.dispose());
+  const enemy = system.spawn('trooper', new THREE.Vector3(0, 1, 0));
+  enemy.target.set(40, 1, 0);
+
+  for (let index = 0; index < 300; index += 1) system.moveEnemy(enemy, 1 / 60);
+
+  const allowedRadius = arena.getMovementBounds(enemy.config.radius + 0.12).radius;
+  assert.ok(Math.hypot(enemy.root.position.x, enemy.root.position.z) <= allowedRadius + 1e-6);
+  assert.ok(enemy.root.position.x <= 8.65, 'enemy must not step into a gap with no supporting surface');
+  assert.equal(enemy.root.position.y, 1);
+});
+
+test('wide enemy sweep slides along walls instead of tunnelling through them', (t) => {
+  const wallX = 1.5;
+  const arena = createSurfaceArena({
+    obstacleRaycast(origin, direction, maxDistance) {
+      if (direction.x <= 1e-6) return { hit: false, hasHit: false, distance: Infinity };
+      const distance = (wallX - origin.x) / direction.x;
+      if (distance < 0 || distance > maxDistance) return { hit: false, hasHit: false, distance: Infinity };
+      return {
+        hit: true,
+        hasHit: true,
+        distance,
+        point: origin.clone().addScaledVector(direction, distance),
+        normal: new THREE.Vector3(-1, 0, 0),
+        body: { userData: { arenaWall: true } },
+      };
+    },
+  });
+  const { system } = createEnemies({ arena });
+  t.after(() => system.dispose());
+  const enemy = system.spawn('warden', new THREE.Vector3(0, 1, 0));
+  enemy.target.set(6, 1, 6);
+
+  for (let index = 0; index < 90; index += 1) system.moveEnemy(enemy, 1 / 60);
+
+  assert.ok(enemy.root.position.x <= wallX - enemy.config.radius + 0.03, 'sweep must preserve body clearance');
+  assert.ok(enemy.root.position.z > 1, 'enemy should slide along the obstacle instead of freezing');
+  assert.ok([enemy.root.position, enemy.velocity, enemy.forward].every((vector) => vector.toArray().every(Number.isFinite)));
+});
+
+test('enemy raycast resolves nested visual intersections to their registered hit zone', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  const enemy = system.spawn('trooper', new THREE.Vector3(0, 0, 0));
+  const body = enemy.root.userData.visualParts.body;
+  const nested = new THREE.Mesh(
+    new THREE.BoxGeometry(0.24, 0.24, 0.24),
+    new THREE.MeshBasicMaterial(),
+  );
+  nested.position.z = 2;
+  body.add(nested);
+  enemy.root.updateMatrixWorld(true);
+  const bodyWorld = body.getWorldPosition(new THREE.Vector3());
+
+  const hit = system.raycast(new THREE.Vector3(bodyWorld.x, bodyWorld.y, 1), new THREE.Vector3(0, 0, 1), 5);
+
+  assert.ok(hit, 'nested mesh must remain hittable');
+  assert.equal(hit.enemy, enemy);
+  assert.equal(hit.zone, 'body');
 });

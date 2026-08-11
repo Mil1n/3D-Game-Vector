@@ -278,10 +278,25 @@ export class Arena {
     foundation.position.y = config.y;
     foundation.receiveShadow = true;
     this.root.add(foundation);
-    const colliderSize = config.shape === 'box'
-      ? new THREE.Vector3().fromArray(config.size)
-      : new THREE.Vector3(config.radius * 2 - 2, config.depth, config.radius * 2 - 2);
-    this._addStaticBox('foundation-collider', colliderSize, new THREE.Vector3(0, config.y, 0));
+    if (config.shape === 'box') {
+      this._addStaticBox(
+        'foundation-collider',
+        new THREE.Vector3().fromArray(config.size),
+        new THREE.Vector3(0, config.y, 0),
+        new THREE.Quaternion(),
+        { arenaSurface: true, blocksLineOfSight: false, role: 'foundation' },
+      );
+    } else {
+      // Keep physics congruent with the visible disc. The old square collider
+      // left invisible walkable corners outside the arena wall.
+      this._addStaticCylinder(
+        'foundation-collider',
+        config.radius - 1,
+        config.depth,
+        new THREE.Vector3(0, config.y, 0),
+        { arenaSurface: true, blocksLineOfSight: false, role: 'foundation' },
+      );
+    }
 
     if (config.glowRadius > 0) {
       const trenchGlow = new THREE.Mesh(
@@ -430,7 +445,9 @@ export class Arena {
     for (const box of this.mapConfig.geometryBoxes) {
       const size = new THREE.Vector3().fromArray(box.size);
       const position = new THREE.Vector3().fromArray(box.position);
-      const rotation = new THREE.Euler(0, box.rotationY ?? 0, 0);
+      const rotation = box.rotation
+        ? new THREE.Euler(box.rotation[0] ?? 0, box.rotation[1] ?? 0, box.rotation[2] ?? 0, 'XYZ')
+        : new THREE.Euler(0, box.rotationY ?? 0, 0);
       const mesh = new THREE.Mesh(this.geometries.box, this.materials[box.material] ?? this.materials.structure);
       mesh.name = box.name;
       mesh.scale.copy(size);
@@ -443,6 +460,8 @@ export class Arena {
         arenaWall: box.wall ?? false,
         arenaSurface: box.surface ?? false,
         cover: box.material === 'cover',
+        role: box.role ?? box.material ?? 'structure',
+        ramp: box.name.endsWith('_RAMP'),
       });
     }
   }
@@ -640,6 +659,9 @@ export class Arena {
         ));
       }
     }
+    for (const point of spawnConfig.enemyPoints ?? []) {
+      this.enemySpawnPoints.push(new THREE.Vector3().fromArray(point));
+    }
 
     const navigation = this.mapConfig.navigation;
     if (navigation.nodes) {
@@ -752,9 +774,10 @@ export class Arena {
     return body;
   }
 
-  _addStaticCylinder(name, radius, height, position) {
+  _addStaticCylinder(name, radius, height, position, userData = {}) {
     const upright = new CANNON.Quaternion();
-    upright.setFromEuler(-Math.PI / 2, 0, 0);
+    // cannon-es cylinders are Y-up already. Rotating by -90° laid every
+    // collider on its side while the corresponding mesh remained upright.
     const body = new CANNON.Body({
       mass: 0,
       type: CANNON.Body.STATIC,
@@ -766,7 +789,7 @@ export class Arena {
       collisionFilterMask: -1,
     });
     body.name = name;
-    body.userData = { arena: true, blocksLineOfSight: true };
+    body.userData = { arena: true, blocksLineOfSight: true, ...userData };
     this.world.addBody(body);
     this.staticBodies.push(body);
     return body;
@@ -931,6 +954,72 @@ export class Arena {
       if (edge.kind === 'bridge-east') edge.enabled = eastEnabled;
       if (edge.kind === 'bridge-west') edge.enabled = westEnabled;
     }
+  }
+
+  /**
+   * Returns the actual horizontal play area inside the visible boundary.
+   * Consumers should use this instead of assuming that every map is circular.
+   */
+  getMovementBounds(margin = 1.25) {
+    const safeMargin = Math.max(0, Number(margin) || 0);
+    const foundation = this.mapConfig.foundation;
+    if (foundation.shape === 'box') {
+      const halfWidth = foundation.size[0] * 0.5;
+      const halfDepth = foundation.size[2] * 0.5;
+      return {
+        shape: 'box',
+        minX: -Math.max(0, halfWidth - safeMargin),
+        maxX: Math.max(0, halfWidth - safeMargin),
+        minZ: -Math.max(0, halfDepth - safeMargin),
+        maxZ: Math.max(0, halfDepth - safeMargin),
+      };
+    }
+
+    const boundary = foundation.boundary;
+    const visibleInnerRadius = boundary?.count > 0
+      ? boundary.radius - (boundary.size?.[2] ?? 0) * 0.5
+      : foundation.radius - 1;
+    return {
+      shape: 'disc',
+      centerX: 0,
+      centerZ: 0,
+      radius: Math.max(0, visibleInnerRadius - safeMargin),
+    };
+  }
+
+  /**
+   * Finds the highest traversable physics surface below/near a position.
+   * The bounded window prevents ground-following actors from snapping onto a
+   * gantry several metres above their current route.
+   */
+  getSurfaceHeight(position, options = {}) {
+    if (!this.world) return null;
+    const point = asThreeVector(position);
+    const currentY = Number.isFinite(options.currentY) ? options.currentY : point.y;
+    const defaultAbove = Math.max(2, this.mapConfig.bounds.maxY - currentY + 2);
+    const defaultBelow = Math.max(2, currentY - this.mapConfig.bounds.minY + 2);
+    const above = Math.max(0, Number.isFinite(options.above) ? options.above : defaultAbove);
+    const below = Math.max(0, Number.isFinite(options.below) ? options.below : defaultBelow);
+    const from = new CANNON.Vec3(point.x, currentY + above, point.z);
+    const to = new CANNON.Vec3(point.x, currentY - below, point.z);
+    let surfaceY = -Infinity;
+
+    this.world.raycastAll(
+      from,
+      to,
+      {
+        skipBackfaces: false,
+        collisionFilterMask: ARENA_COLLISION_GROUP,
+        collisionFilterGroup: -1,
+        checkCollisionResponse: true,
+      },
+      (result) => {
+        if (!result.body?.userData?.arenaSurface) return;
+        const hitY = result.hitPointWorld.y;
+        if (hitY <= from.y + 1e-4 && hitY >= to.y - 1e-4) surfaceY = Math.max(surfaceY, hitY);
+      },
+    );
+    return Number.isFinite(surfaceY) ? surfaceY : null;
   }
 
   getSafePlayerSpawn() {
