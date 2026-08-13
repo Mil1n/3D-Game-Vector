@@ -15,6 +15,7 @@ import { WeaponSystem } from '../combat/WeaponSystem.js';
 import { EnemySystem } from '../combat/EnemySystem.js';
 import { EffectsSystem } from '../combat/EffectsSystem.js';
 import { RunDirector } from '../systems/RunDirector.js';
+import { MomentumSystem } from '../systems/MomentumSystem.js';
 import { UpgradeSystem } from '../systems/UpgradeSystem.js';
 import { AchievementSystem } from '../systems/AchievementSystem.js';
 import { UIManager } from '../ui/UIManager.js';
@@ -31,7 +32,7 @@ const TUTORIAL_STEPS = Object.freeze([
   { title: 'ВЕРТИКАЛЬНЫЙ ИМПУЛЬС', text: 'Перепрыгните препятствие. Доступны coyote time и буфер прыжка.', keys: ['SPACE'] },
   { title: 'УКЛОНЕНИЕ', text: 'Выполните энергетический рывок или начните скольжение из спринта.', keys: ['Q', 'SHIFT + CTRL'] },
   { title: 'ОГНЕВОЙ КОНТАКТ', text: 'Стреляйте и используйте точное прицеливание.', keys: ['ЛКМ', 'ПКМ'] },
-  { title: 'БОЕВОЙ ЦИКЛ', text: 'Перезарядите оружие. Клавиши 1–5 мгновенно меняют платформу.', keys: ['R', '1', '2', '3', '4', '5'] },
+  { title: 'БОЕВОЙ ЦИКЛ', text: 'Перезаряжайтесь, меняйте платформы для Momentum и нажмите F при полном заряде Overdrive.', keys: ['R', '1', '2', '3', '4', '5', 'F'] },
   { title: 'СТАБИЛИЗАЦИЯ', text: 'Подойдите к янтарной цели и удерживайте взаимодействие.', keys: ['E'] },
   { title: 'АДАПТАЦИЯ', text: 'После награды выберите один временный модуль.', keys: ['1', '2', '3'] },
 ]);
@@ -131,6 +132,7 @@ export class Game {
     this.enemies = null;
     this.weapons = null;
     this.upgrades = null;
+    this.momentum = null;
     this.director = null;
     this.achievements = null;
     this.debug = null;
@@ -248,6 +250,7 @@ export class Game {
     });
     this.upgrades = new UpgradeSystem({ eventBus: this.eventBus });
     this.upgrades.reset({ player: this.player, weaponSystem: this.weapons });
+    this.momentum = new MomentumSystem({ eventBus: this.eventBus });
     this.director = new RunDirector({
       scene: this.sceneManager.scene,
       eventBus: this.eventBus,
@@ -258,6 +261,7 @@ export class Game {
       effects: this.effects,
       audioManager: this.audio,
       upgradeSystem: this.upgrades,
+      momentumSystem: this.momentum,
     });
     this.debugLayer = new THREE.Group();
     this.debugLayer.name = 'Debug visual layer';
@@ -340,6 +344,33 @@ export class Game {
     on('director:upgrade-request', ({ options }) => this.openUpgrade(options));
     on('director:ended', (payload) => void this.finishMatch(payload));
 
+    on('momentum:changed', ({ state }) => this.pushMomentumHUD(state));
+    on('momentum:rank-changed', ({ rank, direction, state }) => {
+      if (direction !== 'down') this.audio.playMomentumRank?.(rank);
+      this.pushMomentumHUD(state);
+    });
+    on('style:action', ({ label, state }) => {
+      this.pushMomentumHUD(state, label);
+    });
+    on('overdrive:ready', ({ state }) => {
+      this.pushMomentumHUD(state);
+      this.ui.showToast({
+        type: 'upgrade',
+        title: 'OVERDRIVE ГОТОВ',
+        message: 'Нажмите F, чтобы ускорить оператора и вооружение.',
+        duration: 3200,
+      });
+    });
+    on('overdrive:activated', ({ effects, state }) => {
+      this.setOverdriveEffects(true, effects, 'activated');
+      this.pushMomentumHUD(state);
+    });
+    on('overdrive:extended', ({ state }) => this.pushMomentumHUD(state));
+    on('overdrive:ended', ({ reason, state }) => {
+      this.setOverdriveEffects(false, {}, reason);
+      this.pushMomentumHUD(state);
+    });
+
     on('combat:hit', ({ zone, killed }) => {
       this.ui.setHitmarker(zone === 'head' ? 'headshot' : killed ? 'kill' : 'body');
       this.ui.setCrosshair({ state: 'enemy', target: true });
@@ -412,12 +443,32 @@ export class Game {
         teleport: (x, y, z) => { this.player.teleport(new THREE.Vector3(Number(x), Number(y), Number(z))); return `teleported: ${x}, ${y}, ${z}`; },
         restartMatch: () => { void this.restartMatch(); return 'match restarted'; },
         setTimeScale: (scale) => { this.timeScale = THREE.MathUtils.clamp(Number(scale) || 1, 0.1, 5); return `timescale: ${this.timeScale}`; },
+        fillOverdrive: () => {
+          const actions = ['eliteKill', 'headshot', 'slideKill', 'airKill', 'multiKill'];
+          let index = 0;
+          while (!this.momentum.getState().overdrive.ready && index < 100) {
+            this.momentum.recordAction(actions[index % actions.length], {
+              enemyType: `debug-${index % 7}`,
+              weapon: this.weapons.currentId,
+              count: 3,
+            });
+            index += 1;
+          }
+          return 'overdrive: ready';
+        },
       },
     });
     this.debug.registerMetric('State', () => this.state.state);
     this.debug.registerMetric('Arena', () => this.arena.getMapInfo().shortName);
     this.debug.registerMetric('Accuracy', () => `${(this.weapons.getAccuracy() * 100).toFixed(1)}%`);
     this.debug.registerMetric('Time scale', () => this.timeScale.toFixed(2));
+    this.debug.registerMetric('Momentum', () => `${this.momentum.getState().momentum.toFixed(1)} / 100`);
+    this.debug.registerMetric('Style rank', () => this.momentum.getState().rank);
+    this.debug.registerMetric('Overdrive', () => {
+      const state = this.momentum.getState().overdrive;
+      return state.active ? `${state.remaining.toFixed(1)} s` : state.ready ? 'ready' : 'charging';
+    });
+    this.debug.registerCommand('filloverdrive', () => this.debug.hooks.fillOverdrive(), 'charge Overdrive');
   }
 
   async startMatch({ difficulty = this.matchDifficulty, tutorial = false, mapId = null, map = null } = {}) {
@@ -461,6 +512,8 @@ export class Game {
     this.weapons.reset();
     this.weapons.setEnabled(true);
     this.upgrades.reset({ player: this.player, weaponSystem: this.weapons });
+    this.momentum?.reset?.();
+    this.setOverdriveEffects?.(false, {}, 'reset');
     this.director.reset({ difficulty: this.matchDifficulty, tutorial: this.matchTutorial });
     this.achievements.beginRun();
     this.lastHud = {};
@@ -543,6 +596,8 @@ export class Game {
   async finishMatch({ victory, cause, stats }) {
     if (![GAME_STATES.PLAYING, GAME_STATES.TUTORIAL, GAME_STATES.UPGRADE_SELECTION].includes(this.state.state)) return;
     const resultState = victory ? GAME_STATES.VICTORY : GAME_STATES.DEFEAT;
+    const overdriveWasActive = this.momentum?.endOverdrive?.('match-ended') === true;
+    if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'match-ended');
     this.state.transition(resultState, { cause });
     this.weapons.setEnabled(false);
     void this.input.exitPointerLock();
@@ -566,6 +621,8 @@ export class Game {
   returnToMenu({ show = true } = {}) {
     if (this.director) this.director.running = false;
     this.weapons?.setEnabled(false);
+    const overdriveWasActive = this.momentum?.endOverdrive?.('menu') === true;
+    if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'menu');
     this.audio.stopAll('weapons');
     this.audio.stopAll('effects');
     this.input.clear();
@@ -678,15 +735,27 @@ export class Game {
     }
     this.physicsAccumulator = Math.min(FIXED_STEP * MAX_SUB_STEPS, this.physicsAccumulator + delta);
     let steps = 0;
-    if (this.physicsAccumulator >= FIXED_STEP) this.gameplayInput.beginStepBatch();
+    if (this.physicsAccumulator >= FIXED_STEP) {
+      this.gameplayInput.beginStepBatch();
+      if (this.gameplayInput.wasPressed('overdrive')) this.momentum?.activateOverdrive?.();
+    }
     while (this.physicsAccumulator >= FIXED_STEP && steps < MAX_SUB_STEPS && PLAYING_STATES.has(this.state.state)) {
+      const momentumState = this.momentum?.getState?.();
+      const worldTimeScale = momentumState?.overdrive?.active
+        ? Number(this.momentum.config?.overdrive?.effects?.worldTimeScale ?? 0.86)
+        : 1;
+      const worldDelta = FIXED_STEP * THREE.MathUtils.clamp(worldTimeScale, 0.5, 1);
       this.player.fixedUpdate(this.gameplayInput, FIXED_STEP);
       this.world.step(FIXED_STEP);
       this.weapons.update(FIXED_STEP, this.gameplayInput);
-      this.enemies.update(FIXED_STEP);
-      this.director.update(FIXED_STEP, this.gameplayInput);
+      this.enemies.update(worldDelta);
+      this.director.update(worldDelta, this.gameplayInput);
       this.effects.update(FIXED_STEP);
-      this.arena.update(FIXED_STEP, this.player.position);
+      this.arena.update(worldDelta, this.player.position);
+      this.momentum?.update?.(FIXED_STEP, {
+        moving: this.player.horizontalSpeed > 0.35,
+        speed: this.player.horizontalSpeed,
+      });
       this.physicsAccumulator -= FIXED_STEP;
       steps += 1;
     }
@@ -703,6 +772,43 @@ export class Game {
     if (this.player.position.y < -8) {
       this.player.damage(24, { source: 'arena', cause: 'Падение за пределы решётки', bypassArmor: true });
       this.player.teleport(this.arena.getSafePlayerSpawn());
+    }
+  }
+
+  pushMomentumHUD(state = this.momentum?.getState?.(), actionLabel = null) {
+    if (!state) return;
+    const duration = Number(this.momentum?.config?.overdrive?.duration ?? 8);
+    const momentum = {
+      ...state,
+      normalized: THREE.MathUtils.clamp(Number(state.momentum ?? 0) / 100, 0, 1),
+      actionLabel: actionLabel ?? state.lastAction ?? null,
+      actionRemaining: Number(state.lastActionRemaining ?? 0),
+    };
+    const overdrive = {
+      ...state.overdrive,
+      duration,
+      key: this.settings.get('controls.bindings.overdrive', 'KeyF'),
+    };
+    this.lastHud = { ...this.lastHud, momentum, overdrive };
+    this.ui.updateHUD(this.lastHud);
+  }
+
+  setOverdriveEffects(active, effects = {}, reason = 'manual') {
+    const enabled = Boolean(active);
+    const wasEnabled = Boolean(this.player?.overdriveActive || this.weapons?.runtimeModifiers?.overdrive);
+    this.player?.setOverdrive?.(enabled, effects);
+    this.weapons?.setOverdrive?.(enabled, effects);
+    this.audio?.setOverdriveActive?.(enabled, {
+      cue: enabled || (wasEnabled && reason !== 'reset' && reason !== 'menu'),
+    });
+    if (
+      this.effects?.spawnOverdrivePulse
+      && this.player?.position
+      && (enabled || wasEnabled)
+      && reason !== 'reset'
+      && reason !== 'menu'
+    ) {
+      this.effects.spawnOverdrivePulse(this.player.position, enabled ? 'start' : 'end', enabled ? 1.2 : 0.8);
     }
   }
 
@@ -842,6 +948,8 @@ export class Game {
 
   handleRuntimeError(error) {
     console.error('[Game] Runtime failure.', error);
+    const overdriveWasActive = this.momentum?.endOverdrive?.('runtime-error') === true;
+    if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'runtime-error');
     this.running = false;
     cancelAnimationFrame(this.raf);
     this.ui.showError({ title: 'Симуляция остановлена', detail: error.message, code: 'RUNTIME_FAILURE' });
@@ -853,11 +961,14 @@ export class Game {
     this.running = false;
     cancelAnimationFrame(this.raf);
     window.clearTimeout(this.profileSaveTimer);
+    const overdriveWasActive = this.momentum?.endOverdrive?.('dispose') === true;
+    if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'dispose');
     for (const unsubscribe of this.unsubscribers) unsubscribe?.();
     this.unsubscribers.length = 0;
     this.clearDebugVisuals();
     this.debug?.dispose();
     this.achievements?.dispose();
+    this.momentum?.dispose?.();
     this.director?.dispose();
     this.weapons?.dispose();
     this.enemies?.dispose();

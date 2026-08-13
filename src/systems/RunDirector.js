@@ -143,6 +143,7 @@ export class RunDirector {
     effects,
     audioManager,
     upgradeSystem,
+    momentumSystem = null,
     random = Math.random,
     runConfig = GAME_CONFIG.run,
   }) {
@@ -155,6 +156,7 @@ export class RunDirector {
     this.effects = effects;
     this.audio = audioManager;
     this.upgradeSystem = upgradeSystem;
+    this.momentumSystem = momentumSystem;
     this.random = random;
     this.runConfig = runConfig ?? GAME_CONFIG.run;
     this.maxDurationSeconds = Number.isFinite(this.runConfig.maxDurationSeconds)
@@ -313,15 +315,27 @@ export class RunDirector {
     const completed = this.objective;
     if (!completed || completed.type === 'survive') return;
     this.stats.objectives += 1;
+    this.momentumSystem?.recordAction?.('challengeComplete', {
+      objective: completed.type,
+      phase: this.phase,
+    });
+    const momentum = this.getMomentumState();
     const reward = this.phase === PHASES.RECON ? 400 : this.phase === PHASES.FINAL ? 1800 : 750;
-    this.stats.score += reward;
-    this.stats.experience += Math.round(reward * 0.16);
+    const scoreReward = Math.round(reward * momentum.scoreMultiplier);
+    const experienceReward = Math.round(reward * 0.16 * momentum.xpMultiplier);
+    this.stats.score += scoreReward;
+    this.stats.experience += experienceReward;
     this.player.heal?.(this.phase === PHASES.RECON ? 18 : 10);
     this.weaponSystem.addAmmo?.(this.phase === PHASES.RECON ? 35 : 22);
     this.audio?.playUI?.('objective');
     this.effects.spawnShiftPulse(completed.position, 6);
-    this.eventBus?.emit?.('director:objective-complete', { objective: completed, reward });
-    this.eventBus?.emit?.('director:announcement', { title: 'ЗАДАЧА ВЫПОЛНЕНА', detail: `+${reward} // ресурсный импульс`, duration: 2.4 });
+    this.eventBus?.emit?.('director:objective-complete', {
+      objective: completed,
+      reward,
+      scoreReward,
+      experienceReward,
+    });
+    this.eventBus?.emit?.('director:announcement', { title: 'ЗАДАЧА ВЫПОЛНЕНА', detail: `+${scoreReward} // ресурсный импульс`, duration: 2.4 });
     this.objectiveVisual.visible = false;
     this.objective = null;
     this.eventBus?.emit?.('director:interact', null);
@@ -627,9 +641,9 @@ export class RunDirector {
     this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
     this.comboTimer = 4.2;
     this.stats.bestCombo = Math.max(this.stats.bestCombo, this.combo);
-    const multiplier = 1 + Math.min(2, (this.combo - 1) * 0.12);
-    this.stats.score += Math.round((event.score ?? 100) * multiplier);
-    this.stats.experience += event.elite ? 220 : 18;
+    const momentum = this.getMomentumState();
+    this.stats.score += Math.round((event.score ?? 100) * momentum.scoreMultiplier);
+    this.stats.experience += Math.round((event.elite ? 220 : 18) * momentum.xpMultiplier);
     const blast = this.upgradeSystem.onKill({ headshot: event.headshot });
     if (blast > 0 && event.position) {
       this.effects.spawnExplosion(event.position, 2.8, 0x67f5ff);
@@ -689,10 +703,29 @@ export class RunDirector {
     return Math.max(0, this.nextAmbientShift - this.matchTime);
   }
 
+  getMomentumState() {
+    const state = this.momentumSystem?.getState?.() ?? {};
+    const scoreMultiplier = Number(state.scoreMultiplier);
+    const xpMultiplier = Number(state.xpMultiplier);
+    return {
+      ...state,
+      momentum: Number.isFinite(Number(state.momentum)) ? Number(state.momentum) : 0,
+      rank: state.rank ?? 'D',
+      multiplier: Number.isFinite(Number(state.multiplier)) ? Number(state.multiplier) : 1,
+      scoreMultiplier: Number.isFinite(scoreMultiplier) && scoreMultiplier > 0 ? scoreMultiplier : 1,
+      xpMultiplier: Number.isFinite(xpMultiplier) && xpMultiplier > 0 ? xpMultiplier : 1,
+      styleScore: Number.isFinite(Number(state.styleScore)) ? Number(state.styleScore) : 0,
+      overdrive: state.overdrive && typeof state.overdrive === 'object'
+        ? { ...state.overdrive }
+        : { ready: false, active: false, remaining: 0 },
+    };
+  }
+
   pushHUD(force = false) {
     if (!force && this.hudTimer > 0) return;
     const weapon = this.weaponSystem.getState();
     const dash = this.player.getDashState?.() ?? { ready: 1 };
+    const momentum = this.getMomentumState();
     this.eventBus?.emit?.('director:hud', {
       health: Math.max(0, Math.ceil(this.player.health ?? 0)),
       maxHealth: Math.ceil(this.player.maxHealth ?? 100),
@@ -712,6 +745,8 @@ export class RunDirector {
       upgrades: this.upgradeSystem.getActive(),
       score: this.stats.score,
       combo: this.combo,
+      momentum,
+      overdrive: momentum.overdrive,
       phase: PHASE_LABELS[this.phase],
       shiftCountdown: this.getShiftCountdown(),
       matchTime: this.matchTime,
@@ -720,6 +755,7 @@ export class RunDirector {
 
   getStats() {
     const accuracy = this.weaponSystem.getAccuracy();
+    const momentum = this.momentumSystem?.getStats?.() ?? {};
     return {
       duration: this.matchTime,
       kills: this.stats.kills,
@@ -734,6 +770,11 @@ export class RunDirector {
       score: this.stats.score,
       objectives: this.stats.objectives,
       difficulty: this.difficulty,
+      bestStyleRank: momentum.bestRank ?? 'D',
+      peakMomentum: Number.isFinite(Number(momentum.peakMomentum)) ? Number(momentum.peakMomentum) : 0,
+      styleScore: Number.isFinite(Number(momentum.styleScore)) ? Number(momentum.styleScore) : 0,
+      overdriveActivations: Number.isFinite(Number(momentum.overdriveActivations)) ? Number(momentum.overdriveActivations) : 0,
+      overdriveTime: Number.isFinite(Number(momentum.overdriveTime)) ? Number(momentum.overdriveTime) : 0,
     };
   }
 

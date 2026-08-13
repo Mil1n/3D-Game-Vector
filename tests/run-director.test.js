@@ -7,7 +7,7 @@ import { PHASES, RunDirector } from '../src/systems/RunDirector.js';
 
 const idleInput = { isDown: () => false };
 
-function createHarness({ choices = [], runConfig = GAME_CONFIG.run, random = () => 0.9 } = {}) {
+function createHarness({ choices = [], runConfig = GAME_CONFIG.run, random = () => 0.9, momentumSystem = null } = {}) {
   const events = [];
   const spawned = [];
   const shifts = [];
@@ -85,11 +85,44 @@ function createHarness({ choices = [], runConfig = GAME_CONFIG.run, random = () 
     effects: { spawnShiftPulse() {}, spawnExplosion() {} },
     audioManager: { playUI() {}, playEnvironment() {} },
     upgradeSystem,
+    momentumSystem,
     random,
     runConfig,
   });
 
   return { director, enemySystem, events, spawned, shifts, upgradeSystem, weaponState };
+}
+
+function createMomentumStub({ state = {}, stats = {} } = {}) {
+  const actions = [];
+  const currentState = {
+    momentum: 0,
+    rank: 'D',
+    bestRank: 'D',
+    multiplier: 1,
+    scoreMultiplier: 1,
+    xpMultiplier: 1,
+    styleScore: 0,
+    overdrive: { ready: false, active: false, remaining: 0 },
+    ...state,
+  };
+  return {
+    actions,
+    state: currentState,
+    recordAction(action, context) {
+      actions.push({ action, context });
+      return { action, accepted: true };
+    },
+    getState: () => ({ ...currentState, overdrive: { ...currentState.overdrive } }),
+    getStats: () => ({
+      bestRank: currentState.bestRank,
+      peakMomentum: currentState.momentum,
+      styleScore: currentState.styleScore,
+      overdriveActivations: 0,
+      overdriveTime: 0,
+      ...stats,
+    }),
+  };
 }
 
 test('periodic HUD refresh publishes the currently selected weapon', (t) => {
@@ -106,6 +139,118 @@ test('periodic HUD refresh publishes the currently selected weapon', (t) => {
   assert.equal(hud?.weaponId, 'plasma');
   assert.equal(hud?.weapon, 'PX-7 Поток');
   assert.equal(hud?.ammo, 48);
+});
+
+test('Momentum multipliers replace combo reward scaling while combo tracking remains intact', (t) => {
+  const momentumSystem = createMomentumStub({
+    state: { momentum: 82, rank: 'SS', multiplier: 2.5, scoreMultiplier: 2.5, xpMultiplier: 1.4 },
+  });
+  const { director } = createHarness({ momentumSystem });
+  t.after(() => director.dispose());
+  director.start();
+
+  director.onEnemyKilled({ type: 'trooper', score: 100 });
+  director.onEnemyKilled({ type: 'trooper', score: 100 });
+
+  assert.equal(director.combo, 2);
+  assert.equal(director.stats.bestCombo, 2);
+  assert.equal(director.stats.score, 500, 'the second kill must not multiply Momentum by the old combo bonus');
+  assert.equal(director.stats.experience, 50);
+});
+
+test('objective completion records style before applying current Momentum rewards', (t) => {
+  const momentumSystem = createMomentumStub();
+  momentumSystem.recordAction = (action, context) => {
+    momentumSystem.actions.push({ action, context });
+    Object.assign(momentumSystem.state, {
+      momentum: 60,
+      rank: 'S',
+      multiplier: 2,
+      scoreMultiplier: 2,
+      xpMultiplier: 1.5,
+    });
+    return { action, accepted: true };
+  };
+  const { director, events } = createHarness({ momentumSystem });
+  t.after(() => director.dispose());
+  director.start();
+  director.forceCompleteObjective();
+
+  assert.deepEqual(momentumSystem.actions, [{
+    action: 'challengeComplete',
+    context: { objective: 'activate', phase: PHASES.RECON },
+  }]);
+  assert.equal(director.stats.score, 800);
+  assert.equal(director.stats.experience, 96);
+  const completion = events.find(({ name }) => name === 'director:objective-complete')?.payload;
+  assert.equal(completion?.reward, 400, 'the existing event reward keeps its base-value contract');
+  assert.equal(completion?.scoreReward, 800);
+  assert.equal(completion?.experienceReward, 96);
+});
+
+test('HUD and results expose canonical Momentum and Overdrive state', (t) => {
+  const momentumSystem = createMomentumStub({
+    state: {
+      momentum: 73,
+      rank: 'S',
+      bestRank: 'SS',
+      multiplier: 2,
+      scoreMultiplier: 2,
+      xpMultiplier: 1.28,
+      styleScore: 4321,
+      lastAction: 'AIR SUPERIORITY',
+      overdrive: { ready: false, active: true, remaining: 6.4 },
+    },
+    stats: {
+      bestRank: 'SS',
+      peakMomentum: 100,
+      styleScore: 4321,
+      overdriveActivations: 2,
+      overdriveTime: 13.75,
+    },
+  });
+  const { director, events } = createHarness({ momentumSystem });
+  t.after(() => director.dispose());
+  director.start();
+
+  const hud = events.filter(({ name }) => name === 'director:hud').at(-1)?.payload;
+  assert.equal(hud?.momentum.momentum, 73);
+  assert.equal(hud?.momentum.rank, 'S');
+  assert.equal(hud?.momentum.styleScore, 4321);
+  assert.deepEqual(hud?.overdrive, { ready: false, active: true, remaining: 6.4 });
+
+  const results = director.getStats();
+  assert.equal(results.bestStyleRank, 'SS');
+  assert.equal(results.peakMomentum, 100);
+  assert.equal(results.styleScore, 4321);
+  assert.equal(results.overdriveActivations, 2);
+  assert.equal(results.overdriveTime, 13.75);
+});
+
+test('RunDirector keeps neutral rewards and canonical defaults without MomentumSystem', (t) => {
+  const { director, events } = createHarness();
+  t.after(() => director.dispose());
+  director.start();
+  director.onEnemyKilled({ type: 'trooper', score: 125 });
+
+  assert.equal(director.stats.score, 125);
+  assert.equal(director.stats.experience, 18);
+  const hud = events.filter(({ name }) => name === 'director:hud').at(-1)?.payload;
+  assert.equal(hud?.momentum.momentum, 0);
+  assert.equal(hud?.momentum.rank, 'D');
+  assert.deepEqual(hud?.overdrive, { ready: false, active: false, remaining: 0 });
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(director.getStats()).filter(([key]) => [
+      'bestStyleRank', 'peakMomentum', 'styleScore', 'overdriveActivations', 'overdriveTime',
+    ].includes(key))),
+    {
+      bestStyleRank: 'D',
+      peakMomentum: 0,
+      styleScore: 0,
+      overdriveActivations: 0,
+      overdriveTime: 0,
+    },
+  );
 });
 
 test('early objectives become spawning survive interludes and respect every phase gate', (t) => {

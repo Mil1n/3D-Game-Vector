@@ -77,6 +77,115 @@ test('input activation prompt is an accessible non-blocking persistent shell ele
   assert.match(markup, /data-ui-input-activation hidden/);
 });
 
+test('HUD shell exposes Momentum, Overdrive and the default activation key', () => {
+  const ui = Object.create(UIManager.prototype);
+  const markup = ui._shellMarkup();
+
+  assert.match(markup, /data-hud-panel="momentum"/);
+  assert.match(markup, /role="meter"/);
+  assert.match(markup, /data-meter="momentum"/);
+  assert.match(markup, /data-hud="momentum-action-time"/);
+  assert.match(markup, /data-hud-panel="overdrive"/);
+  assert.match(markup, /data-meter="overdrive"/);
+  assert.match(markup, /data-hud="overdrive-key">F</);
+  assert.match(markup, /overdrive-screen-effect/);
+});
+
+test('Momentum and Overdrive controls are listed with a remappable KeyF default', () => {
+  const ui = Object.create(UIManager.prototype);
+  ui.settings = {};
+
+  const settingsMarkup = ui._settingsTabMarkup('controls');
+  const controlsMarkup = ui._controlsMarkup();
+
+  assert.match(settingsMarkup, /controls\.bindings\.overdrive/);
+  assert.match(settingsMarkup, /Активировать Overdrive/);
+  assert.match(controlsMarkup, /Momentum/);
+  assert.match(controlsMarkup, />F</);
+});
+
+function createHudUpdateHarness() {
+  const nodes = new Map();
+  const element = (selector) => {
+    if (!nodes.has(selector)) {
+      const classes = new Set();
+      nodes.set(selector, {
+        textContent: '',
+        title: '',
+        attrs: {},
+        style: { values: {}, setProperty(key, value) { this.values[key] = value; } },
+        classList: {
+          toggle(name, enabled) { enabled ? classes.add(name) : classes.delete(name); },
+          contains(name) { return classes.has(name); },
+        },
+        setAttribute(key, value) { this.attrs[key] = value; },
+      });
+    }
+    return nodes.get(selector);
+  };
+  const rootClasses = new Set();
+  const hudClasses = new Set();
+  const ui = Object.create(UIManager.prototype);
+  ui._ensureInit = () => {};
+  ui.hudState = {};
+  ui.overdriveDisplayDuration = 0;
+  ui.settings = { controls: { bindings: { overdrive: 'KeyF' } } };
+  ui.root = {
+    querySelector: element,
+    classList: { toggle(name, enabled) { enabled ? rootClasses.add(name) : rootClasses.delete(name); } },
+  };
+  ui.hud = {
+    classList: { toggle(name, enabled) { enabled ? hudClasses.add(name) : hudClasses.delete(name); } },
+  };
+  ui._renderHudUpgrades = () => {};
+  ui._updateInteract = () => {};
+  ui._setText = (key, value) => { element(`[data-hud="${key}"]`).textContent = String(value ?? ''); };
+  ui._setMeter = (key, value) => { element(`[data-meter="${key}"]`).style.setProperty('--value', `${Number(value) * 100}%`); };
+  return { ui, element, rootClasses, hudClasses };
+}
+
+test('HUD renders canonical Momentum state and active Overdrive countdown', () => {
+  const { ui, element, rootClasses, hudClasses } = createHudUpdateHarness();
+  ui.updateHUD({
+    momentum: { value: 78, rank: 'S', multiplier: 2.35, action: { label: 'ВОЗДУШНАЯ ЛИКВИДАЦИЯ', remaining: 1.4 } },
+    overdrive: { active: true, ready: false, remaining: 4.25, duration: 8, key: 'KeyF' },
+  });
+
+  assert.equal(element('[data-hud="momentum-rank"]').textContent, 'S');
+  assert.equal(element('[data-hud="momentum-multiplier"]').textContent, '×2.35');
+  assert.equal(element('[data-hud="momentum-action"]').textContent, 'ВОЗДУШНАЯ ЛИКВИДАЦИЯ');
+  assert.equal(element('[data-hud="momentum-action-time"]').textContent, '1.4 с');
+  assert.equal(element('[data-hud="overdrive-status"]').textContent, 'АКТИВЕН');
+  assert.equal(element('[data-hud="overdrive-time"]').textContent, '4.3 с');
+  assert.equal(element('[data-hud="overdrive-key"]').textContent, 'F');
+  assert.equal(rootClasses.has('is-overdrive-active'), true);
+  assert.equal(hudClasses.has('is-overdrive-active'), true);
+  assert.equal(element('[data-hud-panel="momentum"]').attrs['aria-valuenow'], '78');
+});
+
+test('HUD accepts flat Momentum fallback fields and marks Overdrive ready', () => {
+  const { ui, element, rootClasses } = createHudUpdateHarness();
+  ui.updateHUD({ momentumValue: 100, momentumRank: 'SSS', styleMultiplier: 3, styleAction: 'МУЛЬТИКИЛЛ', styleActionRemaining: 0.8, overdriveReady: true });
+
+  assert.equal(element('[data-hud="momentum-rank"]').textContent, 'SSS');
+  assert.equal(element('[data-hud="overdrive-status"]').textContent, 'ГОТОВ');
+  assert.equal(element('[data-hud="overdrive-time"]').textContent, 'F // АКТИВИРОВАТЬ');
+  assert.equal(rootClasses.has('is-overdrive-ready'), true);
+  assert.equal(rootClasses.has('is-overdrive-active'), false);
+});
+
+test('HUD accepts MomentumSystem getState as the nested momentum object', () => {
+  const { ui, element } = createHudUpdateHarness();
+  ui.updateHUD({
+    momentum: { momentum: 46, rank: 'A', multiplier: 1.6, lastAction: 'HEADHUNTER', overdrive: { ready: true, active: false, remaining: 0 } },
+  });
+
+  assert.equal(element('[data-hud="momentum-rank"]').textContent, 'A');
+  assert.equal(element('[data-hud="momentum-action"]').textContent, 'HEADHUNTER');
+  assert.equal(element('[data-hud-panel="momentum"]').attrs['aria-valuenow'], '46');
+  assert.equal(element('[data-hud="overdrive-status"]').textContent, 'ГОТОВ');
+});
+
 test('input activation prompt only displays over active gameplay and can be dismissed', () => {
   const ui = Object.create(UIManager.prototype);
   const toggles = [];

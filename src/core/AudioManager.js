@@ -36,6 +36,10 @@ const SOUND_PRESETS = Object.freeze({
   realityShift: { group: 'environment', duration: 1.5, gain: 0.38, noise: 0.65, filter: 2400, layers: [['sawtooth', 58, 580, 0.2], ['sine', 760, 65, 0.18]] },
   victory: { group: 'music', duration: 1.6, gain: 0.28, noise: 0, layers: [['triangle', 220, 880, 0.24], ['sine', 330, 1320, 0.15]] },
   defeat: { group: 'music', duration: 1.8, gain: 0.24, noise: 0.12, filter: 900, layers: [['sawtooth', 196, 48, 0.18], ['sine', 98, 42, 0.2]] },
+  momentumRank: { group: 'ui', duration: 0.34, gain: 0.2, noise: 0.03, filter: 5200, layers: [['triangle', 330, 990, 0.2], ['sine', 660, 1320, 0.12]] },
+  overdriveStart: { group: 'music', duration: 0.72, gain: 0.34, noise: 0.18, filter: 3200, layers: [['sawtooth', 82, 660, 0.22], ['sine', 220, 880, 0.28], ['triangle', 440, 1320, 0.12]] },
+  overdriveLoop: { group: 'music', duration: 4, gain: 0.12, noise: 0.035, filter: 2600, loop: true, layers: [['sawtooth', 82, 86, 0.1], ['triangle', 164, 172, 0.15], ['sine', 328, 344, 0.08]] },
+  overdriveEnd: { group: 'music', duration: 0.58, gain: 0.24, noise: 0.08, filter: 1800, layers: [['triangle', 880, 220, 0.22], ['sine', 440, 110, 0.18]] },
   ambience: { group: 'environment', duration: 8, gain: 0.12, noise: 0.12, filter: 440, loop: true, layers: [['sine', 46, 49, 0.3], ['triangle', 69, 73, 0.14]] },
   music: { group: 'music', duration: 8, gain: 0.1, noise: 0, loop: true, layers: [['sine', 55, 82.5, 0.22], ['triangle', 110, 165, 0.1]] },
 });
@@ -60,6 +64,12 @@ const ALIASES = Object.freeze({
   spawn: 'realityShift',
   enemyTelegraph: 'shiftWarning',
   enemyDeath: 'kill',
+  momentum: 'momentumRank',
+  momentumRankUp: 'momentumRank',
+  overdrive: 'overdriveStart',
+  overdriveActivate: 'overdriveStart',
+  overdriveActive: 'overdriveLoop',
+  overdriveDeactivate: 'overdriveEnd',
 });
 
 const clamp01 = (value) => Math.min(1, Math.max(0, Number(value) || 0));
@@ -280,6 +290,46 @@ export class AudioManager {
 
   playUI(soundId, options = {}) {
     return this.play(soundId, { group: 'ui', ...options });
+  }
+
+  playMomentumRank(rank = 'C', options = {}) {
+    const order = ['D', 'C', 'B', 'A', 'S', 'SS', 'SSS'];
+    const index = Math.max(0, order.indexOf(String(rank).toUpperCase()));
+    return this.play('momentumRank', {
+      group: 'ui',
+      pitch: 0.88 + index * 0.08,
+      gain: 0.72 + index * 0.045,
+      variation: false,
+      ...options,
+    });
+  }
+
+  playOverdriveStart(options = {}) {
+    return this.play('overdriveStart', { group: 'music', variation: false, ...options });
+  }
+
+  playOverdriveEnd(options = {}) {
+    return this.play('overdriveEnd', { group: 'music', variation: false, ...options });
+  }
+
+  startOverdriveLoop(options = {}) {
+    return this.#loops.get('overdriveLoop')
+      ?? this.play('overdriveLoop', { group: 'music', variation: false, ...options });
+  }
+
+  stopOverdriveLoop(fadeSeconds = 0.32) {
+    return this.#loops.get('overdriveLoop')?.stop(fadeSeconds) ?? false;
+  }
+
+  setOverdriveActive(active, options = {}) {
+    if (active) {
+      const alreadyActive = Boolean(this.#loops.get('overdriveLoop'));
+      if (!alreadyActive && options.cue !== false) this.playOverdriveStart(options.start ?? {});
+      return this.startOverdriveLoop(options.loop ?? {});
+    }
+    const stopped = this.stopOverdriveLoop(options.fadeSeconds);
+    if (stopped && options.cue !== false) this.playOverdriveEnd(options.end ?? {});
+    return stopped;
   }
 
   startAmbience(options = {}) {

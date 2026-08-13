@@ -17,6 +17,7 @@ export const DEFAULT_BINDINGS = freezeBindings({
   fire: ['Mouse0'],
   aim: ['Mouse2'],
   reload: ['KeyR'],
+  overdrive: ['KeyF'],
   weapon1: ['Digit1'],
   weapon2: ['Digit2'],
   weapon3: ['Digit3'],

@@ -173,6 +173,27 @@ export class EffectsSystem {
     ring.userData.life = ring.userData.duration;
   }
 
+  spawnOverdrivePulse(position, phase = 'start', intensity = 1) {
+    const ending = phase === 'end' || phase === 'ended' || phase === false;
+    const strength = Math.max(0.25, Number(intensity) || 1);
+    const ring = this.rings.next();
+    ring.position.copy(position);
+    ring.position.y += 0.08;
+    ring.rotation.set(-Math.PI / 2, 0, 0);
+    ring.material.color.set(ending ? 0x64f4ff : 0xff48c7);
+    ring.material.opacity = ending ? 0.68 : 0.95;
+    ring.scale.setScalar(ending ? 0.7 : 0.12);
+    ring.userData.maxScale = (ending ? 7 : 12) * strength;
+    ring.userData.duration = ending ? 0.48 : 0.82;
+    ring.userData.life = ring.userData.duration;
+    this.eventBus?.emit?.('effects:overdrive-pulse', {
+      phase: ending ? 'end' : 'start',
+      intensity: strength,
+      position: position.clone?.() ?? { ...position },
+    });
+    return ring;
+  }
+
   update(dt) {
     for (const tracer of this.tracers.items) {
       if (!tracer.visible) continue;

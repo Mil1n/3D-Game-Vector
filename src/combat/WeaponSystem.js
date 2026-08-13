@@ -411,7 +411,9 @@ export class WeaponSystem {
     this.weaponOrder = [...WEAPON_ORDER];
     this.index = 0;
     this.cooldown = 0;
+    this.cooldownKind = null;
     this.reloadRemaining = 0;
+    this.reloadDuration = 0;
     this.recoilKick = 0;
     this.modelKick = 0;
     this.adsAmount = 0;
@@ -420,6 +422,7 @@ export class WeaponSystem {
     this.shotsFired = 0;
     this.shotsHit = 0;
     this.modifiers = this.defaultModifiers();
+    this.runtimeModifiers = this.defaultRuntimeModifiers();
     this.ammo = new Map();
     this.models = new Map();
     this.tempOrigin = new THREE.Vector3();
@@ -451,6 +454,17 @@ export class WeaponSystem {
       headshotExplosion: 0,
       lowHealthDamage: 0,
       railAnomalyMultiplier: 1,
+    };
+  }
+
+  defaultRuntimeModifiers() {
+    return {
+      overdrive: false,
+      fireRate: 1,
+      reloadSpeed: 1,
+      switchSpeed: 1,
+      equipSpeed: 1,
+      impact: 1,
     };
   }
 
@@ -499,7 +513,9 @@ export class WeaponSystem {
 
   reset() {
     this.cooldown = 0;
+    this.cooldownKind = null;
     this.reloadRemaining = 0;
+    this.reloadDuration = 0;
     this.recoilKick = 0;
     this.modelKick = 0;
     this.adsAmount = 0;
@@ -508,6 +524,7 @@ export class WeaponSystem {
     this.shotsFired = 0;
     this.shotsHit = 0;
     this.modifiers = this.defaultModifiers();
+    this.runtimeModifiers = this.defaultRuntimeModifiers();
     for (const id of this.weaponOrder) {
       const config = resolveConfig(id);
       this.ammo.set(id, { magazine: config.magazine, reserve: config.reserve });
@@ -526,7 +543,17 @@ export class WeaponSystem {
   }
 
   applyModifiers(effects) {
-    if (effects.reloadMultiplier) this.modifiers.reloadMultiplier *= effects.reloadMultiplier;
+    if (effects.reloadMultiplier) {
+      const previousDuration = this.reloadDuration;
+      const progress = this.reloadRemaining > 0 && previousDuration > 0
+        ? THREE.MathUtils.clamp(1 - this.reloadRemaining / previousDuration, 0, 1)
+        : 0;
+      this.modifiers.reloadMultiplier *= effects.reloadMultiplier;
+      if (this.reloadRemaining > 0) {
+        this.reloadDuration = this.getReloadDuration();
+        this.reloadRemaining = this.reloadDuration * (1 - progress);
+      }
+    }
     if (effects.damageMultiplier) this.modifiers.damage *= effects.damageMultiplier;
     if (effects.shotgunPellets) this.modifiers.shotgunPellets += effects.shotgunPellets;
     if (effects.railRicochet) this.modifiers.railRicochet += effects.railRicochet;
@@ -535,8 +562,60 @@ export class WeaponSystem {
     if (effects.lowHealthDamage) this.modifiers.lowHealthDamage += effects.lowHealthDamage;
   }
 
+  setOverdrive(active, effects = {}) {
+    const previousDuration = this.reloadDuration;
+    const previousProgress = this.reloadRemaining > 0 && previousDuration > 0
+      ? THREE.MathUtils.clamp(1 - this.reloadRemaining / previousDuration, 0, 1)
+      : 0;
+    const enabled = Boolean(active);
+    const reloadTimeMultiplier = Number(effects.reloadTimeMultiplier ?? 0.62);
+    const switchTimeMultiplier = Number(effects.weaponSwitchTimeMultiplier ?? 0.55);
+    const previousFireRate = this.runtimeModifiers.fireRate;
+    const previousSwitchSpeed = this.runtimeModifiers.switchSpeed;
+    this.runtimeModifiers = enabled ? {
+      overdrive: true,
+      fireRate: THREE.MathUtils.clamp(Number(effects.fireRateMultiplier ?? 1.35), 1, 3),
+      reloadSpeed: 1 / THREE.MathUtils.clamp(
+        Number.isFinite(reloadTimeMultiplier) ? reloadTimeMultiplier : 0.62,
+        0.25,
+        1,
+      ),
+      switchSpeed: 1 / THREE.MathUtils.clamp(
+        Number.isFinite(switchTimeMultiplier) ? switchTimeMultiplier : 0.55,
+        0.25,
+        1,
+      ),
+      equipSpeed: 1 / THREE.MathUtils.clamp(
+        Number.isFinite(switchTimeMultiplier) ? switchTimeMultiplier : 0.55,
+        0.25,
+        1,
+      ),
+      impact: THREE.MathUtils.clamp(Number(effects.impactMultiplier ?? 1.4), 1, 3),
+    } : this.defaultRuntimeModifiers();
+    if (this.reloadRemaining > 0) {
+      this.reloadDuration = this.getReloadDuration();
+      this.reloadRemaining = this.reloadDuration * (1 - previousProgress);
+    }
+    if (this.cooldown > 0 && this.cooldownKind === 'fire') {
+      this.cooldown *= previousFireRate / this.runtimeModifiers.fireRate;
+    } else if (this.cooldown > 0 && this.cooldownKind === 'switch') {
+      this.cooldown *= previousSwitchSpeed / this.runtimeModifiers.switchSpeed;
+    }
+    this.eventBus?.emit?.('weapon:overdrive-changed', {
+      active: this.runtimeModifiers.overdrive,
+      ...this.runtimeModifiers,
+    });
+    this.emitState();
+    return { ...this.runtimeModifiers };
+  }
+
+  getReloadDuration(config = this.currentConfig) {
+    return config.reloadTime * this.modifiers.reloadMultiplier / this.runtimeModifiers.reloadSpeed;
+  }
+
   update(dt, input) {
     this.cooldown = Math.max(0, this.cooldown - dt);
+    if (this.cooldown === 0) this.cooldownKind = null;
     this.modelKick = THREE.MathUtils.damp(this.modelKick, 0, 18, dt);
     this.recoilKick = THREE.MathUtils.damp(this.recoilKick, 0, this.currentConfig.recoil?.recovery ?? 12, dt);
 
@@ -573,7 +652,7 @@ export class WeaponSystem {
     const model = this.currentModel;
     const config = this.currentConfig;
     const bob = this.player?.getViewBob?.() ?? { x: 0, y: 0 };
-    const reloadDuration = config.reloadTime * this.modifiers.reloadMultiplier;
+    const reloadDuration = this.reloadDuration || this.getReloadDuration(config);
     const reloadProgress = this.reloadRemaining > 0 && reloadDuration > 0
       ? THREE.MathUtils.clamp(1 - this.reloadRemaining / reloadDuration, 0, 1)
       : 0;
@@ -582,7 +661,7 @@ export class WeaponSystem {
     model.userData.equipAmount = THREE.MathUtils.damp(
       equipAmount,
       0,
-      4 / Math.max(0.12, config.equipTime ?? 0.3),
+      (4 / Math.max(0.12, config.equipTime ?? 0.3)) * this.runtimeModifiers.equipSpeed,
       dt,
     );
     const poseAds = this.adsAmount * (1 - reloadArc);
@@ -640,8 +719,13 @@ export class WeaponSystem {
     this.primeEquipPose(nextModel);
     nextModel.visible = this.enabled;
     this.reloadRemaining = 0;
+    this.reloadDuration = 0;
     this.modelKick = 0;
-    this.cooldown = Math.max(this.cooldown, 0.18);
+    const switchCooldown = 0.18 / this.runtimeModifiers.switchSpeed;
+    if (switchCooldown >= this.cooldown) {
+      this.cooldown = switchCooldown;
+      this.cooldownKind = 'switch';
+    }
     this.audio?.playUI?.('switch');
     this.eventBus?.emit?.('weapon:changed', this.getState());
     this.emitState();
@@ -654,13 +738,15 @@ export class WeaponSystem {
     if (this.cooldown > 0) return false;
     if (ammo.magazine <= 0) {
       this.cooldown = 0.2;
+      this.cooldownKind = 'empty';
       this.audio?.playWeapon?.('empty', { pitch: 0.95 + Math.random() * 0.08 });
       this.eventBus?.emit?.('weapon:empty', { weapon: config.id });
       return false;
     }
 
     if (!this.infiniteAmmo) ammo.magazine -= 1;
-    this.cooldown = 1 / config.fireRate;
+    this.cooldown = 1 / (config.fireRate * this.runtimeModifiers.fireRate);
+    this.cooldownKind = 'fire';
     const configuredKick = config.viewModel?.kick;
     const modelKick = configuredKick ?? (config.id === 'scatter' ? 1.4 : config.id === 'rail' ? 1.65 : 0.48);
     this.modelKick = Math.min(2.2, this.modelKick + modelKick);
@@ -675,6 +761,7 @@ export class WeaponSystem {
     const pellets = (config.pellets ?? 1) + (config.id === 'scatter' ? this.modifiers.shotgunPellets : 0);
     let anyHit = false;
     let headshot = false;
+    let lethalHeadshot = false;
     let lastPoint = null;
     let lastResult = null;
     const traceThisShot = (config.tracerEvery ?? 1) <= 1 || this.shotsFired % config.tracerEvery === 0;
@@ -685,20 +772,34 @@ export class WeaponSystem {
       if (result.enemyHit) {
         anyHit = true;
         headshot ||= result.zone === 'head';
+        lethalHeadshot ||= result.zone === 'head' && result.killed;
       }
       lastPoint = result.point;
       if (traceThisShot && (pellet < 5 || config.id !== 'scatter')) {
         const tracerWidth = config.vfx?.tracerWidth ?? (config.id === 'rail' ? 1.8 : 1);
-        this.effects.spawnTracer(this.tempMuzzle, result.point, config.color, tracerWidth);
+        this.effects.spawnTracer(
+          this.tempMuzzle,
+          result.point,
+          config.color,
+          tracerWidth * this.runtimeModifiers.impact,
+        );
       }
     }
     if (config.impactBlast && lastResult?.point) {
       const blast = this.applyImpactBlast(lastResult.point, config);
       anyHit ||= blast.hits > 0;
     }
+    if (headshot && !lethalHeadshot) {
+      this.eventBus?.emit?.('combat:precision-hit', { weapon: config.id, enemyType: lastResult?.enemy?.type });
+    }
     if (anyHit) this.shotsHit += 1;
     const muzzleIntensity = config.vfx?.muzzleIntensity ?? (config.id === 'rail' ? 1.5 : 1);
-    this.effects.spawnMuzzle(this.tempMuzzle, this.tempDirection, config.color, muzzleIntensity);
+    this.effects.spawnMuzzle(
+      this.tempMuzzle,
+      this.tempDirection,
+      config.color,
+      muzzleIntensity * this.runtimeModifiers.impact,
+    );
     this.player?.addRecoil?.(
       (config.recoil?.pitch ?? 0.012) * (0.85 + Math.random() * 0.3),
       (config.recoil?.yaw ?? 0.004) * (Math.random() - 0.5) * 2,
@@ -749,6 +850,13 @@ export class WeaponSystem {
       const damage = config.damage * falloff * zoneMultiplier * randomCrit * lowHealthBonus * this.modifiers.damage * anomalyMultiplier;
       const outcome = this.enemySystem.damage(hit.enemy, damage, {
         source: 'player', weapon: config.id, zone: hit.zone, point, direction,
+      });
+      this.eventBus?.emit?.('combat:damage-dealt', {
+        damage: Number(outcome?.applied ?? damage),
+        weapon: config.id,
+        enemyType: hit.enemy?.type,
+        zone: hit.zone,
+        killed: Boolean(outcome?.killed),
       });
       if (hit.zone === 'head' && this.player?.modifiers?.shieldOnHit > 0) {
         this.player.addArmor?.(this.player.modifiers.shieldOnHit);
@@ -827,7 +935,8 @@ export class WeaponSystem {
     const config = this.currentConfig;
     const ammo = this.currentAmmo;
     if (this.reloadRemaining > 0 || ammo.magazine >= config.magazine || ammo.reserve <= 0) return false;
-    this.reloadRemaining = config.reloadTime * this.modifiers.reloadMultiplier;
+    this.reloadDuration = this.getReloadDuration(config);
+    this.reloadRemaining = this.reloadDuration;
     this.audio?.playWeapon?.('reload', { duration: this.reloadRemaining, variant: config.id });
     this.eventBus?.emit?.('weapon:reload-start', { weapon: config.id, duration: this.reloadRemaining });
     return true;
@@ -841,6 +950,7 @@ export class WeaponSystem {
     ammo.magazine += moved;
     ammo.reserve -= moved;
     this.reloadRemaining = 0;
+    this.reloadDuration = 0;
     this.eventBus?.emit?.('weapon:reload-complete', this.getState());
     this.emitState();
   }
@@ -870,9 +980,10 @@ export class WeaponSystem {
       magazine: config.magazine,
       reload: this.reloadRemaining > 0,
       reloadProgress: this.reloadRemaining > 0
-        ? 1 - this.reloadRemaining / (config.reloadTime * this.modifiers.reloadMultiplier)
+        ? 1 - this.reloadRemaining / Math.max(0.001, this.reloadDuration || this.getReloadDuration(config))
         : 0,
       ads: this.adsAmount,
+      overdrive: this.runtimeModifiers.overdrive,
     };
   }
 

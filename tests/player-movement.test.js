@@ -58,3 +58,41 @@ test('held forward movement is not cancelled by arena contact friction', () => {
     arena.dispose();
   }
 });
+
+test('Overdrive accelerates movement and disable or reset restores the exact baseline', () => {
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+  const camera = new THREE.PerspectiveCamera();
+  const spawn = new THREE.Vector3(0, 2, 0);
+  const player = new PlayerController({ world, camera, spawn });
+
+  const sampleForwardSpeed = () => {
+    player.teleport(spawn);
+    for (let step = 0; step < 120; step += 1) player.fixedUpdate(HELD_FORWARD_INPUT, FIXED_STEP);
+    return player.horizontalSpeed;
+  };
+
+  const baseline = sampleForwardSpeed();
+  const enabled = player.setOverdrive(true, { playerSpeedMultiplier: 1.5 });
+  const boosted = sampleForwardSpeed();
+
+  assert.deepEqual(enabled, { active: true, speedMultiplier: 1.5 });
+  assert.equal(player.getState().overdrive, true);
+  assert.ok(boosted > baseline, 'Overdrive must accelerate the player');
+  assert.ok(Math.abs(boosted / baseline - 1.5) < 0.001);
+
+  player.setOverdrive(true, { playerSpeedMultiplier: 1.5 });
+  assert.ok(
+    Math.abs(sampleForwardSpeed() - boosted) < 0.000001,
+    'repeated activation must replace the runtime scale instead of accumulating it',
+  );
+
+  assert.deepEqual(player.setOverdrive(false), { active: false, speedMultiplier: 1 });
+  assert.ok(Math.abs(sampleForwardSpeed() - baseline) < 0.000001);
+
+  player.setOverdrive(true, { playerSpeedMultiplier: 1.8 });
+  player.reset(spawn);
+  assert.equal(player.getState().overdrive, false);
+  assert.ok(Math.abs(sampleForwardSpeed() - baseline) < 0.000001);
+
+  player.dispose();
+});

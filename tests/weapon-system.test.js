@@ -17,12 +17,44 @@ function createWeapons(player = null) {
     camera: new THREE.PerspectiveCamera(),
     scene: new THREE.Scene(),
     eventBus: { emit() {} },
-    audioManager: { playUI() {} },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
     effects: noopEffects,
     arena: null,
     player,
   });
 }
+
+test('successful hits emit combat activity for Momentum decay tracking', () => {
+  const events = [];
+  const enemy = { type: 'trooper' };
+  const weapons = new WeaponSystem({
+    camera: new THREE.PerspectiveCamera(),
+    scene: new THREE.Scene(),
+    eventBus: { emit: (name, payload) => events.push({ name, payload }) },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+    effects: noopEffects,
+    arena: { raycastWorld: () => null },
+    player: null,
+    enemySystem: {
+      raycast: (_origin, _direction, distance) => ({
+        enemy,
+        distance: Math.min(2, distance),
+        point: new THREE.Vector3(0, 0, -2),
+        zone: 'body',
+      }),
+      damage: () => ({ applied: 17, killed: false }),
+    },
+  });
+
+  weapons.traceShot(new THREE.Vector3(), new THREE.Vector3(0, 0, -1), weapons.currentConfig);
+  const activity = events.find(({ name }) => name === 'combat:damage-dealt');
+  assert.ok(activity);
+  assert.equal(activity.payload.damage, 17);
+  assert.equal(activity.payload.weapon, 'carbine');
+  assert.equal(activity.payload.enemyType, 'trooper');
+  assert.equal(activity.payload.killed, false);
+  weapons.dispose();
+});
 
 test('WeaponSystem creates and switches across the five configured weapons', () => {
   const weapons = createWeapons();
@@ -247,5 +279,122 @@ test('reset restores procedural viewmodel poses for a fresh run', () => {
     for (const part of model.userData.pulseParts) assert.ok(part.mesh.scale.equals(part.baseScale));
     for (const part of model.userData.spinParts) assert.ok(part.mesh.rotation.equals(part.baseRotation));
   }
+  weapons.dispose();
+});
+
+test('Overdrive accelerates fire and switching without accumulating across disable or reset', () => {
+  const weapons = createWeapons();
+  const effects = {
+    fireRateMultiplier: 2,
+    reloadTimeMultiplier: 0.5,
+    weaponSwitchTimeMultiplier: 0.5,
+  };
+
+  assert.equal(weapons.tryFire(false), true);
+  const baselineFireCooldown = weapons.cooldown;
+  weapons.cooldown = 0;
+
+  weapons.setOverdrive(true, effects);
+  assert.equal(weapons.tryFire(false), true);
+  const boostedFireCooldown = weapons.cooldown;
+  assert.ok(boostedFireCooldown < baselineFireCooldown);
+  assert.ok(Math.abs(boostedFireCooldown - baselineFireCooldown / 2) < 0.000001);
+  weapons.setOverdrive(false);
+  assert.ok(
+    Math.abs(weapons.cooldown - baselineFireCooldown) < 0.000001,
+    'ending Overdrive must restore the remaining fire interval',
+  );
+
+  weapons.cooldown = 0;
+  weapons.setOverdrive(true, effects);
+  assert.equal(weapons.tryFire(false), true);
+  assert.ok(
+    Math.abs(weapons.cooldown - boostedFireCooldown) < 0.000001,
+    'repeated activation must not compound the fire-rate multiplier',
+  );
+
+  weapons.cooldown = 0;
+  weapons.setOverdrive(false);
+  assert.equal(weapons.tryFire(false), true);
+  assert.ok(Math.abs(weapons.cooldown - baselineFireCooldown) < 0.000001);
+
+  weapons.cooldown = 0;
+  assert.equal(weapons.switchTo(1), true);
+  const baselineSwitchCooldown = weapons.cooldown;
+  assert.ok(Math.abs(baselineSwitchCooldown - 0.18) < 0.000001);
+
+  weapons.reset();
+  weapons.setOverdrive(true, effects);
+  assert.equal(weapons.switchTo(1), true);
+  const boostedSwitchCooldown = weapons.cooldown;
+  assert.ok(Math.abs(boostedSwitchCooldown - baselineSwitchCooldown / 2) < 0.000001);
+  weapons.setOverdrive(false);
+  assert.ok(
+    Math.abs(weapons.cooldown - baselineSwitchCooldown) < 0.000001,
+    'ending Overdrive must restore the remaining switch interval',
+  );
+
+  weapons.cooldown = 0;
+  assert.equal(weapons.switchTo(2), true);
+  assert.ok(Math.abs(weapons.cooldown - baselineSwitchCooldown) < 0.000001);
+
+  weapons.reset();
+  assert.equal(weapons.getState().overdrive, false);
+  assert.deepEqual(weapons.runtimeModifiers, weapons.defaultRuntimeModifiers());
+  assert.equal(weapons.switchTo(1), true);
+  assert.ok(Math.abs(weapons.cooldown - baselineSwitchCooldown) < 0.000001);
+  weapons.dispose();
+});
+
+test('Overdrive rescales an active reload while preserving progress and disable restores timing', () => {
+  const weapons = createWeapons();
+  const idleInput = { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 };
+  const effects = { reloadTimeMultiplier: 0.5, weaponSwitchTimeMultiplier: 0.5 };
+  weapons.setEnabled(true);
+
+  const baselineDuration = weapons.getReloadDuration();
+  weapons.currentAmmo.magazine = 0;
+  assert.equal(weapons.startReload(), true);
+  weapons.update(baselineDuration * 0.4, idleInput);
+  const progressBeforeOverdrive = weapons.getState().reloadProgress;
+  assert.ok(Math.abs(progressBeforeOverdrive - 0.4) < 0.000001);
+
+  weapons.setOverdrive(true, effects);
+  assert.ok(Math.abs(weapons.reloadDuration - baselineDuration / 2) < 0.000001);
+  assert.ok(Math.abs(weapons.getState().reloadProgress - progressBeforeOverdrive) < 0.000001);
+  assert.ok(
+    Math.abs(weapons.reloadRemaining - weapons.reloadDuration * (1 - progressBeforeOverdrive)) < 0.000001,
+  );
+
+  weapons.applyModifiers({ reloadMultiplier: 0.8 });
+  assert.ok(Math.abs(weapons.reloadDuration - baselineDuration * 0.8 / 2) < 0.000001);
+  assert.ok(
+    Math.abs(weapons.getState().reloadProgress - progressBeforeOverdrive) < 0.000001,
+    'a run upgrade applied during Overdrive must preserve active reload progress',
+  );
+
+  const fastDuration = weapons.reloadDuration;
+  const fastRemaining = weapons.reloadRemaining;
+  weapons.setOverdrive(true, effects);
+  assert.ok(Math.abs(weapons.reloadDuration - fastDuration) < 0.000001);
+  assert.ok(Math.abs(weapons.reloadRemaining - fastRemaining) < 0.000001);
+
+  weapons.setOverdrive(false);
+  assert.ok(Math.abs(weapons.reloadDuration - baselineDuration * 0.8) < 0.000001);
+  assert.ok(Math.abs(weapons.getState().reloadProgress - progressBeforeOverdrive) < 0.000001);
+
+  weapons.setOverdrive(true, effects);
+  const boostedRemaining = weapons.reloadRemaining;
+  weapons.update(boostedRemaining + 0.001, idleInput);
+  assert.equal(weapons.reloadRemaining, 0, 'the shortened reload must complete on its accelerated schedule');
+
+  weapons.currentAmmo.magazine = 0;
+  assert.equal(weapons.startReload(), true);
+  weapons.reset();
+  assert.equal(weapons.reloadDuration, 0);
+  assert.equal(weapons.reloadRemaining, 0);
+  assert.equal(weapons.getState().overdrive, false);
+  assert.ok(Math.abs(weapons.getReloadDuration() - baselineDuration) < 0.000001);
+  assert.deepEqual(weapons.runtimeModifiers, weapons.defaultRuntimeModifiers());
   weapons.dispose();
 });

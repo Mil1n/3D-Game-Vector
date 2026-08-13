@@ -59,13 +59,22 @@ function createStartMatchHarness() {
     },
     player: {
       position: { y: 1 },
+      horizontalSpeed: 0,
       reset: noOp,
       fixedUpdate: noOp,
+      setOverdrive: noOp,
     },
     effects: { reset: noOp, update: noOp },
     enemies: { reset: noOp, setDifficulty: noOp, update: noOp },
-    weapons: { setEnabled: noOp, reset: noOp, update: noOp },
+    weapons: { setEnabled: noOp, reset: noOp, update: noOp, setOverdrive: noOp },
     upgrades: { reset: noOp },
+    momentum: {
+      reset: noOp,
+      activateOverdrive: () => false,
+      getState: () => ({ momentum: 0, rank: 'D', overdrive: { ready: false, active: false, remaining: 0 } }),
+      update: noOp,
+      config: { overdrive: { duration: 8, effects: { worldTimeScale: 0.86 } } },
+    },
     director: { reset: noOp, start: noOp, update: noOp },
     achievements: { beginRun: noOp },
     world: { step: noOp },
@@ -80,7 +89,41 @@ function createStartMatchHarness() {
     tutorialMovement: 0,
     tutorialComplete: false,
   };
+  game.setOverdriveEffects = Game.prototype.setOverdriveEffects;
   return { game, input, state };
+}
+
+function createGameplayHarness() {
+  const calls = { player: [], weapons: [], enemies: [], director: [], arena: [], momentum: [], activations: 0 };
+  const game = {
+    input: { wasPressed: () => false, endFrame() {} },
+    gameplayInput: {
+      beginStepBatch() {},
+      wasPressed(action) { return action === 'overdrive'; },
+    },
+    physicsAccumulator: 0,
+    state: { state: GAME_STATES.PLAYING },
+    player: {
+      horizontalSpeed: 2,
+      position: { y: 1 },
+      fixedUpdate(_input, dt) { calls.player.push(dt); },
+    },
+    world: { step() {} },
+    weapons: { update(dt) { calls.weapons.push(dt); } },
+    enemies: { update(dt) { calls.enemies.push(dt); } },
+    director: { update(dt) { calls.director.push(dt); } },
+    effects: { update() {} },
+    arena: { update(dt) { calls.arena.push(dt); } },
+    momentum: {
+      config: { overdrive: { effects: { worldTimeScale: 0.8 } } },
+      getState: () => ({ overdrive: { active: true } }),
+      activateOverdrive() { calls.activations += 1; return true; },
+      update(dt) { calls.momentum.push(dt); },
+    },
+    matchTutorial: false,
+    tutorialComplete: true,
+  };
+  return { game, calls };
 }
 
 test('starting a match clears stale Escape input before the first gameplay frame', async () => {
@@ -95,4 +138,48 @@ test('starting a match clears stale Escape input before the first gameplay frame
   assert.equal(input.pausePressed, false);
   assert.equal(state.state, GAME_STATES.PLAYING);
   assert.equal(paused, false);
+});
+
+test('Overdrive activates once and slows only the world-facing fixed-step systems', () => {
+  const { game, calls } = createGameplayHarness();
+
+  Game.prototype.updateGameplay.call(game, 1 / 60);
+
+  assert.equal(calls.activations, 1);
+  assert.equal(calls.player[0], 1 / 60);
+  assert.equal(calls.weapons[0], 1 / 60);
+  assert.equal(calls.momentum[0], 1 / 60);
+  assert.equal(calls.enemies[0], (1 / 60) * 0.8);
+  assert.equal(calls.director[0], (1 / 60) * 0.8);
+  assert.equal(calls.arena[0], (1 / 60) * 0.8);
+});
+
+test('runtime failure explicitly ends Overdrive before stopping the frame loop', () => {
+  const calls = [];
+  const game = {
+    running: true,
+    raf: 7,
+    momentum: {
+      endOverdrive(reason) {
+        calls.push(`end:${reason}`);
+        game.setOverdriveEffects(false, {}, reason);
+        return true;
+      },
+    },
+    setOverdriveEffects(active, _effects, reason) { calls.push(`effects:${active}:${reason}`); },
+    ui: { showError() { calls.push('error-ui'); } },
+  };
+  const previousCancel = globalThis.cancelAnimationFrame;
+  globalThis.cancelAnimationFrame = () => calls.push('cancel-raf');
+  const previousConsoleError = console.error;
+  console.error = () => {};
+  try {
+    Game.prototype.handleRuntimeError.call(game, new Error('test failure'));
+  } finally {
+    console.error = previousConsoleError;
+    globalThis.cancelAnimationFrame = previousCancel;
+  }
+
+  assert.deepEqual(calls, ['end:runtime-error', 'effects:false:runtime-error', 'cancel-raf', 'error-ui']);
+  assert.equal(game.running, false);
 });

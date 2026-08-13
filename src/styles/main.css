@@ -39,7 +39,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 #app, .ui-root { position: fixed; inset: 0; z-index: 10; overflow: hidden; pointer-events: none; }
 .ui-root button, .ui-root input, .ui-root select, .ui-screen, .tutorial-card { pointer-events: auto; }
 
-.ui-noise, .ui-vignette { position: absolute; inset: 0; pointer-events: none; }
+.ui-noise, .ui-vignette, .overdrive-screen-effect { position: absolute; inset: 0; pointer-events: none; }
 .ui-noise {
   z-index: 30;
   opacity: .035;
@@ -48,6 +48,14 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   mix-blend-mode: screen;
 }
 .ui-vignette { z-index: 2; box-shadow: inset 0 0 13vmax rgba(0, 0, 0, .2); }
+.overdrive-screen-effect { z-index: 3; overflow: hidden; opacity: 0; transition: opacity .28s ease; }
+.overdrive-screen-effect::before { content: ""; position: absolute; inset: -8%; border: 2px solid rgba(100,244,255,.18); border-radius: 50%; box-shadow: inset 0 0 12vmax rgba(62,228,255,.09), 0 0 8vmax rgba(255,72,199,.08); scale: 1.14; }
+.overdrive-screen-effect i { position: absolute; left: 50%; top: 50%; width: 42vmax; aspect-ratio: 1; translate: -50% -50%; border: 1px solid rgba(100,244,255,.16); border-radius: 50%; }
+.overdrive-screen-effect i:last-child { width: 68vmax; border-color: rgba(255,72,199,.11); }
+.ui-root.is-overdrive-ready .overdrive-screen-effect { opacity: .22; }
+.ui-root.is-overdrive-active .overdrive-screen-effect { opacity: 1; }
+.ui-root.is-overdrive-active .overdrive-screen-effect i { animation: overdriveOrbit 3.2s linear infinite; }
+.ui-root.is-overdrive-active .overdrive-screen-effect i:last-child { animation-direction: reverse; animation-duration: 5.4s; }
 .ui-screen { position: absolute; inset: 0; z-index: 5; opacity: 0; transition: opacity .35s ease; }
 .ui-screen.is-active { opacity: 1; }
 .eyebrow { margin: 0 0 9px; color: var(--cyan-soft); font-size: 11px; line-height: 1.3; font-weight: 750; letter-spacing: .22em; text-transform: uppercase; }
@@ -406,6 +414,24 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .hud-score [data-hud-panel="combo"] strong { color: var(--cyan-soft); }
 .hud-score [data-hud-panel="combo"].is-hot strong { color: var(--amber); text-shadow: 0 0 12px rgba(255,190,74,.35); animation: comboBeat .5s var(--ease-out); }
 
+.momentum-card { --momentum-accent: var(--cyan); position: absolute; right: var(--hud-pad); top: 76px; display: grid; grid-template-columns: 52px minmax(150px, 210px); min-width: 218px; border-right: 2px solid var(--momentum-accent); background: linear-gradient(270deg, rgba(5,15,18,.86), rgba(8,20,24,.54)); scale: var(--ui-scale, 1); transform-origin: right top; transition: border-color .18s ease, filter .18s ease; }
+.momentum-rank { display: grid; align-content: center; justify-items: center; min-height: 57px; border-right: 1px solid var(--line); }
+.momentum-rank span, .momentum-readout header span { color: var(--dim); font-size: 6px; letter-spacing: .15em; }
+.momentum-rank strong { color: var(--momentum-accent); font: 800 25px/1 monospace; text-shadow: 0 0 13px color-mix(in srgb, var(--momentum-accent) 44%, transparent); }
+.momentum-readout { min-width: 0; padding: 8px 10px; }
+.momentum-readout header { display: flex; justify-content: space-between; align-items: center; }
+.momentum-readout header b { color: var(--momentum-accent); font: 700 8px/1 monospace; }
+.momentum-meter { position: relative; height: 3px; margin: 7px 0 6px; overflow: hidden; background: var(--line); }
+.momentum-meter i { display: block; width: var(--value, 0%); height: 100%; background: linear-gradient(90deg, var(--cyan), var(--momentum-accent)); box-shadow: 0 0 10px var(--momentum-accent); transition: width .12s linear; }
+.momentum-meter b { position: absolute; inset-block: 0; width: 1px; background: var(--graphite-1); }.momentum-meter b:nth-of-type(1) { left: 25%; }.momentum-meter b:nth-of-type(2) { left: 50%; }.momentum-meter b:nth-of-type(3) { left: 75%; }
+.momentum-action { display: flex; align-items: center; justify-content: space-between; min-height: 9px; gap: 8px; }
+.momentum-action strong { overflow: hidden; color: var(--muted); font-size: 6px; letter-spacing: .07em; text-overflow: ellipsis; white-space: nowrap; }
+.momentum-action output { color: var(--momentum-accent); font: 700 6px/1 monospace; white-space: nowrap; }
+.momentum-card.has-action .momentum-action strong { color: var(--text); }
+.momentum-card[data-rank="B"], .momentum-card[data-rank="A"] { --momentum-accent: var(--amber); }
+.momentum-card[data-rank="S"], .momentum-card[data-rank="SS"], .momentum-card[data-rank="SSS"] { --momentum-accent: var(--magenta); }
+.momentum-card[data-rank="SSS"] { filter: drop-shadow(0 0 11px rgba(255,72,199,.24)); }
+
 .hud-vitals { position: absolute; left: var(--hud-pad); bottom: var(--hud-pad); display: flex; align-items: end; gap: 7px; }
 .vital-card { position: relative; width: clamp(155px, 14vw, 215px); min-height: 75px; padding: 11px 14px; border-bottom: 2px solid var(--cyan); clip-path: polygon(0 8px, 8px 0, 100% 0, 100% 100%, 0 100%); }
 .vital-card--armor { width: clamp(105px, 10vw, 150px); border-bottom-color: var(--amber); }
@@ -447,6 +473,17 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .dash-indicator span { display: block; color: var(--dim); font-size: 6px; letter-spacing: .12em; }
 .dash-indicator strong { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; }
 .dash-indicator.is-ready strong { color: var(--cyan); }
+.overdrive-indicator { --overdrive-accent: var(--cyan); display: flex; align-items: center; gap: 9px; min-width: 126px; padding: 8px 12px 8px 8px; border-bottom: 1px solid var(--overdrive-accent); transition: border-color .18s ease, background .18s ease; }
+.overdrive-ring { position: relative; display: grid; place-items: center; width: 34px; height: 34px; }
+.overdrive-ring::before { content: ""; position: absolute; inset: 0; border: 1px solid var(--line); border-radius: 50%; }
+.overdrive-ring > i { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(var(--overdrive-accent) var(--value, 0%), transparent 0); mask: radial-gradient(transparent 67%, #000 69%); transition: background .12s linear; }
+.overdrive-ring b { color: var(--overdrive-accent); font: 700 9px/1 monospace; }
+.overdrive-indicator span { display: block; color: var(--dim); font-size: 6px; letter-spacing: .12em; }
+.overdrive-indicator strong { display: block; margin-top: 2px; color: var(--muted); font-size: 8px; }
+.overdrive-indicator small { display: block; min-height: 7px; margin-top: 2px; color: var(--overdrive-accent); font: 700 6px/1 monospace; }
+.overdrive-indicator.is-ready { --overdrive-accent: var(--amber); background: linear-gradient(110deg, rgba(56,39,8,.82), rgba(16,22,23,.7)); animation: overdriveReady 1.15s ease-in-out infinite; }
+.overdrive-indicator.is-active { --overdrive-accent: var(--magenta); background: linear-gradient(110deg, rgba(55,10,44,.86), rgba(8,24,28,.76)); box-shadow: 0 0 22px rgba(255,72,199,.1); animation: overdriveActive .52s ease-in-out infinite alternate; }
+.overdrive-indicator.is-ready strong, .overdrive-indicator.is-active strong { color: var(--text); }
 .hud-upgrades { display: flex; gap: 4px; }
 .hud-upgrade { display: grid; grid-template-columns: 24px; width: 24px; height: 34px; overflow: hidden; border: 1px solid var(--line); background: rgba(4,11,14,.7); transition: width .2s var(--ease-out); }
 .hud-upgrade:hover { grid-template-columns: 24px auto; width: 120px; }
@@ -496,6 +533,9 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 @keyframes feedIn { from { opacity: 0; translate: 20px 0; } }
 @keyframes hitmarker { 0% { opacity: 0; scale: 1.4; } 25%,75% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: .9; } }
 @keyframes damageFlash { 0% { opacity: 0; scale: .7; } 18% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: 1.15; } }
+@keyframes overdriveOrbit { to { rotate: 360deg; scale: 1.04; } }
+@keyframes overdriveReady { 50% { filter: drop-shadow(0 0 10px rgba(255,190,74,.32)); } }
+@keyframes overdriveActive { to { filter: drop-shadow(0 0 13px rgba(255,72,199,.42)); } }
 
 /* Context layers */
 .input-activation { position: absolute; z-index: 20; left: 50%; top: calc(50% + 42px); display: grid; justify-items: center; width: min(430px, calc(100vw - 32px)); padding: 10px 18px 11px; translate: -50% 8px; opacity: 0; border: 1px solid rgba(255,190,74,.42); border-inline: 0; background: linear-gradient(90deg, transparent, rgba(7,17,20,.9) 16% 84%, transparent); color: var(--text); text-align: center; pointer-events: none; transition: opacity .2s ease, translate .2s var(--ease-out); }
@@ -579,6 +619,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   .results-panel { grid-template-columns: 1fr; max-height: calc(100vh - 40px); overflow-y: auto; }
   .result-score, .results-grid, .result-upgrades, .results-actions { grid-column: 1; grid-row: auto; }.results-grid { margin: 0; }
   .hud-anomaly { top: 82px; }
+  .momentum-card { top: 76px; grid-template-columns: 46px minmax(125px, 180px); min-width: 190px; }
   .hud-objective { width: 210px; }
   .hud-score > div { min-width: 62px; }
   .hud-abilities { bottom: 108px; }
@@ -611,6 +652,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   .hud-objective { left: 10px; top: 10px; width: 190px; padding: 10px; }.hud-objective > p { display: none; }
   .hud-score { right: 10px; top: 10px; }.hud-score > div { min-width: 50px; padding: 8px; }.hud-score [data-hud-panel="combo"] { display: none; }
   .hud-anomaly { top: 72px; min-width: 230px; }
+  .momentum-card { right: 10px; top: 62px; grid-template-columns: 42px minmax(105px, 145px); min-width: 166px; }.momentum-card .momentum-action { display: none; }.momentum-rank { min-height: 47px; }.momentum-rank strong { font-size: 20px; }.momentum-readout { padding: 7px 8px; }
   .hud-vitals { left: 10px; bottom: 10px; }.vital-card { width: 130px; min-height: 64px; }.vital-card--armor { width: 76px; }.vital-card strong { font-size: 20px; }
   .ammo-card { right: 10px; bottom: 10px; width: min(190px, calc(100vw - 20px)); }.ammo-card header [data-hud="weapon"] { max-width: 21ch; font-size: 6px; }.ammo-readout strong { font-size: 30px; }
   .hud-abilities { display: none; }
@@ -631,3 +673,5 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
 .ui-reduced-motion *, .ui-reduced-motion *::before, .ui-reduced-motion *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+.ui-reduced-motion .overdrive-screen-effect i { animation: none !important; }
+.ui-reduced-motion .overdrive-indicator.is-ready, .ui-reduced-motion .overdrive-indicator.is-active { animation: none !important; }

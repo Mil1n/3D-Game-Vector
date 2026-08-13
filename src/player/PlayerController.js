@@ -137,6 +137,8 @@ export class PlayerController {
     this._previousVerticalVelocity = 0;
     this._speedBoostRemaining = 0;
     this._speedBoostScale = 1;
+    this._overdriveSpeedScale = 1;
+    this.overdriveActive = false;
     this._aimAmount = 0;
     this._lastViewBob = { x: 0, y: 0 };
     this._positionView = new THREE.Vector3();
@@ -386,8 +388,8 @@ export class PlayerController {
     this._dashDirection.copy(this._wishDirection);
     if (this._dashDirection.lengthSq() < 0.05) this._dashDirection.copy(TEMP_FORWARD);
     this._dashDirection.normalize();
-    this.body.velocity.x = this._dashDirection.x * this.config.dashSpeed;
-    this.body.velocity.z = this._dashDirection.z * this.config.dashSpeed;
+    this.body.velocity.x = this._dashDirection.x * this.config.dashSpeed * this._overdriveSpeedScale;
+    this.body.velocity.z = this._dashDirection.z * this.config.dashSpeed * this._overdriveSpeedScale;
     this.body.velocity.y = Math.max(this.body.velocity.y, this.grounded ? 0.8 : -0.5);
     this._emit('player:dashStarted', {
       duration: this.config.dashDuration,
@@ -397,13 +399,14 @@ export class PlayerController {
 
   _applyHorizontalMovement(dt) {
     if (this.isDashing) {
-      this.body.velocity.x = this._dashDirection.x * this.config.dashSpeed;
-      this.body.velocity.z = this._dashDirection.z * this.config.dashSpeed;
+      this.body.velocity.x = this._dashDirection.x * this.config.dashSpeed * this._overdriveSpeedScale;
+      this.body.velocity.z = this._dashDirection.z * this.config.dashSpeed * this._overdriveSpeedScale;
       return;
     }
     if (this.isSliding) {
       const progress = this._slideRemaining / this.config.slideDuration;
-      const speed = THREE.MathUtils.lerp(this.config.walkSpeed, this.config.slideSpeed, progress);
+      const speed = THREE.MathUtils.lerp(this.config.walkSpeed, this.config.slideSpeed, progress)
+        * this._overdriveSpeedScale;
       this.body.velocity.x = moveTowards(this.body.velocity.x, this._slideDirection.x * speed, 8 * dt);
       this.body.velocity.z = moveTowards(this.body.velocity.z, this._slideDirection.z * speed, 8 * dt);
       return;
@@ -414,7 +417,8 @@ export class PlayerController {
     if (this.isCrouching) maxSpeed = this.config.crouchSpeed;
     maxSpeed *= this.modifiers.moveSpeed
       * Math.max(0.1, Number(this.anomaly?.speedScale ?? 1))
-      * this._speedBoostScale;
+      * this._speedBoostScale
+      * this._overdriveSpeedScale;
     if (this.isADS) maxSpeed *= 0.78;
     const targetX = this._wishDirection.x * maxSpeed;
     const targetZ = this._wishDirection.z * maxSpeed;
@@ -422,7 +426,7 @@ export class PlayerController {
     const acceleration = this.grounded
       ? (hasInput ? this.config.groundAcceleration : this.config.groundDeceleration)
       : this.config.airAcceleration;
-    const maxDelta = acceleration * dt;
+    const maxDelta = acceleration * this._overdriveSpeedScale * dt;
     this.body.velocity.x = moveTowards(this.body.velocity.x, targetX, maxDelta);
     this.body.velocity.z = moveTowards(this.body.velocity.z, targetZ, maxDelta);
   }
@@ -646,6 +650,24 @@ export class PlayerController {
     return { scale: this._speedBoostScale, remaining: this._speedBoostRemaining };
   }
 
+  setOverdrive(active, effects = {}) {
+    const nextActive = Boolean(active);
+    const requestedScale = Number(effects.playerSpeedMultiplier ?? effects.speedMultiplier ?? 1.2);
+    const nextScale = nextActive && Number.isFinite(requestedScale)
+      ? clamp(requestedScale, 1, 2)
+      : 1;
+    const changed = this.overdriveActive !== nextActive || this._overdriveSpeedScale !== nextScale;
+    this.overdriveActive = nextActive;
+    this._overdriveSpeedScale = nextScale;
+    if (changed) {
+      this._emit('player:overdrive-changed', {
+        active: this.overdriveActive,
+        speedMultiplier: this._overdriveSpeedScale,
+      });
+    }
+    return { active: this.overdriveActive, speedMultiplier: this._overdriveSpeedScale };
+  }
+
   setAnomaly(anomaly) {
     this.anomaly = anomaly ? { ...anomaly } : null;
   }
@@ -703,8 +725,8 @@ export class PlayerController {
     this._dashCooldownRemaining = 0;
     this._speedBoostRemaining = 0;
     this._speedBoostScale = 1;
-    this._speedBoostRemaining = 0;
-    this._speedBoostScale = 1;
+    this._overdriveSpeedScale = 1;
+    this.overdriveActive = false;
     this._cameraHeight = this.config.standingEyeOffset;
     this._bobTime = 0;
     this._bobAmount = 0;
@@ -774,6 +796,7 @@ export class PlayerController {
       armor: this.armor,
       dead: this.dead,
       invincible: this.invincible,
+      overdrive: this.overdriveActive,
       dashCooldown: this._dashCooldownRemaining,
       slideCooldown: this._slideCooldownRemaining,
     };

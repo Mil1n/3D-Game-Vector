@@ -29,7 +29,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     mouseSensitivity: 0.55,
     invertY: false,
     rawInput: true,
-    bindings: { forward: 'KeyW', backward: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft', crouch: 'ControlLeft', dash: 'KeyQ', interact: 'KeyE', reload: 'KeyR' },
+    bindings: { forward: 'KeyW', backward: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft', crouch: 'ControlLeft', dash: 'KeyQ', overdrive: 'KeyF', interact: 'KeyE', reload: 'KeyR' },
   },
   gameplay: { difficulty: 'normal', fov: 82, sprintFov: 92, headBob: 0.55, cameraShake: 0.65, subtitles: true, crosshairColor: '#64f4ff', aimMode: 'hold', crouchMode: 'hold' },
   accessibility: { reducedMotion: false, highContrast: false, colorBlindMode: 'none', screenFlash: 0.65, uiScale: 1 },
@@ -38,7 +38,7 @@ const DEFAULT_SETTINGS = Object.freeze({
 const TUTORIAL_STEPS = [
   ['ПРОТОКОЛ // 01', 'Навигация', 'Двигайтесь от отметки к активному фазовому узлу.', ['W', 'A', 'S', 'D']],
   ['ПРОТОКОЛ // 02', 'Импульс движения', 'Удерживайте спринт и совершайте рывок, чтобы сменить вектор атаки.', ['SHIFT', 'Q']],
-  ['ПРОТОКОЛ // 03', 'Огневой контакт', 'Левая кнопка стреляет, правая сужает прицел. Клавиши 1—5 мгновенно выбирают оружие.', ['ЛКМ', 'ПКМ', '1', '2', '3', '4', '5']],
+  ['ПРОТОКОЛ // 03', 'Огневой контакт', 'Левая кнопка стреляет, правая сужает прицел. Разные платформы заряжают Momentum; F запускает готовый Overdrive.', ['ЛКМ', 'ПКМ', '1', '2', '3', '4', '5', 'F']],
   ['ПРОТОКОЛ // 04', 'Стабилизация узла', 'Подойдите к маркеру цели и удерживайте взаимодействие до завершения сканирования.', ['E']],
   ['ПРОТОКОЛ // 05', 'Сдвиг реальности', 'Магентовая метка обозначает перестраиваемые секции. До Сдвига займите безопасный маршрут.', []],
 ];
@@ -110,6 +110,7 @@ export class UIManager {
     this.options = [];
     this.lastKillfeedKey = '';
     this.lastWarningKey = '';
+    this.overdriveDisplayDuration = 0;
     this.disposers = [];
     this.timers = new Set();
     this.warningTimer = null;
@@ -157,12 +158,13 @@ export class UIManager {
   }
 
   _shellMarkup() {
-    return `<div class="ui-noise" aria-hidden="true"></div><div class="ui-vignette" aria-hidden="true"></div>
+    return `<div class="ui-noise" aria-hidden="true"></div><div class="ui-vignette" aria-hidden="true"></div><div class="overdrive-screen-effect" aria-hidden="true"><i></i><i></i></div>
       <div class="ui-screen" data-ui-screen></div>
       <section class="hud" data-ui-hud hidden aria-label="Игровой интерфейс">
         <section class="hud-objective hud-panel" data-hud-panel="objective"><header><span data-hud="phase">ФАЗА 01</span><b>ТЕКУЩАЯ ЗАДАЧА</b></header><strong data-hud="objective">Ожидание протокола</strong><p data-hud="objective-detail">Сканирование окружения</p><div class="objective-progress"><span data-meter="objective"></span><output data-hud="objective-progress">0%</output></div></section>
         <section class="hud-anomaly hud-panel" data-hud-panel="anomaly"><div class="anomaly-radar" aria-hidden="true"><i></i><i></i><i></i></div><div><span>АНОМАЛИЯ</span><strong data-hud="anomaly">Сеть стабильна</strong></div><output data-hud="shift-countdown">СИНХРОН</output></section>
         <div class="hud-score"><div data-hud-panel="score"><span>СЧЁТ</span><strong data-hud="score">0</strong></div><div data-hud-panel="combo"><span>СЕРИЯ</span><strong data-hud="combo">×1</strong></div></div>
+        <section class="momentum-card hud-panel" data-hud-panel="momentum" data-rank="D" role="meter" aria-label="Momentum" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="momentum-rank"><span>STYLE</span><strong data-hud="momentum-rank">D</strong></div><div class="momentum-readout"><header><span>MOMENTUM</span><b data-hud="momentum-multiplier">×1.00</b></header><div class="momentum-meter"><i data-meter="momentum"></i><b></b><b></b><b></b></div><div class="momentum-action"><strong data-hud="momentum-action">ДЕРЖИТЕ ТЕМП</strong><output data-hud="momentum-action-time"></output></div></div></section>
         <div class="killfeed" data-hud="killfeed" aria-live="polite" aria-label="Уведомления о ликвидациях"></div>
         <div class="damage-direction" aria-hidden="true"><i data-damage="front"></i><i data-damage="right"></i><i data-damage="back"></i><i data-damage="left"></i></div>
         <div class="interact-prompt" data-hud-panel="interact" hidden><kbd data-hud="interact-key">E</kbd><div><span data-hud="interact-action">ВЗАИМОДЕЙСТВИЕ</span><strong data-hud="interact-label">Активировать</strong></div><div class="interact-hold"><i data-meter="interact"></i></div></div>
@@ -170,7 +172,7 @@ export class UIManager {
           <section class="vital-card vital-card--health hud-panel" data-hud-panel="health"><header><span>СОСТОЯНИЕ</span><b>HP</b></header><div><strong data-hud="health">100</strong><small>/100</small></div><div class="segmented-meter"><span data-meter="health"></span><i></i><i></i><i></i></div></section>
           <section class="vital-card vital-card--armor hud-panel" data-hud-panel="armor"><header><span>БРОНЯ</span><b>AR</b></header><div><strong data-hud="armor">0</strong><small>/100</small></div><div class="segmented-meter"><span data-meter="armor"></span><i></i><i></i><i></i></div></section>
         </div>
-        <div class="hud-abilities"><section class="dash-indicator hud-panel" data-hud-panel="dash"><div class="dash-ring"><i data-meter="dash"></i><b>Q</b></div><div><span>РЫВОК</span><strong data-hud="dash">ГОТОВ</strong></div></section><div class="hud-upgrades" data-hud="upgrades" aria-label="Активные улучшения"></div></div>
+        <div class="hud-abilities"><section class="dash-indicator hud-panel" data-hud-panel="dash"><div class="dash-ring"><i data-meter="dash"></i><b>Q</b></div><div><span>РЫВОК</span><strong data-hud="dash">ГОТОВ</strong></div></section><section class="overdrive-indicator hud-panel" data-hud-panel="overdrive" role="status" aria-live="polite"><div class="overdrive-ring"><i data-meter="overdrive"></i><b data-hud="overdrive-key">F</b></div><div><span>OVERDRIVE</span><strong data-hud="overdrive-status">ЗАРЯД 0%</strong><small data-hud="overdrive-time"></small></div></section><div class="hud-upgrades" data-hud="upgrades" aria-label="Активные улучшения"></div></div>
         <section class="ammo-card hud-panel" data-hud-panel="ammo"><header><span data-hud="weapon">ИМПУЛЬСНЫЙ КАРАБИН</span><b>01</b></header><div class="ammo-readout"><strong data-hud="ammo">24</strong><i>/</i><span data-hud="reserve">120</span></div><footer><kbd>R</kbd><span data-hud="reload-status">ПЕРЕЗАРЯДКА</span></footer></section>
         <div class="crosshair" data-ui-crosshair data-state="default" aria-hidden="true"><i></i><i></i><i></i><i></i><b></b></div>
         <div class="hitmarker" data-ui-hitmarker data-type="body" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -326,6 +328,58 @@ export class UIManager {
     this._setText('combo', `×${combo.toFixed(combo % 1 ? 1 : 0)}`);
     this.root.querySelector('[data-hud-panel="combo"]')?.classList.toggle('is-hot', combo > 1);
 
+    const momentum = state.momentum && typeof state.momentum === 'object' ? state.momentum : {};
+    const momentumValue = clamp(
+      momentum.normalized ?? momentum.progress
+        ?? (finite(momentum.value ?? momentum.momentum ?? state.momentumValue ?? state.momentum, 0) / 100),
+    );
+    const momentumRank = String(momentum.rank ?? state.momentumRank ?? state.styleRank ?? state.rank ?? 'D').toUpperCase();
+    const styleMultiplier = Math.max(1, finite(momentum.multiplier ?? state.styleMultiplier ?? state.multiplier, 1));
+    const rawStyleAction = momentum.action ?? momentum.lastAction ?? state.styleAction ?? state.lastAction;
+    const styleAction = rawStyleAction && typeof rawStyleAction === 'object' ? rawStyleAction : {};
+    const styleActionLabel = styleAction.label ?? styleAction.name ?? momentum.actionLabel
+      ?? (typeof rawStyleAction === 'string' ? rawStyleAction : '');
+    const styleActionRemaining = Math.max(0, finite(
+      styleAction.remaining ?? styleAction.time ?? momentum.actionRemaining ?? momentum.lastActionRemaining
+        ?? state.styleActionRemaining ?? state.lastActionRemaining,
+    ));
+    const momentumPanel = this.root.querySelector('[data-hud-panel="momentum"]');
+    momentumPanel?.setAttribute('data-rank', momentumRank);
+    momentumPanel?.setAttribute('aria-valuenow', String(Math.round(momentumValue * 100)));
+    this._setText('momentum-rank', momentumRank);
+    this._setText('momentum-multiplier', `×${styleMultiplier.toFixed(2)}`);
+    this._setMeter('momentum', momentumValue);
+    this._setText('momentum-action', styleActionLabel || 'ДЕРЖИТЕ ТЕМП');
+    this._setText('momentum-action-time', styleActionLabel && styleActionRemaining > 0 ? `${styleActionRemaining.toFixed(1)} с` : '');
+    momentumPanel?.classList.toggle('has-action', Boolean(styleActionLabel) && styleActionRemaining > 0);
+
+    const overdriveSource = state.overdrive ?? momentum.overdrive;
+    const overdrive = overdriveSource && typeof overdriveSource === 'object' ? overdriveSource : {};
+    const overdriveReady = Boolean(overdrive.ready ?? state.overdriveReady);
+    const overdriveActive = Boolean(overdrive.active ?? state.overdriveActive);
+    const overdriveRemaining = Math.max(0, finite(overdrive.remaining ?? state.overdriveRemaining));
+    const rememberedDuration = Math.max(0, finite(this.overdriveDisplayDuration));
+    const reportedDuration = Math.max(0, finite(overdrive.duration ?? overdrive.totalDuration ?? state.overdriveDuration));
+    if (overdriveActive) this.overdriveDisplayDuration = Math.max(rememberedDuration, reportedDuration, overdriveRemaining);
+    else this.overdriveDisplayDuration = 0;
+    const overdriveDuration = Math.max(0.001, finite(this.overdriveDisplayDuration, overdriveRemaining || 1));
+    const overdriveProgress = overdriveActive
+      ? clamp(overdrive.progress ?? overdriveRemaining / overdriveDuration)
+      : momentumValue;
+    const overdriveKey = overdrive.key ?? state.overdriveKey
+      ?? getPath(this.settings, 'controls.bindings.overdrive', getPath(DEFAULT_SETTINGS, 'controls.bindings.overdrive', 'KeyF'));
+    const overdrivePanel = this.root.querySelector('[data-hud-panel="overdrive"]');
+    this._setText('overdrive-key', humanKey(overdriveKey));
+    this._setMeter('overdrive', overdriveProgress);
+    this._setText('overdrive-status', overdriveActive ? 'АКТИВЕН' : overdriveReady ? 'ГОТОВ' : `ЗАРЯД ${Math.round(momentumValue * 100)}%`);
+    this._setText('overdrive-time', overdriveActive ? `${overdriveRemaining.toFixed(1)} с` : overdriveReady ? `${humanKey(overdriveKey)} // АКТИВИРОВАТЬ` : '');
+    overdrivePanel?.classList.toggle('is-ready', overdriveReady && !overdriveActive);
+    overdrivePanel?.classList.toggle('is-active', overdriveActive);
+    this.hud.classList.toggle('is-overdrive-ready', overdriveReady && !overdriveActive);
+    this.hud.classList.toggle('is-overdrive-active', overdriveActive);
+    this.root.classList.toggle('is-overdrive-ready', overdriveReady && !overdriveActive);
+    this.root.classList.toggle('is-overdrive-active', overdriveActive);
+
     if (Array.isArray(state.upgrades)) this._renderHudUpgrades(state.upgrades);
     this._updateInteract(state.interact);
     if (state.crosshair !== undefined) this.setCrosshair(state.crosshair);
@@ -389,7 +443,7 @@ export class UIManager {
     this._showScreen(`<main class="results-screen results-screen--${victory ? 'victory' : 'defeat'}" aria-labelledby="results-title"><div class="results-sigil" aria-hidden="true"><i></i><i></i><i></i></div><section class="results-panel">
       <header class="results-header"><p class="eyebrow">${stats.newBest ? 'НОВЫЙ РЕКОРД' : victory ? 'ПРОТОКОЛ ЗАВЕРШЁН' : 'ПРОТОКОЛ ОБОРВАН'}</p><h1 id="results-title">${victory ? 'Решётка стабилизирована' : 'Сигнал оператора потерян'}</h1><p>${victory ? 'Три фазовых узла сведены. Коридор эвакуации открыт.' : 'Решётка сохранила данные прогона. Комплекс готов к новому запуску.'}</p></header>
       <div class="result-score"><span>ИТОГОВЫЙ РЕЗУЛЬТАТ</span><strong>${formatInteger(stats.score)}</strong><small>+${formatInteger(stats.xp)} XP</small></div>
-      <dl class="results-grid">${metric('Время прохождения', formatDuration(stats.duration ?? stats.time))}${metric('Ликвидации', formatInteger(stats.kills))}${metric('Попадания в голову', formatInteger(stats.headshots))}${metric('Точность', `${clamp(accuracy, 0, 100).toFixed(1)}%`)}${metric('Получено урона', formatInteger(stats.damageTaken))}${metric('Лучшая серия', `×${Math.max(1, finite(stats.bestCombo, 1)).toFixed(finite(stats.bestCombo, 1) % 1 ? 1 : 0)}`)}</dl>
+      <dl class="results-grid">${metric('Время прохождения', formatDuration(stats.duration ?? stats.time))}${metric('Ликвидации', formatInteger(stats.kills))}${metric('Попадания в голову', formatInteger(stats.headshots))}${metric('Точность', `${clamp(accuracy, 0, 100).toFixed(1)}%`)}${metric('Получено урона', formatInteger(stats.damageTaken))}${metric('Лучшая серия', `×${Math.max(1, finite(stats.bestCombo, 1)).toFixed(finite(stats.bestCombo, 1) % 1 ? 1 : 0)}`)}${metric('Лучший стиль', escapeHTML(stats.bestStyleRank ?? 'D'))}${metric('Style score', formatInteger(stats.styleScore))}${metric('Overdrive', `${formatInteger(stats.overdriveActivations)} запусков / ${finite(stats.overdriveTime).toFixed(1)} с`)}</dl>
       <section class="result-upgrades"><h2>Модули забега</h2><div>${upgrades.length ? upgrades.map((upgrade) => `<span>${escapeHTML(upgrade.name ?? upgrade.title ?? upgrade)}</span>`).join('') : '<span class="is-muted">Модули не установлены</span>'}</div></section>
       <div class="results-actions">${this._actionButton('01', 'Новый забег', 'Сформировать новый протокол', 'restart', true)}<button class="text-button" type="button" data-action="menu">В главное меню</button></div>
     </section></main>`, 'results');
@@ -571,7 +625,7 @@ export class UIManager {
       const bindings = [
         ['forward', 'Движение вперёд'], ['backward', 'Движение назад'], ['left', 'Шаг влево'], ['right', 'Шаг вправо'],
         ['jump', 'Прыжок'], ['sprint', 'Спринт'], ['crouch', 'Присесть'], ['dash', 'Рывок'],
-        ['interact', 'Взаимодействие'], ['reload', 'Перезарядка'],
+        ['overdrive', 'Активировать Overdrive'], ['interact', 'Взаимодействие'], ['reload', 'Перезарядка'],
         ['weapon1', 'Оружие 1'], ['weapon2', 'Оружие 2'], ['weapon3', 'Оружие 3'], ['weapon4', 'Оружие 4'], ['weapon5', 'Оружие 5'],
       ];
       return `${this._settingsHeader('INPUT // RESPONSE', 'Управление', 'Для новой клавиши нажмите «Изменить», затем нужную клавишу. Escape отменяет захват.')}
@@ -688,6 +742,7 @@ export class UIManager {
       ['Движение', [binding('forward'), binding('left'), binding('backward'), binding('right')], 'Перемещайтесь и не задерживайтесь в открытом пространстве.'],
       ['Огневой контакт', ['ЛКМ', 'ПКМ'], 'Левая кнопка стреляет, правая включает прицеливание.'],
       ['Мобильность', [binding('jump'), binding('sprint'), binding('dash')], 'Прыжок, спринт и рывок позволяют менять вектор атаки.'],
+      ['Momentum', [binding('overdrive')], 'При полной шкале активирует Overdrive и временно усиливает боевой темп.'],
       ['Взаимодействие', [binding('interact'), binding('reload')], 'Контекстное действие и перезарядка активного оружия.'],
       ['Система', ['ESC', '1', '2', '3', '4', '5'], 'Пауза и быстрая смена одного из пяти видов оружия.'],
     ];
@@ -991,7 +1046,8 @@ export class UIManager {
     this.inputActivationRequested = false;
     this._setInputActivationDisplayed(false);
     this.hud.hidden = true;
-    this.hud.classList.remove('is-active', 'is-critical');
+    this.hud.classList.remove('is-active', 'is-critical', 'is-overdrive-ready', 'is-overdrive-active');
+    this.root.classList.remove('is-overdrive-ready', 'is-overdrive-active');
     if (this.crosshair) this.crosshair.hidden = true;
   }
 
