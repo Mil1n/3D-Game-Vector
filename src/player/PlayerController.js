@@ -4,6 +4,8 @@ import * as CANNON from 'cannon-es';
 export const PLAYER_COLLISION_GROUP = 1;
 const STATIC_WORLD_COLLISION_GROUP = 2;
 const TAU = Math.PI * 2;
+const MAX_GROUNDED_UPWARD_SPEED = 1.2;
+const MIN_LANDING_IMPACT = 0.5;
 
 export const DEFAULT_PLAYER_CONFIG = Object.freeze({
   height: 1.8,
@@ -203,8 +205,11 @@ export class PlayerController {
     this._previousInput.crouch = normalized.crouch;
     this._previousInput.dash = normalized.dash;
 
-    if (jumpPressed) this._jumpBufferRemaining = this.config.jumpBufferTime;
-    if (this.grounded) this._coyoteRemaining = this.config.coyoteTime;
+    const canJumpFromGround = this.grounded && this.body.velocity.y <= MAX_GROUNDED_UPWARD_SPEED;
+    if (jumpPressed || (normalized.jump && canJumpFromGround)) {
+      this._jumpBufferRemaining = this.config.jumpBufferTime;
+    }
+    if (canJumpFromGround) this._coyoteRemaining = this.config.coyoteTime;
 
     const inputLength = Math.hypot(normalized.moveX, normalized.moveForward);
     const moveX = inputLength > 1 ? normalized.moveX / inputLength : normalized.moveX;
@@ -290,23 +295,26 @@ export class PlayerController {
     const wasGrounded = this.grounded;
     let grounded = false;
     let bestNormalY = -1;
-    const contacts = this.world.contacts ?? [];
-    for (const contact of contacts) {
-      let supportY = -1;
-      if (contact.bi === this.body) supportY = -contact.ni.y;
-      else if (contact.bj === this.body) supportY = contact.ni.y;
-      if (supportY > 0.46 && supportY > bestNormalY) {
-        grounded = true;
-        bestNormalY = supportY;
-        if (contact.bi === this.body) {
-          this._groundNormal.set(-contact.ni.x, -contact.ni.y, -contact.ni.z);
-        } else {
-          this._groundNormal.set(contact.ni.x, contact.ni.y, contact.ni.z);
+    const canAcceptGroundContact = this.body.velocity.y <= MAX_GROUNDED_UPWARD_SPEED;
+    if (canAcceptGroundContact) {
+      const contacts = this.world.contacts ?? [];
+      for (const contact of contacts) {
+        let supportY = -1;
+        if (contact.bi === this.body) supportY = -contact.ni.y;
+        else if (contact.bj === this.body) supportY = contact.ni.y;
+        if (supportY > 0.46 && supportY > bestNormalY) {
+          grounded = true;
+          bestNormalY = supportY;
+          if (contact.bi === this.body) {
+            this._groundNormal.set(-contact.ni.x, -contact.ni.y, -contact.ni.z);
+          } else {
+            this._groundNormal.set(contact.ni.x, contact.ni.y, contact.ni.z);
+          }
         }
       }
     }
 
-    if (!grounded && this.body.velocity.y <= 1.2) {
+    if (!grounded && canAcceptGroundContact) {
       const rayStart = this.body.position;
       const rayEnd = new CANNON.Vec3(
         rayStart.x,
@@ -337,7 +345,9 @@ export class PlayerController {
     this.grounded = grounded;
     if (grounded && !wasGrounded) {
       const impact = Math.max(0, -this._previousVerticalVelocity);
-      this._emit('player:landed', { impact, hard: impact > 9 });
+      if (impact >= MIN_LANDING_IMPACT) {
+        this._emit('player:landed', { impact, hard: impact > 9 });
+      }
     }
   }
 

@@ -15,6 +15,67 @@ const HELD_FORWARD_INPUT = {
   consumeLook: () => ({ x: 0, y: 0 }),
 };
 
+function createJumpHarness() {
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+  const ground = new CANNON.Body({
+    mass: 0,
+    position: new CANNON.Vec3(0, -0.5, 0),
+    collisionFilterGroup: 2,
+  });
+  ground.addShape(new CANNON.Box(new CANNON.Vec3(20, 0.5, 20)));
+  world.addBody(ground);
+
+  const events = [];
+  let stepNumber = 0;
+  const player = new PlayerController({
+    world,
+    spawn: new THREE.Vector3(0, 1.05, 0),
+    eventBus: {
+      emit(type, payload) {
+        if (type === 'player:jumped' || type === 'player:landed') {
+          events.push({ type, payload, step: stepNumber });
+        }
+      },
+    },
+  });
+  const input = {
+    jumpHeld: false,
+    jumpPressed: false,
+    isDown(action) {
+      return action === 'jump' && this.jumpHeld;
+    },
+    wasPressed(action) {
+      return action === 'jump' && this.jumpPressed;
+    },
+    getAxis: () => 0,
+    consumeLook: () => ({ x: 0, y: 0 }),
+    pressJump() {
+      this.jumpHeld = true;
+      this.jumpPressed = true;
+    },
+    releaseJump() {
+      this.jumpHeld = false;
+      this.jumpPressed = false;
+    },
+  };
+
+  const step = () => {
+    player.fixedUpdate(input, FIXED_STEP);
+    input.jumpPressed = false;
+    world.step(FIXED_STEP);
+    stepNumber += 1;
+  };
+  const settle = () => {
+    for (let count = 0; count < 180 && !player.grounded; count += 1) step();
+    assert.equal(player.grounded, true, 'jump harness should settle the player on its floor');
+    for (let count = 0; count < 30; count += 1) step();
+    assert.equal(player.grounded, true, 'jump harness should retain a stable floor contact');
+    events.length = 0;
+  };
+
+  return { events, input, player, settle, step };
+}
+
 test('held forward movement is not cancelled by arena contact friction', () => {
   for (const mapId of MAP_ORDER) {
     const scene = new THREE.Scene();
@@ -95,4 +156,61 @@ test('Overdrive accelerates movement and disable or reset restores the exact bas
   assert.ok(Math.abs(sampleForwardSpeed() - baseline) < 0.000001);
 
   player.dispose();
+});
+
+test('held Space jumps immediately and repeats exactly once after each landing', () => {
+  const harness = createJumpHarness();
+  harness.settle();
+  harness.input.pressJump();
+  harness.step();
+
+  assert.equal(harness.events.filter(({ type }) => type === 'player:jumped').length, 1);
+  assert.ok(harness.player.body.velocity.y > 0, 'the initial held Space should launch the player');
+
+  for (let count = 0; count < 10; count += 1) harness.step();
+  assert.equal(
+    harness.events.filter(({ type }) => type === 'player:jumped').length,
+    1,
+    'holding Space in the air must not emit extra jump events',
+  );
+
+  for (let count = 0; count < 240; count += 1) {
+    harness.step();
+    if (harness.events.filter(({ type }) => type === 'player:jumped').length === 3) break;
+  }
+
+  const jumpEvents = harness.events.filter(({ type }) => type === 'player:jumped');
+  const landingEvents = harness.events.filter(({ type }) => type === 'player:landed');
+  assert.equal(jumpEvents.length, 3, 'held Space should continue jumping after landings');
+  assert.equal(landingEvents.length, 2, 'each repeated jump should have one preceding landing');
+  assert.deepEqual(
+    harness.events.map(({ type }) => type),
+    [
+      'player:jumped',
+      'player:landed',
+      'player:jumped',
+      'player:landed',
+      'player:jumped',
+    ],
+  );
+  assert.ok(jumpEvents[1].step - jumpEvents[0].step > 20, 'the repeat must wait for a real landing');
+  assert.ok(jumpEvents[2].step - jumpEvents[1].step > 20, 'only one jump is allowed per landing');
+
+  harness.player.dispose();
+});
+
+test('releasing Space in the air stops the automatic jump on landing', () => {
+  const harness = createJumpHarness();
+  harness.settle();
+  harness.input.pressJump();
+  harness.step();
+  for (let count = 0; count < 8; count += 1) harness.step();
+  harness.input.releaseJump();
+  for (let count = 0; count < 120; count += 1) harness.step();
+
+  assert.equal(harness.events.filter(({ type }) => type === 'player:jumped').length, 1);
+  assert.equal(harness.events.filter(({ type }) => type === 'player:landed').length, 1);
+  assert.equal(harness.player.grounded, true, 'the player should remain grounded after Space is released');
+
+  harness.player.dispose();
 });
