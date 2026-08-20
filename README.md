@@ -7,7 +7,7 @@
     <img alt="Playable" src="https://img.shields.io/badge/STATUS-PLAYABLE-58ffc7?style=for-the-badge&amp;labelColor=111827">
     <img alt="3 arenas" src="https://img.shields.io/badge/ARENAS-3-67f5ff?style=for-the-badge&amp;labelColor=111827">
     <img alt="5 weapons" src="https://img.shields.io/badge/WEAPONS-5-d66cff?style=for-the-badge&amp;labelColor=111827">
-    <img alt="86 tests" src="https://img.shields.io/badge/TESTS-86%2F86-ffb638?style=for-the-badge&amp;labelColor=111827">
+    <img alt="91 tests" src="https://img.shields.io/badge/TESTS-91%2F91-ffb638?style=for-the-badge&amp;labelColor=111827">
   </p>
 
   <p>
@@ -287,7 +287,7 @@ npm run preview
 ```
 
 > [!NOTE]
-> Текущий набор: **86/86 тестов** — конфигурации, состояния, ввод, карты, движение, Momentum/Overdrive, директор матча, HUD/audio/VFX, error UI, пулы, оружие, руки и модели противников. Production-сборка Vite также проходит.
+> Текущий набор: **91/91 тест** — конфигурации, состояния, ввод, карты, движение, прогрессия, Momentum/Overdrive, директор матча, HUD/audio/VFX, error UI, пулы, оружие, руки и модели противников. Production-сборка Vite также проходит.
 
 <details>
 <summary><strong>✅ Ручной smoke-check</strong></summary>

@@ -1,4 +1,5 @@
 import { EventBus } from './EventBus.js';
+import { levelFromExperience } from '../configs/progressionConfig.js';
 
 export const SAVE_SCHEMA_VERSION = 3;
 export const SAVE_DATABASE_VERSION = 3;
@@ -153,7 +154,7 @@ export function validateProfile(input, id = DEFAULT_PROFILE_ID) {
   const defaults = createDefaultProfile(id);
   const timestamp = nowIso();
   const totalExperience = integer(source.totalXp ?? source.progression?.totalExperience);
-  const level = integer(source.level ?? source.progression?.level, 1, 1);
+  const level = levelFromExperience(totalExperience);
   const bestScore = integer(source.bestScore ?? source.stats?.bestScore);
   const achievementEntries = achievements(source.achievements ?? source.progression?.achievements);
   const unlockedWeapons = strings(source.unlocks?.weapons ?? source.progression?.unlockedWeapons);
@@ -414,7 +415,7 @@ export class SaveManager {
       profile.stats.playTimeSeconds += finite(result.playTimeSeconds);
       profile.stats.totalPlayTime = profile.stats.playTimeSeconds;
       profile.progression.totalExperience += experience;
-      profile.progression.level = this.#levelForExperience(profile.progression.totalExperience);
+      profile.progression.level = levelFromExperience(profile.progression.totalExperience);
       for (const achievement of achievements(result.achievements)) {
         const id = typeof achievement === 'string' ? achievement : achievement.id;
         const known = profile.progression.achievements.some((entry) => (typeof entry === 'string' ? entry : entry.id) === id);
@@ -511,18 +512,6 @@ export class SaveManager {
     this.mode = 'fallback';
   }
 
-  #levelForExperience(experience) {
-    let level = 1;
-    let remaining = experience;
-    let cost = 500;
-    while (remaining >= cost && level < 100) {
-      remaining -= cost;
-      level += 1;
-      cost = Math.floor(cost * 1.22);
-    }
-    return level;
-  }
-
   #globalValue(name) {
     try {
       return globalThis[name] ?? null;
@@ -541,13 +530,10 @@ export class SaveManager {
       profile.progression.totalExperience = profile.totalXp;
     } else if (nestedXpChanged) profile.totalXp = profile.progression?.totalExperience;
 
-    const rootLevelChanged = Object.hasOwn(patch, 'level') || profile.level !== previous.level;
-    const nestedLevelChanged = Object.hasOwn(patch.progression ?? {}, 'level')
-      || profile.progression?.level !== previous.progression?.level;
-    if (rootLevelChanged) {
-      profile.progression ??= {};
-      profile.progression.level = profile.level;
-    } else if (nestedLevelChanged) profile.level = profile.progression?.level;
+    const canonicalLevel = levelFromExperience(profile.totalXp ?? profile.progression?.totalExperience);
+    profile.level = canonicalLevel;
+    profile.progression ??= {};
+    profile.progression.level = canonicalLevel;
 
     const rootScoreChanged = Object.hasOwn(patch, 'bestScore') || profile.bestScore !== previous.bestScore;
     const nestedScoreChanged = Object.hasOwn(patch.stats ?? {}, 'bestScore')

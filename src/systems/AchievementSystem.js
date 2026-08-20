@@ -1,3 +1,5 @@
+import { levelFromExperience } from '../configs/progressionConfig.js';
+
 const ACHIEVEMENTS = Object.freeze([
   {
     id: 'first_contact',
@@ -40,10 +42,6 @@ const ACHIEVEMENTS = Object.freeze([
 function safeClone(value) {
   if (typeof structuredClone === 'function') return structuredClone(value);
   return JSON.parse(JSON.stringify(value));
-}
-
-function levelFromExperience(experience) {
-  return 1 + Math.floor(Math.sqrt(Math.max(0, experience) / 260));
 }
 
 export class AchievementSystem {

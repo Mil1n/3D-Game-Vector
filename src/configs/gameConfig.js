@@ -175,8 +175,6 @@ export const GAME_CONFIG = deepFreeze({
     eliteEnergy: 50,
     objectiveEnergy: 75,
     experiencePerScore: 0.02,
-    firstLevelExperience: 500,
-    levelGrowth: 1.22,
   },
 });
 
