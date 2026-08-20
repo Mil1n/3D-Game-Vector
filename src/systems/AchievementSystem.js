@@ -143,7 +143,10 @@ export class AchievementSystem {
   getCatalog() {
     const profile = this.saveManager.getProfile?.() ?? this.profile ?? {};
     const unlockedIds = new Set((profile.achievements ?? []).map((item) => typeof item === 'string' ? item : item.id));
-    return ACHIEVEMENTS.map((achievement) => ({ ...achievement, unlocked: unlockedIds.has(achievement.id) }));
+    return ACHIEVEMENTS.map(({ test: _test, ...achievement }) => ({
+      ...achievement,
+      unlocked: unlockedIds.has(achievement.id),
+    }));
   }
 
   getProfile() {

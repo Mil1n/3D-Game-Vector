@@ -719,20 +719,13 @@ export class UIManager {
   }
 
   _achievementsMarkup() {
-    const stats = this.profile?.stats ?? {};
-    const unlocked = this.profile?.progression?.achievements ?? [];
-    const unlockedIds = new Set(unlocked.map((item) => typeof item === 'string' ? item : item.id));
-    const definitions = [
-      ['first-run', 'Первый вектор', 'Завершить первый забег.', finite(stats.runs), 1],
-      ['first-win', 'Стабильный коридор', 'Стабилизировать все три фазовых узла.', finite(stats.wins), 1],
-      ['hunter', 'Охотник решётки', 'Уничтожить 100 противников.', finite(stats.kills), 100],
-      ['veteran', 'Ветеран протокола', 'Завершить 10 забегов.', finite(stats.runs), 10],
-      ['high-score', 'Резонанс', 'Набрать 50 000 очков за забег.', finite(stats.bestScore), 50000],
-      ['unstoppable', 'Неудержимый', 'Пять раз успешно стабилизировать решётку.', finite(stats.wins), 5],
-    ];
-    return `<div class="achievement-grid">${definitions.map(([id, name, detail, current, target], index) => {
-      const complete = unlockedIds.has(id) || current >= target;
-      return `<article class="achievement ${complete ? 'is-unlocked' : ''}"><div class="achievement__icon"><span>${String(index + 1).padStart(2, '0')}</span><i style="--progress:${clamp(current / target) * 360}deg"></i></div><div><span>${complete ? 'РАЗБЛОКИРОВАНО' : `${formatInteger(current)} / ${formatInteger(target)}`}</span><h2>${name}</h2><p>${detail}</p></div></article>`;
+    const catalog = Array.isArray(this.profile?.achievementsCatalog) ? this.profile.achievementsCatalog : [];
+    if (!catalog.length) {
+      return '<section class="archive-note"><h2>Каталог недоступен</h2><p>Вернитесь в главное меню, чтобы синхронизировать достижения профиля.</p></section>';
+    }
+    return `<div class="achievement-grid">${catalog.map((achievement, index) => {
+      const complete = achievement.unlocked === true;
+      return `<article class="achievement ${complete ? 'is-unlocked' : ''}" data-achievement-id="${escapeHTML(achievement.id)}"><div class="achievement__icon"><span>${String(index + 1).padStart(2, '0')}</span><i style="--progress:${complete ? 360 : 0}deg"></i></div><div><span>${complete ? 'РАЗБЛОКИРОВАНО' : 'НЕ РАЗБЛОКИРОВАНО'}</span><h2>${escapeHTML(achievement.name)}</h2><p>${escapeHTML(achievement.description)}</p></div></article>`;
     }).join('')}</div>`;
   }
 

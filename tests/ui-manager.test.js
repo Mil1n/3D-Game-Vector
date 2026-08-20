@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { AchievementSystem } from '../src/systems/AchievementSystem.js';
 import { UIManager } from '../src/ui/UIManager.js';
 
 function renderError(error, detail = '') {
@@ -102,6 +103,59 @@ test('Momentum and Overdrive controls are listed with a remappable KeyF default'
   assert.match(settingsMarkup, /Активировать Overdrive/);
   assert.match(controlsMarkup, /Momentum/);
   assert.match(controlsMarkup, />F</);
+});
+
+test('achievements view renders the canonical AchievementSystem catalog', () => {
+  const achievements = new AchievementSystem({
+    saveManager: {
+      getProfile: () => ({ achievements: [{ id: 'first_contact' }] }),
+    },
+  });
+  const catalog = achievements.getCatalog();
+  const ui = Object.create(UIManager.prototype);
+  ui.profile = {
+    achievementsCatalog: catalog,
+    progression: { achievements: [] },
+    stats: { runs: 99, wins: 99, kills: 999, bestScore: 999999 },
+  };
+
+  const markup = ui._achievementsMarkup();
+  const cards = [...markup.matchAll(/<article\b[^>]*class="[^"]*\bachievement\b[^"]*"[^>]*>/g)].map((match) => match[0]);
+  const renderedIds = cards.map((card) => card.match(/data-achievement-id="([^"]+)"/)?.[1]);
+
+  assert.equal(new Set(catalog.map(({ id }) => id)).size, catalog.length);
+  assert.ok(catalog.every((achievement) => !Object.hasOwn(achievement, 'test')), 'public catalog must not expose evaluator functions');
+  assert.deepEqual(renderedIds, catalog.map(({ id }) => id));
+  for (const achievement of catalog) {
+    assert.ok(markup.includes(achievement.name), `missing achievement name: ${achievement.id}`);
+    assert.ok(markup.includes(achievement.description), `missing achievement description: ${achievement.id}`);
+  }
+  assert.match(cards.find((card) => card.includes('data-achievement-id="first_contact"')) ?? '', /\bis-unlocked\b/);
+  assert.doesNotMatch(cards.find((card) => card.includes('data-achievement-id="velocity"')) ?? '', /\bis-unlocked\b/);
+  assert.doesNotMatch(markup, /data-achievement-id="(?:first-run|first-win|hunter|veteran|high-score|unstoppable)"/);
+});
+
+test('achievements view escapes catalog fields and handles an unavailable catalog', () => {
+  const ui = Object.create(UIManager.prototype);
+  ui.profile = {
+    achievementsCatalog: [{
+      id: `"><script>alert('id')</script>`,
+      name: '<b>Unsafe name</b>',
+      description: 'A & B',
+      unlocked: false,
+    }],
+  };
+
+  const markup = ui._achievementsMarkup();
+  assert.doesNotMatch(markup, /<script>|<b>/);
+  assert.match(markup, /data-achievement-id="&quot;&gt;&lt;script&gt;alert\(&#039;id&#039;\)&lt;\/script&gt;"/);
+  assert.match(markup, /&lt;b&gt;Unsafe name&lt;\/b&gt;/);
+  assert.match(markup, /A &amp; B/);
+
+  ui.profile = { achievementsCatalog: [] };
+  const emptyMarkup = ui._achievementsMarkup();
+  assert.match(emptyMarkup, /Каталог недоступен/);
+  assert.doesNotMatch(emptyMarkup, /class="[^"]*\bachievement\b/);
 });
 
 function createHudUpdateHarness() {
