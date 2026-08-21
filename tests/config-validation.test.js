@@ -41,6 +41,7 @@ test('all five weapon configs expose the WeaponSystem contract', () => {
     'id', 'name', 'shortName', 'description', 'type', 'damage', 'fireRate', 'magazine',
     'reserve', 'reloadTime', 'spread', 'moveSpread', 'adsSpread', 'recoil', 'range',
     'falloffStart', 'falloffEnd', 'automatic', 'pellets', 'headMultiplier', 'color',
+    'adsFovMultiplier',
   ];
 
   for (const id of WEAPON_ORDER) {
@@ -51,6 +52,12 @@ test('all five weapon configs expose the WeaponSystem contract', () => {
     for (const field of ['damage', 'fireRate', 'magazine', 'reserve', 'reloadTime', 'range', 'pellets', 'headMultiplier']) {
       positive(weapon[field], `${id}.${field}`);
     }
+    assert.ok(
+      Number.isFinite(weapon.adsFovMultiplier)
+        && weapon.adsFovMultiplier > 0
+        && weapon.adsFovMultiplier <= 1,
+      `${id}.adsFovMultiplier must be finite and within (0, 1]`,
+    );
     assert.ok(weapon.falloffStart < weapon.falloffEnd && weapon.falloffEnd <= weapon.range);
     positive(weapon.recoil.recovery, `${id}.recoil.recovery`);
   }

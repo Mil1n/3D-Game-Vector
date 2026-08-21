@@ -3,6 +3,7 @@ import * as CANNON from 'cannon-es';
 import { EventBus } from './EventBus.js';
 import { GameStateManager, GAME_STATES } from './GameStateManager.js';
 import { SceneManager } from './SceneManager.js';
+import { CameraFovController } from './CameraFovController.js';
 import { AssetManager } from './AssetManager.js';
 import { InputManager } from './InputManager.js';
 import { AudioManager } from './AudioManager.js';
@@ -125,6 +126,8 @@ export class Game {
     });
     this.ui = new UIManager({ eventBus: this.eventBus, settingsManager: this.settings, saveManager: this.save, uiRoot });
     this.sceneManager = null;
+    this.cameraFov = null;
+    this.cameraFovContext = { sprinting: false, adsAmount: 0, adsFovMultiplier: 1 };
     this.world = null;
     this.arena = null;
     this.player = null;
@@ -199,6 +202,7 @@ export class Game {
   createSimulation() {
     const settings = this.settings.getSettings();
     this.sceneManager = new SceneManager({ canvas: this.canvas, eventBus: this.eventBus, settings });
+    this.cameraFov = new CameraFovController({ camera: this.sceneManager.camera, settings });
     const gravity = GAME_CONFIG.physics?.gravity ?? [0, -22, 0];
     this.world = new CANNON.World({ gravity: new CANNON.Vec3(...gravity) });
     this.world.allowSleep = true;
@@ -461,6 +465,7 @@ export class Game {
     this.debug.registerMetric('State', () => this.state.state);
     this.debug.registerMetric('Arena', () => this.arena.getMapInfo().shortName);
     this.debug.registerMetric('Accuracy', () => `${(this.weapons.getAccuracy() * 100).toFixed(1)}%`);
+    this.debug.registerMetric('Camera FOV', () => this.cameraFov.getState().currentFov.toFixed(1));
     this.debug.registerMetric('Time scale', () => this.timeScale.toFixed(2));
     this.debug.registerMetric('Momentum', () => `${this.momentum.getState().momentum.toFixed(1)} / 100`);
     this.debug.registerMetric('Style rank', () => this.momentum.getState().rank);
@@ -510,6 +515,7 @@ export class Game {
     this.enemies.reset();
     this.enemies.setDifficulty(this.matchDifficulty);
     this.weapons.reset();
+    this.cameraFov?.reset();
     this.weapons.setEnabled(true);
     this.upgrades.reset({ player: this.player, weaponSystem: this.weapons });
     this.momentum?.reset?.();
@@ -541,6 +547,7 @@ export class Game {
     void this.input.exitPointerLock();
     this.input.clear();
     this.ui.showPause();
+    this.cameraFov?.reset();
     this.audio.setVolume('master', this.settings.get('audio.master', 0.8) * 0.3);
     return true;
   }
@@ -574,6 +581,7 @@ export class Game {
     void this.input.exitPointerLock();
     this.input.clear();
     this.ui.showUpgrade(options);
+    this.cameraFov?.reset();
     this.audio.setVolume('master', this.settings.get('audio.master', 0.8) * 0.55);
   }
 
@@ -599,6 +607,7 @@ export class Game {
     const overdriveWasActive = this.momentum?.endOverdrive?.('match-ended') === true;
     if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'match-ended');
     this.state.transition(resultState, { cause });
+    this.cameraFov?.reset();
     this.weapons.setEnabled(false);
     void this.input.exitPointerLock();
     this.input.clear();
@@ -643,6 +652,7 @@ export class Game {
 
   positionMenuCamera() {
     if (!this.sceneManager?.camera) return;
+    this.cameraFov?.reset();
     const camera = this.sceneManager.camera;
     camera.position.set(20, 11, 29);
     camera.lookAt(0, 4, 0);
@@ -686,6 +696,7 @@ export class Game {
   applySettings(settings = this.settings.getSettings()) {
     if (!settings) return;
     this.sceneManager?.applySettings(settings);
+    this.cameraFov?.applySettings(settings, { immediate: true });
     this.input.setBindings(settings.controls.bindings, { replace: true, silent: true });
     this.input.setMouseOptions({ sensitivity: settings.controls.mouseSensitivity, invertY: settings.controls.invertY });
     this.player?.setHeadBobEnabled(settings.gameplay.headBob && !settings.accessibility.reducedMotion);
@@ -718,6 +729,7 @@ export class Game {
       if ([GAME_STATES.PLAYING, GAME_STATES.TUTORIAL, GAME_STATES.PAUSED, GAME_STATES.UPGRADE_SELECTION].includes(this.state.state)) {
         this.player?.update(this.sceneManager.camera, PLAYING_STATES.has(this.state.state) ? realDelta : 0);
       }
+      if (PLAYING_STATES.has(this.state.state)) this.updateCameraFov(realDelta);
       this.updateAudioListener();
       this.updateDebug(realDelta);
       const stats = this.sceneManager.render(realDelta);
@@ -773,6 +785,22 @@ export class Game {
       this.player.damage(24, { source: 'arena', cause: 'Падение за пределы решётки', bypassArmor: true });
       this.player.teleport(this.arena.getSafePlayerSpawn());
     }
+  }
+
+  updateCameraFov(deltaSeconds) {
+    if (!this.cameraFov) return undefined;
+    const context = this.cameraFovContext ??= {
+      sprinting: false,
+      adsAmount: 0,
+      adsFovMultiplier: 1,
+    };
+    const readsIntent = typeof this.gameplayInput?.isDown === 'function';
+    const sprintIntent = !readsIntent || this.gameplayInput.isDown('sprint');
+    const aimIntent = !readsIntent || this.gameplayInput.isDown('aim');
+    context.sprinting = Boolean(this.player?.isSprinting && sprintIntent);
+    context.adsAmount = aimIntent ? Number(this.weapons?.adsAmount ?? 0) : 0;
+    context.adsFovMultiplier = Number(this.weapons?.currentConfig?.adsFovMultiplier ?? 1);
+    return this.cameraFov.update(deltaSeconds, context);
   }
 
   pushMomentumHUD(state = this.momentum?.getState?.(), actionLabel = null) {
@@ -952,6 +980,7 @@ export class Game {
     if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'runtime-error');
     this.running = false;
     cancelAnimationFrame(this.raf);
+    this.cameraFov?.reset();
     this.ui.showError({ title: 'Симуляция остановлена', detail: error.message, code: 'RUNTIME_FAILURE' });
   }
 
@@ -975,6 +1004,7 @@ export class Game {
     this.effects?.dispose();
     this.player?.dispose();
     this.arena?.dispose();
+    this.cameraFov?.dispose?.();
     this.sceneManager?.dispose();
     this.audio?.dispose();
     this.input?.dispose();
