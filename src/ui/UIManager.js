@@ -656,7 +656,7 @@ export class UIManager {
           ${this._toggleSetting('accessibility.reducedMotion', 'Снижение движения', 'Отключает декоративные анимации и сокращает переходы.', value('accessibility.reducedMotion'))}
           ${this._rangeSetting('accessibility.uiScale', 'Размер интерфейса', 'Масштаб боевого HUD и контекстных подсказок.', value('accessibility.uiScale'), 0.8, 1.3, 0.05, 'ratio')}
           ${this._rangeSetting('gameplay.headBob', 'Покачивание камеры', 'Амплитуда камеры при движении.', value('gameplay.headBob'), 0, 1, 0.05, 'percent')}
-          ${this._rangeSetting('gameplay.cameraShake', 'Тряска камеры', 'Сила импульсов от урона и взрывов.', value('gameplay.cameraShake'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('gameplay.cameraShake', 'Тряска камеры', 'Сила затухающих импульсов от урона и близких взрывов.', value('gameplay.cameraShake'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('accessibility.screenFlash', 'Экранные вспышки', 'Яркость вспышек и эффектов попадания.', value('accessibility.screenFlash'), 0, 1, 0.05, 'percent')}
           ${this._toggleSetting('gameplay.subtitles', 'Субтитры', 'Показывает речь и важные звуки.', value('gameplay.subtitles'))}
         </section><section class="settings-group"><h3>Читаемость</h3>

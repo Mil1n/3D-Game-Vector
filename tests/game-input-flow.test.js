@@ -183,3 +183,69 @@ test('runtime failure explicitly ends Overdrive before stopping the frame loop',
   assert.deepEqual(calls, ['end:runtime-error', 'effects:false:runtime-error', 'cancel-raf', 'error-ui']);
   assert.equal(game.running, false);
 });
+
+test('playing frame restores shake before the player pose and applies it after the audio listener', (t) => {
+  const calls = [];
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = () => 7;
+  t.after(() => {
+    if (originalRequestAnimationFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  });
+
+  const game = {
+    running: true,
+    disposed: false,
+    _frame() {},
+    raf: 0,
+    lastTimestamp: 1000,
+    timeScale: 1,
+    settings: { get: () => 0 },
+    state: { state: GAME_STATES.PLAYING },
+    cameraShake: {
+      restoreCamera: () => calls.push('restore-shake'),
+      update: () => calls.push('apply-shake'),
+    },
+    updateGameplay: () => calls.push('gameplay'),
+    player: { update: () => calls.push('player-pose') },
+    updateCameraFov: () => calls.push('fov'),
+    updateAudioListener: () => calls.push('audio-listener'),
+    updateDebug: () => calls.push('debug'),
+    sceneManager: {
+      camera: {},
+      render: () => {
+        calls.push('render');
+        return { fps: 60 };
+      },
+    },
+    updateAdaptiveQuality: () => calls.push('adaptive-quality'),
+    handleRuntimeError: (error) => { throw error; },
+  };
+
+  Game.prototype.frame.call(game, 1000 + 1000 / 60);
+
+  assert.deepEqual(calls, [
+    'restore-shake',
+    'gameplay',
+    'player-pose',
+    'fov',
+    'audio-listener',
+    'apply-shake',
+    'debug',
+    'render',
+    'adaptive-quality',
+  ]);
+});
+
+test('resetCameraPresentation clears both shake and dynamic FOV state', () => {
+  const calls = [];
+  const game = {
+    cameraShake: { reset: () => calls.push('shake') },
+    cameraFov: { reset: () => { calls.push('fov'); return 'fov-reset'; } },
+  };
+
+  const result = Game.prototype.resetCameraPresentation.call(game);
+
+  assert.deepEqual(calls, ['shake', 'fov']);
+  assert.equal(result, 'fov-reset');
+});
