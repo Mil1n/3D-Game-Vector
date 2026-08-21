@@ -214,3 +214,21 @@ test('releasing Space in the air stops the automatic jump on landing', () => {
 
   harness.player.dispose();
 });
+
+test('reset clears stale fall velocity before the player touches the spawn floor', () => {
+  const harness = createJumpHarness();
+  harness.settle();
+  harness.player.grounded = false;
+  harness.player._previousVerticalVelocity = -24;
+
+  harness.player.reset(new THREE.Vector3(0, 1.05, 0));
+  harness.step();
+
+  assert.equal(
+    harness.events.filter(({ type }) => type === 'player:landed').length,
+    0,
+    'a restart during a fall must not replay the old impact at the spawn point',
+  );
+
+  harness.player.dispose();
+});

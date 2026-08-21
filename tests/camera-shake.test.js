@@ -90,6 +90,82 @@ test('damage events add a bounded impulse that scales with received damage', () 
   harness.controller.dispose();
 });
 
+test('landing events ignore soft contact and add a bounded impulse that scales with hard impact', () => {
+  const harness = createHarness();
+
+  harness.eventBus.emit('player:landed', { impact: 8.5, hard: false });
+  harness.eventBus.emit('player:landed', { impact: 1, hard: true });
+  assert.equal(
+    harness.controller.getState().trauma,
+    0,
+    'ordinary landings should not introduce visible camera noise',
+  );
+
+  harness.eventBus.emit('player:landed', { impact: 12, hard: true });
+  const hardLandingTrauma = harness.controller.getState().trauma;
+  assert.ok(hardLandingTrauma > 0, 'a hard landing should kick the camera');
+  assert.ok(hardLandingTrauma <= 1, 'landing trauma must remain bounded');
+  harness.controller.update(FRAME);
+  const firstLandingOffset = harness.controller.getState().offset;
+  assert.ok(firstLandingOffset.y < -0.001, 'the first hard-landing frame should visibly dip downward');
+  assert.ok(firstLandingOffset.pitch < -0.001, 'the first hard-landing frame should pitch the view downward');
+  for (let frame = 0; frame < 2; frame += 1) {
+    harness.controller.restoreCamera();
+    harness.controller.update(FRAME);
+    const offset = harness.controller.getState().offset;
+    assert.ok(offset.y < 0, 'the landing dip must not immediately flip upward');
+    assert.ok(offset.pitch < 0, 'the landing pitch must return from the correct direction');
+  }
+
+  harness.controller.reset();
+  harness.eventBus.emit('player:landed', { impact: 24, hard: true });
+  const severeLandingTrauma = harness.controller.getState().trauma;
+  assert.ok(
+    severeLandingTrauma > hardLandingTrauma,
+    'a larger vertical impact should produce a stronger landing kick',
+  );
+  assert.ok(severeLandingTrauma <= 1, 'even severe landing trauma must remain bounded');
+
+  harness.controller.reset();
+  harness.eventBus.emit('player:landed', { impact: 1000, hard: true });
+  assert.ok(harness.controller.getState().trauma <= 1, 'extreme impact payloads must stay bounded');
+
+  harness.controller.dispose();
+});
+
+test('cameraShake intensity and reducedMotion disable hard-landing impulses', () => {
+  const disabled = createHarness({
+    settings: {
+      gameplay: { cameraShake: 0 },
+      accessibility: { reducedMotion: false },
+    },
+  });
+  disabled.eventBus.emit('player:landed', { impact: 30, hard: true });
+  assert.equal(disabled.controller.getState().trauma, 0);
+  assert.equal(disabled.controller.landingPitchKick, 0);
+  assert.equal(disabled.controller.landingVerticalKick, 0);
+  disabled.controller.applySettings(ENABLED_SETTINGS);
+  disabled.eventBus.emit('player:damaged', { amount: 1 });
+  disabled.controller.update(FRAME);
+  assert.ok(
+    Math.abs(disabled.controller.getState().offset.y) < 0.001,
+    're-enabling shake must not replay a landing that happened while disabled',
+  );
+  disabled.controller.dispose();
+
+  const reducedMotion = createHarness({
+    settings: {
+      gameplay: { cameraShake: 1 },
+      accessibility: { reducedMotion: true },
+    },
+  });
+  reducedMotion.eventBus.emit('player:landed', { impact: 30, hard: true });
+  assert.equal(reducedMotion.controller.getState().trauma, 0);
+  assert.equal(reducedMotion.controller.landingPitchKick, 0);
+  assert.equal(reducedMotion.controller.landingVerticalKick, 0);
+  reducedMotion.controller.dispose();
+});
+
 test('nearby explosion shake uses player distance and ignores explosions outside its effective range', () => {
   const playerPosition = new THREE.Vector3(0, 1, 0);
   const harness = createHarness({ playerPosition });
@@ -228,6 +304,7 @@ test('reset and dispose restore the camera and release all event listeners', () 
   const base = snapshotCamera(harness.camera);
   assert.equal(harness.eventBus.listenerCount('player:damaged'), 1);
   assert.equal(harness.eventBus.listenerCount('effects:explosion'), 1);
+  assert.equal(harness.eventBus.listenerCount('player:landed'), 1);
 
   harness.controller.impulse(1);
   harness.controller.update(FRAME);
@@ -243,6 +320,7 @@ test('reset and dispose restore the camera and release all event listeners', () 
   assertCameraTransform(harness.camera, base);
   assert.equal(harness.eventBus.listenerCount('player:damaged'), 0);
   assert.equal(harness.eventBus.listenerCount('effects:explosion'), 0);
+  assert.equal(harness.eventBus.listenerCount('player:landed'), 0);
 
   const stateAfterDispose = harness.controller.getState();
   harness.eventBus.emit('player:damaged', { amount: 100 });

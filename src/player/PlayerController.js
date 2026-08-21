@@ -545,6 +545,7 @@ export class PlayerController {
     if (resetVelocity) {
       this.body.velocity.setZero();
       this.body.angularVelocity.setZero();
+      this._previousVerticalVelocity = 0;
     }
     this.body.aabbNeedsUpdate = true;
     this.body.wakeUp();
