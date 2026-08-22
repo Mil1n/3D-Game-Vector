@@ -107,6 +107,33 @@ test('SettingsManager validates and persists a string key rebind', () => {
   assert.equal(JSON.parse(values.get(settings.storageKey)).controls.bindings.forward[0], 'KeyZ');
 });
 
+test('SettingsManager persists a bounded weapon recoil intensity', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const settings = new SettingsManager({ storage });
+  assert.equal(settings.set('gameplay.weaponRecoil', 0.4), 0.4);
+  assert.equal(settings.set('gameplay.weaponRecoil', -9), 0);
+  assert.equal(settings.set('gameplay.weaponRecoil', 9), 1);
+  assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.weaponRecoil, 1);
+});
+
+test('legacy settings without weapon recoil receive the current default', () => {
+  const values = new Map([
+    ['vector-null:settings:v1', JSON.stringify({ gameplay: { cameraShake: 0.2 } })],
+  ]);
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const settings = new SettingsManager({ storage });
+
+  assert.equal(settings.get('gameplay.cameraShake'), 0.2);
+  assert.equal(settings.get('gameplay.weaponRecoil'), 0.85);
+});
+
 test('SaveManager fallback keeps root and nested progression aliases synchronized', async () => {
   const values = new Map();
   const storage = {

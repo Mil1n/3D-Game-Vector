@@ -475,6 +475,11 @@ export class Game {
     this.debug.registerMetric('Accuracy', () => `${(this.weapons.getAccuracy() * 100).toFixed(1)}%`);
     this.debug.registerMetric('Camera FOV', () => this.cameraFov.getState().currentFov.toFixed(1));
     this.debug.registerMetric('Camera trauma', () => this.cameraShake.getState().trauma.toFixed(2));
+    this.debug.registerMetric('Camera recoil', () => {
+      const recoil = this.player.getRecoilState();
+      return `${THREE.MathUtils.radToDeg(recoil.pitch).toFixed(1)}° / ${THREE.MathUtils.radToDeg(recoil.yaw).toFixed(1)}°`;
+    });
+    this.debug.registerMetric('Model recoil', () => this.weapons.getRecoilState().modelKick.toFixed(2));
     this.debug.registerMetric('Time scale', () => this.timeScale.toFixed(2));
     this.debug.registerMetric('Momentum', () => `${this.momentum.getState().momentum.toFixed(1)} / 100`);
     this.debug.registerMetric('Style rank', () => this.momentum.getState().rank);
@@ -707,6 +712,8 @@ export class Game {
     this.sceneManager?.applySettings(settings);
     this.cameraFov?.applySettings(settings, { immediate: true });
     this.cameraShake?.applySettings(settings);
+    this.player?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
+    this.weapons?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.input.setBindings(settings.controls.bindings, { replace: true, silent: true });
     this.input.setMouseOptions({ sensitivity: settings.controls.mouseSensitivity, invertY: settings.controls.invertY });
     this.player?.setHeadBobEnabled(settings.gameplay.headBob && !settings.accessibility.reducedMotion);
@@ -817,6 +824,8 @@ export class Game {
 
   resetCameraPresentation() {
     this.cameraShake?.reset();
+    this.player?.resetRecoil?.();
+    this.weapons?.clearModelRecoil?.();
     return this.cameraFov?.reset();
   }
 

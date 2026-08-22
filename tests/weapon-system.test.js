@@ -12,15 +12,16 @@ const noopEffects = {
   spawnExplosion() {},
 };
 
-function createWeapons(player = null) {
+function createWeapons(player = null, { random = Math.random, eventBus = { emit() {} } } = {}) {
   return new WeaponSystem({
     camera: new THREE.PerspectiveCamera(),
     scene: new THREE.Scene(),
-    eventBus: { emit() {} },
+    eventBus,
     audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
     effects: noopEffects,
     arena: null,
     player,
+    random,
   });
 }
 
@@ -183,6 +184,9 @@ test('WeaponSystem creates and switches across the five configured weapons', () 
   assert.equal(weapons.models.size, 0);
   weapons.dispose();
   for (const count of disposeCounts.values()) assert.equal(count, 1);
+  assert.doesNotThrow(() => weapons.update(1 / 60, inputFor(null)));
+  assert.equal(weapons.tryFire(false), false);
+  assert.equal(weapons.switchTo(1), false);
 });
 
 test('viewmodel bob settles to the same pose at different frame rates', () => {
@@ -210,6 +214,278 @@ test('viewmodel bob settles to the same pose at different frame rates', () => {
   assert.ok(at60.position.distanceTo(at60.expected) < 0.001);
   assert.ok(at144.position.distanceTo(at144.expected) < 0.001);
   assert.ok(at60.position.distanceTo(at144.position) < 0.001);
+});
+
+test('a fired shot uses the current recoil aim and forwards the configured recovery exactly once', () => {
+  const recoilCalls = [];
+  let aimReads = 0;
+  const player = {
+    getViewBob: () => ({ x: 0, y: 0 }),
+    setAiming() {},
+    getAimDirection(target) {
+      aimReads += 1;
+      return target.set(0.18, 0.12, -0.976).normalize();
+    },
+    addRecoil(...args) { recoilCalls.push(args); },
+  };
+  const weapons = createWeapons(player, { random: () => 0.75 });
+
+  assert.equal(weapons.tryFire(false), true);
+  assert.equal(aimReads, 1);
+  assert.equal(recoilCalls.length, 1);
+  assert.equal(recoilCalls[0][2], weapons.currentConfig.recoil.recovery);
+  assert.ok(recoilCalls[0][0] > 0);
+  assert.ok(Math.abs(recoilCalls[0][1]) <= weapons.currentConfig.recoil.yaw);
+  assert.ok(weapons.tempDirection.y > 0, 'the ballistic direction should include prior recoil offset');
+
+  assert.equal(weapons.tryFire(false), false, 'cooldown must not create a second recoil impulse');
+  assert.equal(recoilCalls.length, 1);
+  weapons.dispose();
+});
+
+test('procedural recoil is deterministic with an injected random source', () => {
+  const sequence = [0.91, 0.18, 0.73, 0.42, 0.64, 0.27, 0.55];
+  const randomForRun = () => {
+    let index = 0;
+    const sample = () => {
+      sample.calls += 1;
+      return sequence[index++ % sequence.length];
+    };
+    sample.calls = 0;
+    return sample;
+  };
+  const playerForRun = () => ({
+    getViewBob: () => ({ x: 0, y: 0 }),
+    setAiming() {},
+    getAimDirection: (target) => target.set(0, 0, -1),
+    addRecoil() {},
+  });
+  const firstRandom = randomForRun();
+  const secondRandom = randomForRun();
+  const first = createWeapons(playerForRun(), { random: firstRandom });
+  const second = createWeapons(playerForRun(), { random: secondRandom });
+  first.setEnabled(true);
+  second.setEnabled(true);
+  first.currentModel.userData.equipAmount = 0;
+  second.currentModel.userData.equipAmount = 0;
+
+  assert.equal(first.tryFire(false), true);
+  assert.equal(second.tryFire(false), true);
+  const randomReadsAfterShot = firstRandom.calls;
+  assert.ok(randomReadsAfterShot > 0);
+  assert.equal(secondRandom.calls, randomReadsAfterShot);
+  first.update(1 / 60, { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 });
+  second.update(1 / 60, { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 });
+  assert.equal(firstRandom.calls, randomReadsAfterShot, 'frame updates must not sample new recoil noise');
+
+  assert.deepEqual(first.getRecoilState(), second.getRecoilState());
+  assert.ok(first.currentModel.position.distanceTo(second.currentModel.position) < 1e-12);
+  const firstRotation = new THREE.Vector3(
+    first.currentModel.rotation.x,
+    first.currentModel.rotation.y,
+    first.currentModel.rotation.z,
+  );
+  const secondRotation = new THREE.Vector3(
+    second.currentModel.rotation.x,
+    second.currentModel.rotation.y,
+    second.currentModel.rotation.z,
+  );
+  assert.ok(firstRotation.distanceTo(secondRotation) < 1e-12);
+  first.dispose();
+  second.dispose();
+});
+
+test('opposite procedural samples produce opposite lateral recoil without bias', () => {
+  const sample = (randomValue) => {
+    const calls = [];
+    const player = {
+      getAimDirection: (target) => target.set(0, 0, -1),
+      addRecoil: (...args) => calls.push(args),
+    };
+    const weapons = createWeapons(player, { random: () => randomValue });
+    weapons.tryFire(false);
+    const state = weapons.getRecoilState();
+    weapons.dispose();
+    return { calls, state };
+  };
+
+  const left = sample(0);
+  const right = sample(1);
+  assert.ok(left.calls[0][1] < 0);
+  assert.ok(right.calls[0][1] > 0);
+  assert.ok(left.state.modelSide < 0);
+  assert.ok(right.state.modelSide > 0);
+  assert.ok(left.state.modelRoll > 0);
+  assert.ok(right.state.modelRoll < 0);
+});
+
+test('viewmodel recoil moves backward, stays bounded and settles at any frame rate', () => {
+  const sample = (fps) => {
+    const player = {
+      getViewBob: () => ({ x: 0, y: 0 }),
+      setAiming() {},
+      getAimDirection: (target) => target.set(0, 0, -1),
+      addRecoil() {},
+    };
+    const weapons = createWeapons(player, { random: () => 0.8 });
+    weapons.setEnabled(true);
+    const model = weapons.currentModel;
+    model.userData.equipAmount = 0;
+    model.position.copy(model.userData.basePosition);
+    model.rotation.set(0, model.userData.baseYaw, 0);
+    assert.equal(weapons.tryFire(false), true);
+    const peak = weapons.getRecoilState();
+    weapons.update(1 / fps, { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 });
+    const firstPosition = model.position.clone();
+    for (let frame = 1; frame < fps * 2; frame += 1) {
+      weapons.update(1 / fps, { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 });
+    }
+    const result = {
+      peak,
+      firstPosition,
+      position: model.position.clone(),
+      rotation: new THREE.Vector3(model.rotation.x, model.rotation.y, model.rotation.z),
+      base: model.userData.basePosition.clone(),
+      baseYaw: model.userData.baseYaw,
+      state: weapons.getRecoilState(),
+    };
+    weapons.dispose();
+    return result;
+  };
+
+  const at60 = sample(60);
+  const at144 = sample(144);
+  assert.ok(at60.firstPosition.z > at60.base.z, 'the shot should push the weapon back toward the camera');
+  assert.ok(at60.peak.modelKick > 0 && at60.peak.modelKick <= 2.2);
+  assert.ok(Math.abs(at60.peak.modelSide) <= 1.35);
+  assert.ok(Math.abs(at60.peak.modelRoll) <= 1);
+  assert.ok(at60.position.distanceTo(at60.base) < 0.001);
+  assert.ok(at144.position.distanceTo(at144.base) < 0.001);
+  assert.ok(at60.position.distanceTo(at144.position) < 0.001);
+  assert.ok(Math.abs(at60.rotation.y - at60.baseYaw) < 0.001);
+  assert.ok(at60.state.modelKick < 0.0001);
+  assert.ok(at144.state.modelKick < 0.0001);
+});
+
+test('all five weapons expose distinct recoil impulses in the intended weight order', () => {
+  const peaks = {};
+  for (const id of WEAPON_ORDER) {
+    const weapons = createWeapons(null, { random: () => 0.5 });
+    const index = weapons.weaponOrder.indexOf(id);
+    if (index > 0) weapons.switchTo(index);
+    weapons.cooldown = 0;
+    assert.equal(weapons.tryFire(false), true);
+    peaks[id] = weapons.getRecoilState().modelKick;
+    weapons.dispose();
+  }
+
+  assert.equal(new Set(Object.values(peaks)).size, WEAPON_ORDER.length);
+  assert.ok(peaks.nova > peaks.rail);
+  assert.ok(peaks.rail > peaks.scatter);
+  assert.ok(peaks.scatter > peaks.carbine);
+  assert.ok(peaks.carbine > peaks.plasma);
+});
+
+test('a long automatic burst stays capped and fully returns the model to rest', () => {
+  const player = {
+    getViewBob: () => ({ x: 0, y: 0 }),
+    setAiming() {},
+    getAimDirection: (target) => target.set(0, 0, -1),
+    addRecoil() {},
+  };
+  const weapons = createWeapons(player, { random: () => 1 });
+  const idle = { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 };
+  weapons.setEnabled(true);
+  weapons.setInfiniteAmmo(true);
+  weapons.currentModel.userData.equipAmount = 0;
+  for (let shot = 0; shot < 100; shot += 1) {
+    weapons.cooldown = 0;
+    assert.equal(weapons.tryFire(false), true);
+  }
+  const peak = weapons.getRecoilState();
+  assert.equal(peak.modelKick, 2.2);
+  assert.equal(peak.modelSide, 1.35);
+  assert.equal(peak.modelRoll, -1);
+
+  for (let frame = 0; frame < 180; frame += 1) weapons.update(1 / 60, idle);
+  const model = weapons.currentModel;
+  assert.ok(model.position.distanceTo(model.userData.basePosition) < 0.001);
+  assert.ok(Math.abs(model.rotation.x) < 0.001);
+  assert.ok(Math.abs(model.rotation.y - model.userData.baseYaw) < 0.001);
+  assert.ok(Math.abs(model.rotation.z) < 0.001);
+  for (const part of model.userData.motionParts) {
+    assert.ok(part.mesh.position.distanceTo(part.basePosition) < 0.001);
+  }
+  weapons.dispose();
+});
+
+test('zero recoil intensity disables viewmodel motion without removing spread recovery', () => {
+  const weapons = createWeapons(null, { random: () => 0.5 });
+  weapons.setRecoilIntensity(0);
+  assert.equal(weapons.tryFire(false), true);
+  assert.deepEqual(weapons.getRecoilState(), {
+    spread: 1,
+    modelKick: 0,
+    modelSide: 0,
+    modelRoll: 0,
+    intensity: 0,
+  });
+  weapons.dispose();
+});
+
+test('clearing recoil immediately recomposes the actual viewmodel pose', () => {
+  const player = {
+    getViewBob: () => ({ x: 0, y: 0 }),
+    setAiming() {},
+    getAimDirection: (target) => target.set(0, 0, -1),
+    addRecoil() {},
+  };
+  const weapons = createWeapons(player, { random: () => 0.8 });
+  const idle = { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 };
+  weapons.setEnabled(true);
+  const model = weapons.currentModel;
+  model.userData.equipAmount = 0;
+  model.position.copy(model.userData.basePosition);
+  model.rotation.set(0, model.userData.baseYaw, 0);
+
+  assert.equal(weapons.tryFire(false), true);
+  weapons.update(1 / 60, idle);
+  assert.ok(model.position.distanceTo(model.userData.basePosition) > 0.001);
+  assert.ok(Math.abs(model.rotation.x) > 0.001);
+
+  weapons.setRecoilIntensity(0);
+  assert.ok(model.position.distanceTo(model.userData.basePosition) < 1e-12);
+  assert.ok(Math.abs(model.rotation.x) < 1e-12);
+  assert.ok(Math.abs(model.rotation.y - model.userData.baseYaw) < 1e-12);
+  assert.ok(Math.abs(model.rotation.z) < 1e-12);
+  for (const part of model.userData.motionParts) {
+    assert.ok(part.mesh.position.distanceTo(part.basePosition) < 1e-12);
+    assert.ok(part.mesh.quaternion.angleTo(part.baseQuaternion) < 1e-6);
+  }
+
+  weapons.update(0, idle);
+  assert.ok(model.position.distanceTo(model.userData.basePosition) < 1e-12);
+  weapons.dispose();
+});
+
+test('partial and reduced-motion intensity scale or suppress viewmodel recoil', () => {
+  const impulseAt = (intensity, reducedMotion = false) => {
+    const weapons = createWeapons(null, { random: () => 0.8 });
+    weapons.setRecoilIntensity(intensity, reducedMotion);
+    weapons.tryFire(false);
+    const state = weapons.getRecoilState();
+    weapons.dispose();
+    return state;
+  };
+
+  const full = impulseAt(1);
+  const partial = impulseAt(0.4);
+  const reduced = impulseAt(1, true);
+  assert.ok(Math.abs(partial.modelKick - full.modelKick * 0.4) < 1e-12);
+  assert.ok(Math.abs(partial.modelSide - full.modelSide * 0.4) < 1e-12);
+  assert.equal(reduced.modelKick, 0);
+  assert.equal(reduced.modelSide, 0);
+  assert.equal(reduced.modelRoll, 0);
 });
 
 test('equip and reload poses move the complete arm rig without leaving floating parts', () => {

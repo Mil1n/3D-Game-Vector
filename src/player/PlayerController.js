@@ -6,6 +6,12 @@ const STATIC_WORLD_COLLISION_GROUP = 2;
 const TAU = Math.PI * 2;
 const MAX_GROUNDED_UPWARD_SPEED = 1.2;
 const MIN_LANDING_IMPACT = 0.5;
+const DEFAULT_RECOIL_RECOVERY = 12;
+const MIN_RECOIL_RECOVERY = 2;
+const MAX_RECOIL_RECOVERY = 30;
+const MAX_RECOIL_PITCH = 0.22;
+const MAX_RECOIL_YAW = 0.1;
+const RECOIL_REST_EPSILON = 0.0001;
 
 export const DEFAULT_PLAYER_CONFIG = Object.freeze({
   height: 1.8,
@@ -142,6 +148,12 @@ export class PlayerController {
     this._overdriveSpeedScale = 1;
     this.overdriveActive = false;
     this._aimAmount = 0;
+    this._recoilPitch = 0;
+    this._recoilYaw = 0;
+    this._recoilRecovery = DEFAULT_RECOIL_RECOVERY;
+    this._recoilIntensity = 1;
+    this._appliedRecoilPitch = 0;
+    this._appliedRecoilYaw = 0;
     this._lastViewBob = { x: 0, y: 0 };
     this._positionView = new THREE.Vector3();
     this._velocityView = new THREE.Vector3();
@@ -188,6 +200,7 @@ export class PlayerController {
     const dt = clamp(Number(deltaSeconds) || 0, 0, 0.05);
     if (dt <= 0) return;
 
+    this._recoverRecoil(dt);
     const normalized = this._readInput(input);
     this._updateLook(normalized.lookX, normalized.lookY, input);
     this.isADS = normalized.ads;
@@ -489,7 +502,15 @@ export class PlayerController {
     TEMP_RIGHT.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     camera.position.addScaledVector(TEMP_RIGHT, bobX);
     camera.rotation.order = 'YXZ';
-    camera.rotation.set(this.pitch, this.yaw, roll, 'YXZ');
+    const visualPitch = clamp(
+      this.pitch + this._recoilPitch,
+      -this.config.maxPitch,
+      this.config.maxPitch,
+    );
+    const visualYaw = this.yaw + this._recoilYaw;
+    camera.rotation.set(visualPitch, visualYaw, roll, 'YXZ');
+    this._appliedRecoilPitch = visualPitch - this.pitch;
+    this._appliedRecoilYaw = visualYaw - this.yaw;
     camera.updateMatrixWorld();
   }
 
@@ -497,7 +518,8 @@ export class PlayerController {
     this.update(camera, deltaSeconds);
   }
 
-  setLook(yaw, pitch = this.pitch) {
+  setLook(yaw, pitch = this.pitch, { preserveRecoil = false } = {}) {
+    if (!preserveRecoil) this.resetRecoil();
     this.yaw = Number(yaw) || 0;
     this.pitch = clamp(Number(pitch) || 0, -this.config.maxPitch, this.config.maxPitch);
   }
@@ -511,9 +533,67 @@ export class PlayerController {
     this.isADS = this._aimAmount > 0.15;
   }
 
-  addRecoil(pitchKick = 0, yawKick = 0) {
-    this.pitch = clamp(this.pitch + (Number(pitchKick) || 0), -this.config.maxPitch, this.config.maxPitch);
-    this.yaw += Number(yawKick) || 0;
+  addRecoil(pitchKick = 0, yawKick = 0, recovery = DEFAULT_RECOIL_RECOVERY) {
+    if (this._disposed || this._recoilIntensity <= 0) return false;
+    const pitch = Number(pitchKick);
+    const yaw = Number(yawKick);
+    const recoveryRate = Number(recovery);
+    const adsScale = THREE.MathUtils.lerp(1, 0.68, this._aimAmount);
+    const scaledPitch = (Number.isFinite(pitch) ? Math.max(0, pitch) : 0)
+      * this._recoilIntensity * adsScale;
+    const scaledYaw = (Number.isFinite(yaw) ? yaw : 0)
+      * this._recoilIntensity * adsScale;
+    if (scaledPitch <= 0 && scaledYaw === 0) return false;
+    this._recoilPitch = clamp(this._recoilPitch + scaledPitch, 0, MAX_RECOIL_PITCH);
+    this._recoilYaw = clamp(this._recoilYaw + scaledYaw, -MAX_RECOIL_YAW, MAX_RECOIL_YAW);
+    this._recoilRecovery = clamp(
+      Number.isFinite(recoveryRate) ? recoveryRate : DEFAULT_RECOIL_RECOVERY,
+      MIN_RECOIL_RECOVERY,
+      MAX_RECOIL_RECOVERY,
+    );
+    return true;
+  }
+
+  setRecoilIntensity(intensity = 1, reducedMotion = false) {
+    const numeric = Number(intensity);
+    this._recoilIntensity = reducedMotion === true
+      ? 0
+      : clamp(Number.isFinite(numeric) ? numeric : 1, 0, 1);
+    if (this._recoilIntensity <= 0) this.resetRecoil();
+    return this.getRecoilState();
+  }
+
+  resetRecoil() {
+    if (this.camera && (this._appliedRecoilPitch !== 0 || this._appliedRecoilYaw !== 0)) {
+      this.camera.rotation.x -= this._appliedRecoilPitch;
+      this.camera.rotation.y -= this._appliedRecoilYaw;
+      this.camera.updateMatrixWorld?.();
+    }
+    this._recoilPitch = 0;
+    this._recoilYaw = 0;
+    this._recoilRecovery = DEFAULT_RECOIL_RECOVERY;
+    this._appliedRecoilPitch = 0;
+    this._appliedRecoilYaw = 0;
+    return this.getRecoilState();
+  }
+
+  getRecoilState() {
+    return {
+      pitch: this._recoilPitch,
+      yaw: this._recoilYaw,
+      recovery: this._recoilRecovery,
+      intensity: this._recoilIntensity,
+      enabled: this._recoilIntensity > 0,
+    };
+  }
+
+  _recoverRecoil(dt) {
+    if (this._recoilPitch === 0 && this._recoilYaw === 0) return;
+    const damping = Math.exp(-this._recoilRecovery * dt);
+    this._recoilPitch *= damping;
+    this._recoilYaw *= damping;
+    if (Math.abs(this._recoilPitch) < RECOIL_REST_EPSILON) this._recoilPitch = 0;
+    if (Math.abs(this._recoilYaw) < RECOIL_REST_EPSILON) this._recoilYaw = 0;
   }
 
   getViewBob() {
@@ -738,6 +818,7 @@ export class PlayerController {
     this._speedBoostScale = 1;
     this._overdriveSpeedScale = 1;
     this.overdriveActive = false;
+    this.resetRecoil();
     this._cameraHeight = this.config.standingEyeOffset;
     this._bobTime = 0;
     this._bobAmount = 0;
@@ -766,15 +847,26 @@ export class PlayerController {
   }
 
   get cameraForward() {
-    return new THREE.Vector3(
-      -Math.sin(this.yaw) * Math.cos(this.pitch),
-      Math.sin(this.pitch),
-      -Math.cos(this.yaw) * Math.cos(this.pitch),
-    ).normalize();
+    return this.getAimDirection(new THREE.Vector3());
   }
 
   get forward() {
     return this.cameraForward;
+  }
+
+  getAimDirection(target = new THREE.Vector3()) {
+    const pitch = clamp(
+      this.pitch + this._recoilPitch,
+      -this.config.maxPitch,
+      this.config.maxPitch,
+    );
+    const yaw = this.yaw + this._recoilYaw;
+    const cosine = Math.cos(pitch);
+    return target.set(
+      -Math.sin(yaw) * cosine,
+      Math.sin(pitch),
+      -Math.cos(yaw) * cosine,
+    ).normalize();
   }
 
   get speedNormalized() {
@@ -822,6 +914,7 @@ export class PlayerController {
 
   dispose() {
     if (this._disposed) return;
+    this.resetRecoil();
     this._disposed = true;
     this.world?.removeBody(this.body);
     this.camera = null;

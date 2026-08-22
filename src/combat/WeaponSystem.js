@@ -398,7 +398,17 @@ function createWeaponModel(config) {
 }
 
 export class WeaponSystem {
-  constructor({ camera, scene, eventBus, audioManager, effects, arena, player, enemySystem = null }) {
+  constructor({
+    camera,
+    scene,
+    eventBus,
+    audioManager,
+    effects,
+    arena,
+    player,
+    enemySystem = null,
+    random = Math.random,
+  }) {
     this.camera = camera;
     this.scene = scene;
     this.eventBus = eventBus;
@@ -407,6 +417,8 @@ export class WeaponSystem {
     this.arena = arena;
     this.player = player;
     this.enemySystem = enemySystem;
+    this.random = typeof random === 'function' ? random : Math.random;
+    this.disposed = false;
     this.enabled = false;
     this.weaponOrder = [...WEAPON_ORDER];
     this.index = 0;
@@ -416,6 +428,9 @@ export class WeaponSystem {
     this.reloadDuration = 0;
     this.recoilKick = 0;
     this.modelKick = 0;
+    this.modelSideKick = 0;
+    this.modelRollKick = 0;
+    this.recoilIntensity = 1;
     this.adsAmount = 0;
     this.triggerReleased = true;
     this.infiniteAmmo = false;
@@ -489,10 +504,49 @@ export class WeaponSystem {
   }
 
   setEnabled(enabled) {
+    if (this.disposed) return false;
     const wasEnabled = this.enabled;
     this.enabled = Boolean(enabled);
     if (this.enabled && !wasEnabled) this.primeEquipPose(this.currentModel);
+    if (!this.enabled) {
+      this.clearModelRecoil();
+      this.restoreModelParts(this.currentModel);
+    }
     this.currentModel.visible = this.enabled;
+    return this.enabled;
+  }
+
+  setRecoilIntensity(intensity = 1, reducedMotion = false) {
+    const numeric = Number(intensity);
+    this.recoilIntensity = reducedMotion === true
+      ? 0
+      : THREE.MathUtils.clamp(Number.isFinite(numeric) ? numeric : 1, 0, 1);
+    if (this.recoilIntensity <= 0) this.clearModelRecoil();
+    return this.getRecoilState();
+  }
+
+  clearModelRecoil({ snap = true } = {}) {
+    this.modelKick = 0;
+    this.modelSideKick = 0;
+    this.modelRollKick = 0;
+    if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
+      this.animateModel(0, { snap: true });
+    }
+  }
+
+  randomUnit() {
+    const value = Number(this.random());
+    return Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 0.5;
+  }
+
+  getRecoilState() {
+    return {
+      spread: this.recoilKick,
+      modelKick: this.modelKick,
+      modelSide: this.modelSideKick,
+      modelRoll: this.modelRollKick,
+      intensity: this.recoilIntensity,
+    };
   }
 
   restoreModelParts(model) {
@@ -512,12 +566,13 @@ export class WeaponSystem {
   }
 
   reset() {
+    if (this.disposed) return;
     this.cooldown = 0;
     this.cooldownKind = null;
     this.reloadRemaining = 0;
     this.reloadDuration = 0;
     this.recoilKick = 0;
-    this.modelKick = 0;
+    this.clearModelRecoil();
     this.adsAmount = 0;
     this.triggerReleased = true;
     this.index = 0;
@@ -614,9 +669,13 @@ export class WeaponSystem {
   }
 
   update(dt, input) {
+    if (this.disposed) return;
     this.cooldown = Math.max(0, this.cooldown - dt);
     if (this.cooldown === 0) this.cooldownKind = null;
-    this.modelKick = THREE.MathUtils.damp(this.modelKick, 0, 18, dt);
+    const modelRecovery = Math.max(4, (this.currentConfig.recoil?.recovery ?? 12) * 1.5);
+    this.modelKick = THREE.MathUtils.damp(this.modelKick, 0, modelRecovery, dt);
+    this.modelSideKick = THREE.MathUtils.damp(this.modelSideKick, 0, modelRecovery, dt);
+    this.modelRollKick = THREE.MathUtils.damp(this.modelRollKick, 0, modelRecovery, dt);
     this.recoilKick = THREE.MathUtils.damp(this.recoilKick, 0, this.currentConfig.recoil?.recovery ?? 12, dt);
 
     if (!this.enabled) return;
@@ -648,7 +707,7 @@ export class WeaponSystem {
     this.animateModel(dt, aiming);
   }
 
-  animateModel(dt) {
+  animateModel(dt, { snap = false } = {}) {
     const model = this.currentModel;
     const config = this.currentConfig;
     const bob = this.player?.getViewBob?.() ?? { x: 0, y: 0 };
@@ -670,19 +729,20 @@ export class WeaponSystem {
       .copy(model.userData.basePosition)
       .lerp(model.userData.adsPosition, poseAds);
     this.tempModelPosition.x += (bob.x ?? 0) * bobScale;
+    this.tempModelPosition.x += this.modelSideKick * 0.018;
     this.tempModelPosition.x += reloadArc * 0.11 + equipAmount * 0.13;
     this.tempModelPosition.y += (bob.y ?? 0) * bobScale
       - this.modelKick * 0.025
       - reloadArc * 0.18
       - equipAmount * 0.42;
-    this.tempModelPosition.z += reloadArc * 0.06 + equipAmount * 0.08;
-    model.position.lerp(this.tempModelPosition, 1 - Math.exp(-dt * 15));
+    this.tempModelPosition.z += this.modelKick * 0.04 + reloadArc * 0.06 + equipAmount * 0.08;
+    model.position.lerp(this.tempModelPosition, snap ? 1 : 1 - Math.exp(-dt * 15));
     model.rotation.x = -this.modelKick * 0.055 + reloadArc * 0.3 + equipAmount * 0.16;
     model.rotation.y = THREE.MathUtils.lerp(model.userData.baseYaw, 0, poseAds)
-      + this.modelKick * 0.018
+      + this.modelSideKick * 0.035
       + reloadArc * 0.4
       + equipAmount * 0.24;
-    model.rotation.z = reloadArc * 0.3 + equipAmount * 0.2;
+    model.rotation.z = this.modelRollKick * 0.045 + reloadArc * 0.3 + equipAmount * 0.2;
     model.userData.animationTime += dt;
     for (const part of model.userData.pulseParts ?? []) {
       const amount = 1 + Math.sin(model.userData.animationTime * part.speed + part.phase) * part.amplitude;
@@ -706,6 +766,7 @@ export class WeaponSystem {
   }
 
   switchTo(index) {
+    if (this.disposed) return false;
     if (index < 0 || index >= this.weaponOrder.length || index === this.index) return false;
     const previousModel = this.currentModel;
     this.restoreModelParts(previousModel);
@@ -720,7 +781,7 @@ export class WeaponSystem {
     nextModel.visible = this.enabled;
     this.reloadRemaining = 0;
     this.reloadDuration = 0;
-    this.modelKick = 0;
+    this.clearModelRecoil();
     const switchCooldown = 0.18 / this.runtimeModifiers.switchSpeed;
     if (switchCooldown >= this.cooldown) {
       this.cooldown = switchCooldown;
@@ -733,13 +794,14 @@ export class WeaponSystem {
   }
 
   tryFire(aiming) {
+    if (this.disposed) return false;
     const config = this.currentConfig;
     const ammo = this.currentAmmo;
     if (this.cooldown > 0) return false;
     if (ammo.magazine <= 0) {
       this.cooldown = 0.2;
       this.cooldownKind = 'empty';
-      this.audio?.playWeapon?.('empty', { pitch: 0.95 + Math.random() * 0.08 });
+      this.audio?.playWeapon?.('empty', { pitch: 0.95 + this.randomUnit() * 0.08 });
       this.eventBus?.emit?.('weapon:empty', { weapon: config.id });
       return false;
     }
@@ -749,11 +811,31 @@ export class WeaponSystem {
     this.cooldownKind = 'fire';
     const configuredKick = config.viewModel?.kick;
     const modelKick = configuredKick ?? (config.id === 'scatter' ? 1.4 : config.id === 'rail' ? 1.65 : 0.48);
-    this.modelKick = Math.min(2.2, this.modelKick + modelKick);
+    const recoilPitch = (config.recoil?.pitch ?? 0.012) * (0.85 + this.randomUnit() * 0.3);
+    const recoilYawRange = config.recoil?.yaw ?? 0.004;
+    const recoilYaw = recoilYawRange * (this.randomUnit() - 0.5) * 2;
+    const adsModelScale = THREE.MathUtils.lerp(1, 0.52, this.adsAmount);
+    const modelImpulse = modelKick * this.recoilIntensity * adsModelScale;
+    const lateral = recoilYawRange > 0 ? recoilYaw / recoilYawRange : 0;
+    this.modelKick = Math.min(2.2, this.modelKick + modelImpulse);
+    this.modelSideKick = THREE.MathUtils.clamp(
+      this.modelSideKick + lateral * modelImpulse * 0.42,
+      -1.35,
+      1.35,
+    );
+    this.modelRollKick = THREE.MathUtils.clamp(
+      this.modelRollKick - lateral * modelImpulse * 0.34,
+      -1,
+      1,
+    );
     this.recoilKick = Math.min(3, this.recoilKick + 1);
     this.shotsFired += 1;
     this.camera.getWorldPosition(this.tempOrigin);
-    this.camera.getWorldDirection(this.tempDirection);
+    if (typeof this.player?.getAimDirection === 'function') {
+      this.player.getAimDirection(this.tempDirection);
+    } else {
+      this.camera.getWorldDirection(this.tempDirection);
+    }
     this.currentModel.userData.muzzle.getWorldPosition(this.tempMuzzle);
     const movement = this.player?.speedNormalized ?? 0;
     const baseSpread = aiming ? config.adsSpread : config.spread;
@@ -800,11 +882,8 @@ export class WeaponSystem {
       config.color,
       muzzleIntensity * this.runtimeModifiers.impact,
     );
-    this.player?.addRecoil?.(
-      (config.recoil?.pitch ?? 0.012) * (0.85 + Math.random() * 0.3),
-      (config.recoil?.yaw ?? 0.004) * (Math.random() - 0.5) * 2,
-    );
-    this.audio?.playWeapon?.(config.sound ?? config.id, { position: this.tempOrigin, pitch: 0.96 + Math.random() * 0.08 });
+    this.player?.addRecoil?.(recoilPitch, recoilYaw, config.recoil?.recovery ?? 12);
+    this.audio?.playWeapon?.(config.sound ?? config.id, { position: this.tempOrigin, pitch: 0.96 + this.randomUnit() * 0.08 });
     this.eventBus?.emit?.('combat:shot', {
       weapon: config.id,
       origin: this.tempOrigin.clone(),
@@ -824,8 +903,8 @@ export class WeaponSystem {
     this.tempRight.crossVectors(direction, WORLD_UP).normalize();
     if (this.tempRight.lengthSq() < 0.1) this.tempRight.set(1, 0, 0);
     this.tempUp.crossVectors(this.tempRight, direction).normalize();
-    const ring = pellets > 1 ? Math.sqrt((pellet + Math.random()) / pellets) : Math.random();
-    const angle = Math.random() * Math.PI * 2;
+    const ring = pellets > 1 ? Math.sqrt((pellet + this.randomUnit()) / pellets) : this.randomUnit();
+    const angle = this.randomUnit() * Math.PI * 2;
     direction
       .addScaledVector(this.tempRight, Math.cos(angle) * spread * ring)
       .addScaledVector(this.tempUp, Math.sin(angle) * spread * ring)
@@ -844,7 +923,7 @@ export class WeaponSystem {
       const falloffRange = Math.max(1, config.falloffEnd - config.falloffStart);
       const falloff = 1 - THREE.MathUtils.clamp((distance - config.falloffStart) / falloffRange, 0, 1) * (1 - (config.minDamageMultiplier ?? 0.45));
       const zoneMultiplier = hit.zone === 'head' ? (config.headMultiplier ?? 1.8) : hit.zone === 'limb' ? 0.78 : 1;
-      const randomCrit = Math.random() < this.modifiers.critChance ? 1.65 : 1;
+      const randomCrit = this.randomUnit() < this.modifiers.critChance ? 1.65 : 1;
       const lowHealthBonus = (this.player?.health ?? 100) / (this.player?.maxHealth ?? 100) < 0.35 ? 1 + this.modifiers.lowHealthDamage : 1;
       const anomalyMultiplier = config.id === 'rail' ? this.modifiers.railAnomalyMultiplier : 1;
       const damage = config.damage * falloff * zoneMultiplier * randomCrit * lowHealthBonus * this.modifiers.damage * anomalyMultiplier;
@@ -996,6 +1075,8 @@ export class WeaponSystem {
   }
 
   dispose() {
+    if (this.disposed) return;
+    this.clearModelRecoil({ snap: false });
     const geometries = new Set();
     const materials = new Set();
     for (const model of this.models.values()) {
@@ -1008,6 +1089,7 @@ export class WeaponSystem {
     for (const geometry of geometries) geometry.dispose();
     for (const material of materials) material.dispose();
     this.models.clear();
+    this.disposed = true;
   }
 }
 

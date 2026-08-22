@@ -237,15 +237,56 @@ test('playing frame restores shake before the player pose and applies it after t
   ]);
 });
 
-test('resetCameraPresentation clears both shake and dynamic FOV state', () => {
+test('resetCameraPresentation clears shake, weapon recoil and dynamic FOV state', () => {
   const calls = [];
   const game = {
     cameraShake: { reset: () => calls.push('shake') },
+    player: { resetRecoil: () => calls.push('camera-recoil') },
+    weapons: { clearModelRecoil: () => calls.push('model-recoil') },
     cameraFov: { reset: () => { calls.push('fov'); return 'fov-reset'; } },
   };
 
   const result = Game.prototype.resetCameraPresentation.call(game);
 
-  assert.deepEqual(calls, ['shake', 'fov']);
+  assert.deepEqual(calls, ['shake', 'camera-recoil', 'model-recoil', 'fov']);
   assert.equal(result, 'fov-reset');
+});
+
+test('applySettings sends weapon recoil intensity and reduced-motion state to both owners', (t) => {
+  const calls = [];
+  const previousDocument = globalThis.document;
+  globalThis.document = { documentElement: { style: { setProperty() {} } } };
+  t.after(() => {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  });
+  const settings = {
+    gameplay: {
+      weaponRecoil: 0.4,
+      headBob: 0.6,
+      crosshairColor: '#67f7e3',
+    },
+    accessibility: { reducedMotion: true, uiScale: 1 },
+    controls: { bindings: {}, mouseSensitivity: 0.55, invertY: false },
+    audio: { muted: false },
+  };
+  const game = {
+    sceneManager: { applySettings() {} },
+    cameraFov: { applySettings() {} },
+    cameraShake: { applySettings() {} },
+    player: {
+      setRecoilIntensity: (...args) => calls.push(['player', ...args]),
+      setHeadBobEnabled() {},
+    },
+    weapons: { setRecoilIntensity: (...args) => calls.push(['weapons', ...args]) },
+    input: { setBindings() {}, setMouseOptions() {} },
+    audio: { setVolumes() {}, setMuted() {} },
+  };
+
+  Game.prototype.applySettings.call(game, settings);
+
+  assert.deepEqual(calls, [
+    ['player', 0.4, true],
+    ['weapons', 0.4, true],
+  ]);
 });

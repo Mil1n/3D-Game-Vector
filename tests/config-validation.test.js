@@ -59,7 +59,12 @@ test('all five weapon configs expose the WeaponSystem contract', () => {
       `${id}.adsFovMultiplier must be finite and within (0, 1]`,
     );
     assert.ok(weapon.falloffStart < weapon.falloffEnd && weapon.falloffEnd <= weapon.range);
-    positive(weapon.recoil.recovery, `${id}.recoil.recovery`);
+    for (const field of ['pitch', 'yaw', 'recovery']) {
+      positive(weapon.recoil[field], `${id}.recoil.${field}`);
+    }
+    assert.ok(weapon.recoil.pitch <= 0.2, `${id}.recoil.pitch must stay within the camera cap`);
+    assert.ok(weapon.recoil.yaw <= 0.05, `${id}.recoil.yaw must stay within the camera cap`);
+    assert.ok(weapon.recoil.recovery <= 30, `${id}.recoil.recovery must stay within the supported range`);
   }
   assert.equal(WEAPON_CONFIGS.plasma.automatic, true);
   assert.ok(WEAPON_CONFIGS.plasma.fireRate > WEAPON_CONFIGS.carbine.fireRate);

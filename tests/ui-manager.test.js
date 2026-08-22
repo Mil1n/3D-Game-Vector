@@ -105,6 +105,17 @@ test('Momentum and Overdrive controls are listed with a remappable KeyF default'
   assert.match(controlsMarkup, />F</);
 });
 
+test('accessibility settings expose independent weapon recoil intensity', () => {
+  const ui = Object.create(UIManager.prototype);
+  ui.settings = {};
+
+  const markup = ui._settingsTabMarkup('accessibility');
+
+  assert.match(markup, /gameplay\.weaponRecoil/);
+  assert.match(markup, /Оружейная отдача/);
+  assert.match(markup, /Сила управляемого отклонения прицела/);
+});
+
 test('achievements view renders the canonical AchievementSystem catalog', () => {
   const achievements = new AchievementSystem({
     saveManager: {
