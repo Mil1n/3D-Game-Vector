@@ -76,6 +76,71 @@ function createJumpHarness() {
   return { events, input, player, settle, step };
 }
 
+function createHeadBobHarness() {
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+  const camera = new THREE.PerspectiveCamera();
+  const spawn = new THREE.Vector3(0, 2, 0);
+  const player = new PlayerController({ world, camera, spawn });
+
+  const keepMoving = () => {
+    player.grounded = true;
+    player.body.velocity.set(player.config.walkSpeed, 0, 0);
+  };
+  const advance = (frames = 30) => {
+    for (let frame = 0; frame < frames; frame += 1) {
+      keepMoving();
+      player.update(camera, FIXED_STEP);
+    }
+  };
+  const readPose = () => {
+    const target = new THREE.Vector2(Number.NaN, Number.NaN);
+    const returnedTarget = player.getViewBob(target);
+    const state = player.getHeadBobState();
+    return {
+      state,
+      target,
+      returnedTarget,
+      cameraX: camera.position.x - player.body.position.x,
+      cameraY: camera.position.y - player.body.position.y - player.config.standingEyeOffset,
+      cameraRoll: camera.rotation.z,
+    };
+  };
+
+  return { advance, camera, keepMoving, player, readPose, spawn, world };
+}
+
+function sampleHeadBob(intensity, { ads = false, reducedMotion = false } = {}) {
+  const harness = createHeadBobHarness();
+  harness.player.setHeadBobIntensity(intensity, reducedMotion);
+  harness.player.setAiming(ads);
+  harness.advance();
+  const pose = harness.readPose();
+  harness.player.dispose();
+  return pose;
+}
+
+function assertNearlyEqual(actual, expected, message, epsilon = 1e-12) {
+  assert.ok(
+    Math.abs(actual - expected) <= epsilon,
+    `${message}: expected ${expected}, received ${actual}`,
+  );
+}
+
+function assertZeroHeadBob(pose, message) {
+  for (const [name, value] of Object.entries({
+    stateX: pose.state.x,
+    stateY: pose.state.y,
+    roll: pose.state.roll,
+    viewX: pose.target.x,
+    viewY: pose.target.y,
+    cameraX: pose.cameraX,
+    cameraY: pose.cameraY,
+    cameraRoll: pose.cameraRoll,
+  })) {
+    assertNearlyEqual(value, 0, `${message} (${name})`);
+  }
+}
+
 test('held forward movement is not cancelled by arena contact friction', () => {
   for (const mapId of MAP_ORDER) {
     const scene = new THREE.Scene();
@@ -229,6 +294,166 @@ test('reset clears stale fall velocity before the player touches the spawn floor
     0,
     'a restart during a fall must not replay the old impact at the spawn point',
   );
+
+  harness.player.dispose();
+});
+
+test('head bob intensity scales camera X, Y and roll at the same movement phase', () => {
+  const disabled = sampleHeadBob(0);
+  const half = sampleHeadBob(0.5);
+  const full = sampleHeadBob(1);
+
+  assertZeroHeadBob(disabled, 'zero intensity must remove every head-bob component');
+  assert.equal(disabled.state.intensity, 0);
+  assert.equal(disabled.state.enabled, false);
+  assert.equal(half.state.intensity, 0.5);
+  assert.equal(half.state.enabled, true);
+  assert.equal(full.state.intensity, 1);
+  assert.equal(full.state.enabled, true);
+
+  for (const field of ['x', 'y', 'roll']) {
+    assert.notEqual(full.state[field], 0, `${field} needs a non-zero reference sample`);
+    assertNearlyEqual(
+      half.state[field],
+      full.state[field] * 0.5,
+      `${field} must scale linearly with the numeric intensity`,
+    );
+  }
+  assertNearlyEqual(half.cameraX, full.cameraX * 0.5, 'camera X must use the numeric intensity');
+  assertNearlyEqual(half.cameraY, full.cameraY * 0.5, 'camera Y must use the numeric intensity');
+  assertNearlyEqual(half.cameraRoll, full.cameraRoll * 0.5, 'camera roll must use the numeric intensity');
+  assertNearlyEqual(full.cameraX, full.state.x, 'state must report the applied camera X offset');
+  assertNearlyEqual(full.cameraY, full.state.y, 'state must report the applied camera Y offset');
+  assertNearlyEqual(full.cameraRoll, full.state.roll, 'state must report the applied camera roll');
+  assert.strictEqual(full.returnedTarget, full.target, 'getViewBob must reuse a preallocated target');
+  assertNearlyEqual(full.target.x, full.state.x, 'viewmodel bob X must match the camera bob state');
+  assertNearlyEqual(full.target.y, full.state.y, 'viewmodel bob Y must match the camera bob state');
+});
+
+test('ADS attenuates every head-bob component without disabling it', () => {
+  const hip = sampleHeadBob(1);
+  const ads = sampleHeadBob(1, { ads: true });
+  const attenuation = Math.abs(ads.state.x / hip.state.x);
+
+  assert.ok(attenuation > 0 && attenuation < 1, 'ADS must retain a reduced amount of camera motion');
+  for (const field of ['y', 'roll']) {
+    assertNearlyEqual(
+      Math.abs(ads.state[field] / hip.state[field]),
+      attenuation,
+      `ADS must attenuate ${field} by the same presentation scale`,
+    );
+  }
+  assertNearlyEqual(ads.cameraX, ads.state.x, 'ADS camera X must match the applied state');
+  assertNearlyEqual(ads.cameraY, ads.state.y, 'ADS camera Y must match the applied state');
+  assertNearlyEqual(ads.cameraRoll, ads.state.roll, 'ADS camera roll must match the applied state');
+});
+
+test('reduced motion clears head bob synchronously and supports live re-enable', () => {
+  const harness = createHeadBobHarness();
+  harness.player.setHeadBobIntensity(1);
+  harness.advance();
+  const active = harness.readPose();
+  assert.notEqual(active.state.x, 0);
+  assert.notEqual(active.state.y, 0);
+  assert.notEqual(active.state.roll, 0);
+
+  harness.player.setHeadBobIntensity(0.5, true);
+  const disabled = harness.readPose();
+  assertZeroHeadBob(disabled, 'reduced motion must clear an already-applied pose synchronously');
+  assert.equal(disabled.state.amount, 0);
+  assert.equal(disabled.state.intensity, 0);
+  assert.equal(disabled.state.enabled, false);
+
+  harness.player.setHeadBobIntensity(0.5, false);
+  harness.advance(1);
+  const restored = harness.readPose();
+  assert.equal(restored.state.intensity, 0.5);
+  assert.equal(restored.state.enabled, true);
+  assert.ok(restored.state.amount > 0, 're-enabling while moving must restart the smoothed envelope');
+  assert.notEqual(restored.state.x, 0, 'live re-enable must restore horizontal motion');
+  assert.notEqual(restored.state.y, 0, 'live re-enable must restore vertical motion');
+  assert.notEqual(restored.state.roll, 0, 'live re-enable must restore camera roll');
+
+  harness.player.dispose();
+});
+
+test('head-bob reset removes its rotated world offset while preserving active slide tilt and aim', () => {
+  const harness = createHeadBobHarness();
+  const yaw = Math.PI / 2;
+  const pitch = -0.17;
+  harness.player.setLook(yaw, pitch);
+  harness.player.setHeadBobIntensity(1);
+  harness.player.setSlideTiltIntensity(1);
+  harness.player.isSliding = true;
+  harness.advance();
+
+  const head = harness.player.getHeadBobState();
+  const slide = harness.player.getSlideTiltState();
+  const aim = harness.player.getAimDirection(new THREE.Vector3()).clone();
+  const expected = harness.camera.position.clone();
+  expected.x -= Math.cos(yaw) * head.x;
+  expected.y -= head.y;
+  expected.z += Math.sin(yaw) * head.x;
+
+  harness.player.setHeadBobIntensity(1, true);
+
+  assert.ok(harness.camera.position.distanceTo(expected) < 1e-12, 'rotated world-space bob must be removed immediately');
+  assertNearlyEqual(harness.camera.rotation.z, slide.roll, 'head-bob reset must leave the slide roll applied');
+  assert.deepEqual(harness.player.getSlideTiltState(), slide, 'head-bob reset must not mutate slide state');
+  assert.deepEqual(harness.player.getHeadBobState(), {
+    amount: 0,
+    intensity: 0,
+    x: 0,
+    y: 0,
+    roll: 0,
+    enabled: false,
+  });
+  assert.ok(harness.player.getAimDirection(new THREE.Vector3()).distanceTo(aim) < 1e-12);
+  assert.equal(harness.player.yaw, yaw);
+  assert.equal(harness.player.pitch, pitch);
+
+  harness.player.dispose();
+});
+
+test('reset clears head-bob state and its applied camera transform immediately', () => {
+  const harness = createHeadBobHarness();
+  harness.player.setHeadBobIntensity(1);
+  harness.advance();
+  assert.notEqual(harness.readPose().state.x, 0);
+
+  harness.player.reset(harness.spawn);
+  const reset = harness.readPose();
+  assertZeroHeadBob(reset, 'player reset must not leave a stale head-bob pose');
+  assert.equal(reset.state.amount, 0);
+  assert.equal(reset.state.intensity, 1, 'reset must preserve the configured preference');
+  assert.equal(reset.state.enabled, true);
+
+  harness.player.dispose();
+});
+
+test('legacy setHeadBobEnabled remains a boolean alias for full and zero intensity', () => {
+  const full = sampleHeadBob(1);
+  const harness = createHeadBobHarness();
+
+  harness.player.setHeadBobEnabled(true);
+  harness.advance();
+  const legacyFull = harness.readPose();
+  for (const field of ['x', 'y', 'roll']) {
+    assertNearlyEqual(legacyFull.state[field], full.state[field], `legacy enabled ${field}`);
+  }
+  assert.equal(legacyFull.state.intensity, 1);
+  assert.equal(legacyFull.state.enabled, true);
+
+  harness.player.setHeadBobEnabled(false);
+  const legacyOff = harness.readPose();
+  assertZeroHeadBob(legacyOff, 'legacy disable must clear the applied pose synchronously');
+  assert.equal(legacyOff.state.amount, 0);
+  assert.equal(legacyOff.state.intensity, 0);
+  assert.equal(legacyOff.state.enabled, false);
+
+  harness.player.setHeadBobEnabled(true);
+  harness.advance(1);
+  assert.ok(harness.readPose().state.amount > 0, 'legacy enable must remain live after a disable');
 
   harness.player.dispose();
 });

@@ -120,6 +120,19 @@ test('SettingsManager persists a bounded weapon recoil intensity', () => {
   assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.weaponRecoil, 1);
 });
 
+test('SettingsManager persists a bounded numeric head-bob intensity', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const settings = new SettingsManager({ storage });
+  assert.equal(settings.set('gameplay.headBob', 0.5), 0.5);
+  assert.equal(settings.set('gameplay.headBob', -2), 0);
+  assert.equal(settings.set('gameplay.headBob', 4), 1);
+  assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.headBob, 1);
+});
+
 test('SettingsManager persists a bounded weapon sway intensity', () => {
   const values = new Map();
   const storage = {

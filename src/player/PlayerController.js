@@ -146,6 +146,11 @@ export class PlayerController {
     this._cameraHeight = this.config.standingEyeOffset;
     this._bobTime = 0;
     this._bobAmount = 0;
+    this._headBobIntensity = this.config.headBob ? 1 : 0;
+    this._appliedHeadBobWorldX = 0;
+    this._appliedHeadBobWorldY = 0;
+    this._appliedHeadBobWorldZ = 0;
+    this._appliedHeadBobRoll = 0;
     this._slideTiltAmount = 0;
     this._slideTiltIntensity = 0.75;
     this._appliedSlideTiltRoll = 0;
@@ -501,15 +506,15 @@ export class PlayerController {
     const moving = this.grounded && planarSpeed > 0.45;
     const bobFrequency = this.isSprinting ? 13.5 : this.isCrouching ? 7 : 10.2;
     if (moving) this._bobTime += dt * bobFrequency * clamp(planarSpeed / this.config.walkSpeed, 0.55, 1.65);
-    const bobTarget = moving && this.config.headBob ? 1 : 0;
+    const bobTarget = moving && this._headBobIntensity > 0 ? 1 : 0;
     this._bobAmount = THREE.MathUtils.lerp(this._bobAmount, bobTarget, 1 - Math.exp(-dt * 9));
-    const bobScale = this.config.headBobScale * (this.isADS ? 0.28 : 1);
+    const bobScale = this.config.headBobScale * this._headBobIntensity * (this.isADS ? 0.28 : 1);
     const bobY = Math.abs(Math.sin(this._bobTime)) * 0.046 * this._bobAmount * bobScale;
     const bobX = Math.sin(this._bobTime * 0.5) * 0.026 * this._bobAmount * bobScale;
     this._lastViewBob.x = bobX;
     this._lastViewBob.y = bobY;
     this.updateSlideTilt(dt);
-    const bobRoll = Math.sin(this._bobTime * 0.5) * 0.007 * this._bobAmount;
+    const bobRoll = Math.sin(this._bobTime * 0.5) * 0.007 * this._bobAmount * bobScale;
     const slideRoll = -this._slideTiltAmount * MAX_SLIDE_TILT_ROLL * this._slideTiltIntensity;
     const roll = bobRoll + slideRoll;
 
@@ -519,6 +524,9 @@ export class PlayerController {
     camera.position.set(source.x, source.y + this._cameraHeight + bobY, source.z);
     TEMP_RIGHT.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     camera.position.addScaledVector(TEMP_RIGHT, bobX);
+    this._appliedHeadBobWorldX = TEMP_RIGHT.x * bobX;
+    this._appliedHeadBobWorldY = bobY;
+    this._appliedHeadBobWorldZ = TEMP_RIGHT.z * bobX;
     camera.rotation.order = 'YXZ';
     const visualPitch = clamp(
       this.pitch + this._recoilPitch,
@@ -527,6 +535,7 @@ export class PlayerController {
     );
     const visualYaw = this.yaw + this._recoilYaw;
     camera.rotation.set(visualPitch, visualYaw, roll, 'YXZ');
+    this._appliedHeadBobRoll = bobRoll;
     this._appliedSlideTiltRoll = slideRoll;
     this._appliedRecoilPitch = visualPitch - this.pitch;
     this._appliedRecoilYaw = visualYaw - this.yaw;
@@ -546,7 +555,47 @@ export class PlayerController {
   }
 
   setHeadBobEnabled(enabled) {
-    this.config.headBob = Boolean(enabled);
+    return this.setHeadBobIntensity(enabled ? 1 : 0);
+  }
+
+  setHeadBobIntensity(intensity = 1, reducedMotion = false) {
+    const numeric = Number(intensity);
+    this._headBobIntensity = reducedMotion === true
+      ? 0
+      : clamp(Number.isFinite(numeric) ? numeric : 1, 0, 1);
+    this.config.headBob = this._headBobIntensity > 0;
+    if (this._headBobIntensity <= 0) this.resetHeadBob();
+    return this.getHeadBobState();
+  }
+
+  resetHeadBob() {
+    if (this.camera) {
+      this.camera.position.x -= this._appliedHeadBobWorldX;
+      this.camera.position.y -= this._appliedHeadBobWorldY;
+      this.camera.position.z -= this._appliedHeadBobWorldZ;
+      this.camera.rotation.z -= this._appliedHeadBobRoll;
+      this.camera.updateMatrixWorld?.();
+    }
+    this._bobTime = 0;
+    this._bobAmount = 0;
+    this._lastViewBob.x = 0;
+    this._lastViewBob.y = 0;
+    this._appliedHeadBobWorldX = 0;
+    this._appliedHeadBobWorldY = 0;
+    this._appliedHeadBobWorldZ = 0;
+    this._appliedHeadBobRoll = 0;
+    return this.getHeadBobState();
+  }
+
+  getHeadBobState() {
+    return {
+      amount: this._bobAmount,
+      intensity: this._headBobIntensity,
+      x: this._lastViewBob.x,
+      y: this._lastViewBob.y,
+      roll: this._appliedHeadBobRoll,
+      enabled: this._headBobIntensity > 0,
+    };
   }
 
   setSlideTiltIntensity(intensity = 0.75, reducedMotion = false) {
@@ -894,8 +943,7 @@ export class PlayerController {
     this._lastLookYawDelta = 0;
     this._lastLookPitchDelta = 0;
     this._cameraHeight = this.config.standingEyeOffset;
-    this._bobTime = 0;
-    this._bobAmount = 0;
+    this.resetHeadBob();
     this.resetSlideTilt();
     this._previousInput = { jump: false, crouch: false, dash: false };
     this._emit('player:reset', { health: this.health, armor: this.armor });
@@ -990,6 +1038,7 @@ export class PlayerController {
   dispose() {
     if (this._disposed) return;
     this.resetRecoil();
+    this.resetHeadBob();
     this.resetSlideTilt();
     this._lastLookYawDelta = 0;
     this._lastLookPitchDelta = 0;

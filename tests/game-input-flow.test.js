@@ -503,12 +503,13 @@ test('resetSimulationTiming clears hit-stop, weapon input and accumulated simula
   assert.equal(game.timeScale, 0.4);
 });
 
-test('resetCameraPresentation clears shake, recoil, slide tilt, viewmodel motion and dynamic FOV state', () => {
+test('resetCameraPresentation clears shake, recoil, head bob, slide tilt, viewmodel motion and dynamic FOV state', () => {
   const calls = [];
   const game = {
     cameraShake: { reset: () => calls.push('shake') },
     player: {
       resetRecoil: () => calls.push('camera-recoil'),
+      resetHeadBob: () => calls.push('head-bob'),
       resetSlideTilt: () => calls.push('camera-slide'),
     },
     weapons: { clearViewmodelMotion: () => calls.push('viewmodel-motion') },
@@ -517,11 +518,11 @@ test('resetCameraPresentation clears shake, recoil, slide tilt, viewmodel motion
 
   const result = Game.prototype.resetCameraPresentation.call(game);
 
-  assert.deepEqual(calls, ['shake', 'camera-recoil', 'camera-slide', 'viewmodel-motion', 'fov']);
+  assert.deepEqual(calls, ['shake', 'camera-recoil', 'head-bob', 'camera-slide', 'viewmodel-motion', 'fov']);
   assert.equal(result, 'fov-reset');
 });
 
-test('applySettings sends recoil, sway, slide tilt and hit-stop accessibility settings to their owners', (t) => {
+test('applySettings sends head-bob, recoil, sway, slide tilt and hit-stop accessibility settings to their owners', (t) => {
   const calls = [];
   const previousDocument = globalThis.document;
   globalThis.document = { documentElement: { style: { setProperty() {} } } };
@@ -552,7 +553,7 @@ test('applySettings sends recoil, sway, slide tilt and hit-stop accessibility se
     player: {
       setRecoilIntensity: (...args) => calls.push(['player', ...args]),
       setSlideTiltIntensity: (...args) => calls.push(['player-slide', ...args]),
-      setHeadBobEnabled() {},
+      setHeadBobIntensity: (...args) => calls.push(['head-bob', ...args]),
     },
     weapons: {
       setRecoilIntensity: (...args) => calls.push(['weapons', ...args]),
@@ -573,5 +574,6 @@ test('applySettings sends recoil, sway, slide tilt and hit-stop accessibility se
     ['sway', 0.55, true],
     ['player-slide', 0.65, true],
     ['weapon-slide', 0.65, true],
+    ['head-bob', 0.6, true],
   ]);
 });

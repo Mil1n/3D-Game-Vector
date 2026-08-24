@@ -673,7 +673,7 @@ export class UIManager {
         <div class="settings-groups"><section class="settings-group"><h3>Движение и камера</h3>
           ${this._toggleSetting('accessibility.reducedMotion', 'Снижение движения', 'Отключает декоративную инерцию камеры и оружия и сокращает переходы.', value('accessibility.reducedMotion'))}
           ${this._rangeSetting('accessibility.uiScale', 'Размер интерфейса', 'Масштаб боевого HUD и контекстных подсказок.', value('accessibility.uiScale'), 0.8, 1.3, 0.05, 'ratio')}
-          ${this._rangeSetting('gameplay.headBob', 'Покачивание камеры', 'Амплитуда камеры при движении.', value('gameplay.headBob'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('gameplay.headBob', 'Покачивание камеры', 'Пропорционально масштабирует покачивание камеры и оружия при движении.', value('gameplay.headBob'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.cameraShake', 'Тряска камеры', 'Сила отклика на прыжок и приземление, урон и близкие взрывы.', value('gameplay.cameraShake'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.weaponRecoil', 'Оружейная отдача', 'Сила управляемого отклонения прицела и движения модели оружия.', value('gameplay.weaponRecoil'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.weaponSway', 'Инерция оружия', 'Отставание оружия при повороте, прыжке, приземлении и скольжении. ADS ослабляет эффект, а снижение движения полностью отключает.', value('gameplay.weaponSway'), 0, 1, 0.05, 'percent')}
