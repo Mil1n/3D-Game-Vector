@@ -256,6 +256,8 @@ export class Game {
       arena: this.arena,
       player: this.player,
       difficulty: this.matchDifficulty,
+      hitReactionIntensity: settings.gameplay.enemyHitReaction,
+      reducedMotion: settings.accessibility.reducedMotion,
     });
     this.weapons = new WeaponSystem({
       camera: this.sceneManager.camera,
@@ -735,6 +737,7 @@ export class Game {
     this.cameraFov?.applySettings(settings, { immediate: true });
     this.cameraShake?.applySettings(settings);
     this.hitStop?.applySettings(settings);
+    this.enemies?.setHitReactionIntensity(settings.gameplay.enemyHitReaction, settings.accessibility.reducedMotion);
     this.player?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.weapons?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.input.setBindings(settings.controls.bindings, { replace: true, silent: true });

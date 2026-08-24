@@ -109,6 +109,8 @@ test('direct body, headshot and lethal headshot impacts preserve their aggregate
 
   for (const expected of cases) {
     const events = [];
+    const damageContexts = [];
+    const tracedDirections = [];
     const enemy = { type: 'trooper' };
     const weapons = new WeaponSystem({
       camera: new THREE.PerspectiveCamera(),
@@ -118,13 +120,19 @@ test('direct body, headshot and lethal headshot impacts preserve their aggregate
       effects: noopEffects,
       arena: { raycastWorld: () => null },
       enemySystem: {
-        raycast: (_origin, _direction, distance) => ({
-          enemy,
-          distance: Math.min(2, distance),
-          point: new THREE.Vector3(0, 0, -2),
-          zone: expected.zone,
-        }),
-        damage: (_target, amount) => ({ applied: amount, killed: expected.killed }),
+        raycast: (_origin, direction, distance) => {
+          tracedDirections.push(direction.clone());
+          return {
+            enemy,
+            distance: Math.min(2, distance),
+            point: new THREE.Vector3(0, 0, -2),
+            zone: expected.zone,
+          };
+        },
+        damage: (_target, amount, context) => {
+          damageContexts.push(context);
+          return { applied: amount, killed: expected.killed };
+        },
       },
       random: () => 0.5,
     });
@@ -137,6 +145,12 @@ test('direct body, headshot and lethal headshot impacts preserve their aggregate
     assert.equal(impacts[0].payload.headshot, expected.headshot);
     assert.equal(impacts[0].payload.killed, expected.killed);
     assert.equal(impacts[0].payload.hitCount, 1);
+    assert.equal(damageContexts.length, 1);
+    assert.equal(damageContexts[0].zone, expected.zone);
+    assert.ok(damageContexts[0].direction instanceof THREE.Vector3);
+    assert.ok(Math.abs(damageContexts[0].direction.length() - 1) < 1e-8);
+    assert.ok([...damageContexts[0].direction.toArray()].every(Number.isFinite));
+    assert.ok(damageContexts[0].direction.dot(tracedDirections[0]) > 1 - 1e-8);
     weapons.dispose();
   }
 });

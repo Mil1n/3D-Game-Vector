@@ -530,6 +530,7 @@ test('applySettings sends recoil and hit-stop accessibility settings to their ow
     gameplay: {
       weaponRecoil: 0.4,
       hitStop: 0.6,
+      enemyHitReaction: 0.75,
       headBob: 0.6,
       crosshairColor: '#67f7e3',
     },
@@ -542,6 +543,7 @@ test('applySettings sends recoil and hit-stop accessibility settings to their ow
     cameraFov: { applySettings() {} },
     cameraShake: { applySettings() {} },
     hitStop: { applySettings: (value) => calls.push(['hit-stop', value.gameplay.hitStop, value.accessibility.reducedMotion]) },
+    enemies: { setHitReactionIntensity: (...args) => calls.push(['enemies', ...args]) },
     player: {
       setRecoilIntensity: (...args) => calls.push(['player', ...args]),
       setHeadBobEnabled() {},
@@ -555,6 +557,7 @@ test('applySettings sends recoil and hit-stop accessibility settings to their ow
 
   assert.deepEqual(calls, [
     ['hit-stop', 0.6, true],
+    ['enemies', 0.75, true],
     ['player', 0.4, true],
     ['weapons', 0.4, true],
   ]);

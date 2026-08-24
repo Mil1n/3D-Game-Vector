@@ -141,7 +141,18 @@ function createPickupPool(scene, size = 20) {
 }
 
 export class EnemySystem {
-  constructor({ scene, eventBus, audioManager, effects, arena, player, difficulty = 'normal', random = Math.random }) {
+  constructor({
+    scene,
+    eventBus,
+    audioManager,
+    effects,
+    arena,
+    player,
+    difficulty = 'normal',
+    random = Math.random,
+    hitReactionIntensity = 0.85,
+    reducedMotion = false,
+  }) {
     this.scene = scene;
     this.eventBus = eventBus;
     this.audio = audioManager;
@@ -162,6 +173,10 @@ export class EnemySystem {
     this.maxAttackers = difficulty === 'easy' ? 2 : difficulty === 'hard' ? 4 : 3;
     this.aiFrozen = false;
     this.disposed = false;
+    this.hitReactionIntensity = Number.isFinite(Number(hitReactionIntensity))
+      ? THREE.MathUtils.clamp(Number(hitReactionIntensity), 0, 1)
+      : 0.85;
+    this.hitReactionReducedMotion = reducedMotion === true;
     this.raycaster = new THREE.Raycaster();
     this.projectiles = createProjectilePool(scene);
     this.hazards = createHazardPool(scene);
@@ -178,6 +193,8 @@ export class EnemySystem {
     this.tempPlanarVelocity = new THREE.Vector3();
     this.tempProjectileToPlayer = new THREE.Vector3();
     this.tempProjectileClosest = new THREE.Vector3();
+    this.tempHitDirection = new THREE.Vector3();
+    this.tempRadialDirection = new THREE.Vector3();
     this.unsubscribers = [
       this.eventBus?.on?.('combat:shot', (event) => this.onNoise(event)),
       this.eventBus?.on?.('debug:freeze-ai', ({ enabled }) => { this.aiFrozen = enabled; }),
@@ -187,6 +204,25 @@ export class EnemySystem {
   setDifficulty(difficulty) {
     this.difficulty = difficulty;
     this.maxAttackers = difficulty === 'easy' ? 2 : difficulty === 'hard' ? 4 : 3;
+  }
+
+  setHitReactionIntensity(intensity = 0.85, reducedMotion = false) {
+    const value = Number(intensity);
+    this.hitReactionIntensity = Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, 1) : 0.85;
+    this.hitReactionReducedMotion = reducedMotion === true;
+    if (this.hitReactionIntensity > 0 && !this.hitReactionReducedMotion) return;
+    for (const enemy of this.enemies) {
+      if (!enemy.hitReaction) continue;
+      enemy.hitReaction.remaining = 0;
+      enemy.hitReaction.strength = 0;
+      if (enemy.dead && enemy.deathTime < 0.7) {
+        enemy.deathLeanX = 0;
+        enemy.deathLeanZ = 0;
+        enemy.root.rotation.x = 0;
+        enemy.root.rotation.z = 0;
+      }
+      updateEnemyVisual(enemy, 0);
+    }
   }
 
   spawn(type = 'trooper', position = null, options = {}) {
@@ -231,6 +267,17 @@ export class EnemySystem {
       elitePhase: 1,
       visualTime: 0,
       visualRecovery: null,
+      hitReaction: {
+        remaining: 0,
+        duration: 0.2,
+        worldX: 0,
+        worldY: 0,
+        worldZ: 0,
+        strength: 0,
+        zone: 'body',
+      },
+      deathLeanX: 0,
+      deathLeanZ: 0,
       dead: false,
       deathTime: 0,
       bobOffset: this.random() * Math.PI * 2,
@@ -258,20 +305,31 @@ export class EnemySystem {
     this.updateProjectiles(dt);
     this.updateHazards(dt);
     this.updatePickups(dt);
-    if (this.aiFrozen) return;
 
-    this.attackTokenAccumulator -= dt;
-    if (this.attackTokenAccumulator <= 0) {
-      this.attackTokenAccumulator = 0.5;
-      this.assignAttackTokens();
+    if (!this.aiFrozen) {
+      this.attackTokenAccumulator -= dt;
+      if (this.attackTokenAccumulator <= 0) {
+        this.attackTokenAccumulator = 0.5;
+        this.assignAttackTokens();
+      }
     }
 
     for (const enemy of this.enemies) {
       if (enemy.dead) {
+        if (enemy.deathTime >= 0.7) {
+          enemy.root.visible = false;
+          continue;
+        }
         enemy.deathTime += dt;
         enemy.root.position.y -= dt * Math.min(1.5, enemy.deathTime * 2);
-        enemy.root.rotation.z += dt * 1.8;
+        enemy.root.rotation.z -= dt * 1.8 * enemy.deathLeanX;
+        enemy.root.rotation.x += dt * 1.2 * enemy.deathLeanZ;
+        updateEnemyVisual(enemy, dt);
         if (enemy.deathTime > 0.7) enemy.root.visible = false;
+        continue;
+      }
+      if (this.aiFrozen) {
+        updateEnemyVisual(enemy, dt);
         continue;
       }
       enemy.stateTime += dt;
@@ -889,12 +947,73 @@ export class EnemySystem {
     shield.visible = enemy.shield > 0;
   }
 
+  triggerHitReaction(enemy, amount, context = {}, { shieldOnly = false, killed = false } = {}) {
+    if (!enemy?.hitReaction || this.hitReactionReducedMotion || this.hitReactionIntensity <= 0) return false;
+    const provided = context.direction;
+    const providedLengthSq = finiteVector(provided)
+      ? provided.x * provided.x + provided.y * provided.y + provided.z * provided.z
+      : 0;
+    if (providedLengthSq > 1e-8) {
+      this.tempHitDirection.copy(provided);
+    } else if (finiteVector(this.player?.position)) {
+      this.tempHitDirection.subVectors(enemy.root.position, this.player.position);
+    } else {
+      this.tempHitDirection.copy(enemy.forward);
+    }
+    if (!finiteVector(this.tempHitDirection) || this.tempHitDirection.lengthSq() < 1e-8) return false;
+    this.tempHitDirection.normalize();
+
+    const reaction = enemy.hitReaction;
+    const staggerThreshold = Number(enemy.config.staggerThreshold) || enemy.maxHealth * 0.35;
+    const damageRatio = THREE.MathUtils.clamp(Number(amount) / Math.max(1, staggerThreshold), 0, 1);
+    const zone = context.zone === 'head' ? 'head' : context.zone === 'limb' ? 'limb' : 'body';
+    const zoneScale = zone === 'head' ? 1.22 : zone === 'limb' ? 0.76 : 1;
+    const massScale = enemy.type === 'warden' ? 0.5 : enemy.type === 'hunter' ? 0.86 : 1;
+    const shieldScale = shieldOnly ? 0.28 : 1;
+    const lethalScale = killed ? 1.18 : 1;
+    const impulse = THREE.MathUtils.clamp(
+      (0.12 + damageRatio * 0.88)
+        * zoneScale
+        * massScale
+        * shieldScale
+        * lethalScale
+        * this.hitReactionIntensity,
+      0,
+      1.2,
+    );
+    if (impulse <= 0) return false;
+
+    const carry = reaction.remaining > 0 ? reaction.strength * 0.32 : 0;
+    let worldX = reaction.worldX * carry + this.tempHitDirection.x * impulse;
+    let worldY = reaction.worldY * carry + this.tempHitDirection.y * impulse;
+    let worldZ = reaction.worldZ * carry + this.tempHitDirection.z * impulse;
+    const length = Math.hypot(worldX, worldY, worldZ);
+    if (length > 1e-8) {
+      worldX /= length;
+      worldY /= length;
+      worldZ /= length;
+    } else {
+      worldX = this.tempHitDirection.x;
+      worldY = this.tempHitDirection.y;
+      worldZ = this.tempHitDirection.z;
+    }
+    reaction.worldX = worldX;
+    reaction.worldY = worldY;
+    reaction.worldZ = worldZ;
+    reaction.strength = THREE.MathUtils.clamp(carry + impulse, 0, 1.2);
+    reaction.zone = zone;
+    reaction.duration = killed ? 0.3 : zone === 'head' ? 0.24 : zone === 'limb' ? 0.17 : 0.2;
+    reaction.remaining = reaction.duration;
+    return true;
+  }
+
   damage(enemyOrId, amount, context = {}) {
     const enemy = typeof enemyOrId === 'string' ? this.byId.get(enemyOrId) : enemyOrId;
     if (!enemy || enemy.dead || !Number.isFinite(amount) || amount <= 0) return { applied: 0, killed: false };
     let remaining = amount;
+    let absorbed = 0;
     if (enemy.shield > 0) {
-      const absorbed = Math.min(enemy.shield, remaining);
+      absorbed = Math.min(enemy.shield, remaining);
       enemy.shield -= absorbed;
       remaining -= absorbed;
       this.updateShieldVisual(enemy);
@@ -904,6 +1023,7 @@ export class EnemySystem {
     this.setState(enemy, 'combat');
     enemy.lastKnown.copy(this.player.position);
     const killed = enemy.health <= 0;
+    this.triggerHitReaction(enemy, amount, context, { shieldOnly: absorbed > 0 && remaining <= 0, killed });
     if (killed) this.kill(enemy, context);
     else this.eventBus?.emit?.('enemy:damaged', { id: enemy.id, type: enemy.type, amount, health: enemy.health, maxHealth: enemy.maxHealth, shield: enemy.shield });
     return { applied: amount, killed, health: Math.max(0, enemy.health), shield: enemy.shield };
@@ -915,6 +1035,21 @@ export class EnemySystem {
     enemy.health = 0;
     enemy.pendingAttack = null;
     enemy.hasAttackToken = false;
+    enemy.velocity.set(0, 0, 0);
+    if (this.hitReactionIntensity > 0 && !this.hitReactionReducedMotion) {
+      const reaction = enemy.hitReaction;
+      const forwardX = Number.isFinite(enemy.forward?.x) ? enemy.forward.x : Math.sin(enemy.root.rotation.y);
+      const forwardZ = Number.isFinite(enemy.forward?.z) ? enemy.forward.z : Math.cos(enemy.root.rotation.y);
+      const rightX = forwardZ;
+      const rightZ = -forwardX;
+      const localX = reaction ? reaction.worldX * rightX + reaction.worldZ * rightZ : 0;
+      const localZ = reaction ? reaction.worldX * forwardX + reaction.worldZ * forwardZ : 0;
+      enemy.deathLeanX = Math.abs(localX) > 0.05 ? localX : enemy.flankSign * 0.35;
+      enemy.deathLeanZ = Math.abs(localZ) > 0.05 ? localZ : -0.65;
+    } else {
+      enemy.deathLeanX = 0;
+      enemy.deathLeanZ = 0;
+    }
     for (const mesh of enemy.hitMeshes) {
       const index = this.hitMeshes.indexOf(mesh);
       if (index >= 0) this.hitMeshes.splice(index, 1);
@@ -947,7 +1082,15 @@ export class EnemySystem {
       if (!(this.arena?.hasLineOfSight?.(position, enemy.root.position) ?? true)) continue;
       const distance = Math.sqrt(enemy.root.position.distanceToSquared(position));
       const amount = damage * (1 - THREE.MathUtils.clamp(distance / radius, 0, 1) * 0.72);
-      const outcome = this.damage(enemy, amount, { ...context, point: enemy.root.position.clone(), zone: 'body' });
+      this.tempRadialDirection.subVectors(enemy.root.position, position);
+      if (this.tempRadialDirection.lengthSq() < 1e-8) this.tempRadialDirection.copy(enemy.forward);
+      else this.tempRadialDirection.normalize();
+      const outcome = this.damage(enemy, amount, {
+        ...context,
+        point: enemy.root.position.clone(),
+        zone: 'body',
+        direction: this.tempRadialDirection,
+      });
       hits += 1;
       kills += Number(Boolean(outcome?.killed));
       const applied = Number(outcome?.applied);

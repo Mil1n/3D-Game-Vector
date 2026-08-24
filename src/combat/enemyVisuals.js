@@ -420,6 +420,25 @@ export function updateEnemyVisual(enemy, dt) {
   else if (enemy.type === 'warden') animateWarden(enemy, parts, enemy.visualTime, motion);
   else animateTrooper(enemy, parts, enemy.visualTime, motion);
 
+  const reaction = enemy.hitReaction;
+  if (reaction?.remaining > 0 && reaction.strength > 0) {
+    reaction.remaining = Math.max(0, reaction.remaining - Math.max(0, dt));
+    const life = clamp01(reaction.remaining / Math.max(0.001, reaction.duration));
+    const envelope = life * life;
+    const forwardX = Number.isFinite(enemy.forward?.x) ? enemy.forward.x : Math.sin(enemy.root.rotation.y);
+    const forwardZ = Number.isFinite(enemy.forward?.z) ? enemy.forward.z : Math.cos(enemy.root.rotation.y);
+    const localX = reaction.worldX * forwardZ - reaction.worldZ * forwardX;
+    const localZ = reaction.worldX * forwardX + reaction.worldZ * forwardZ;
+    const kick = reaction.strength * envelope;
+    parts.visualRoot.position.x += localX * kick * 0.085;
+    parts.visualRoot.position.y += reaction.worldY * kick * 0.04;
+    parts.visualRoot.position.z += localZ * kick * 0.075;
+    parts.visualRoot.rotation.x += (localZ * 0.14 - reaction.worldY * 0.055) * kick;
+    parts.visualRoot.rotation.y += localX * localZ * kick * 0.045;
+    parts.visualRoot.rotation.z -= localX * kick * 0.13;
+    if (reaction.remaining <= 0) reaction.strength = 0;
+  }
+
   const activeWindup = enemy.pendingAttack
     ? clamp01(1 - enemy.pendingAttack.remaining / Math.max(0.001, enemy.pendingAttack.duration ?? 0.001))
     : 0;

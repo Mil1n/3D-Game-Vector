@@ -192,6 +192,18 @@ test('accessibility settings expose a saved hit-stop intensity slider', () => {
   assert.match(markup, />35%<\/output>/);
 });
 
+test('accessibility settings expose a saved enemy hit-reaction intensity slider', () => {
+  const ui = Object.create(UIManager.prototype);
+  ui.settings = { gameplay: { enemyHitReaction: 0.45 } };
+
+  const markup = ui._settingsTabMarkup('accessibility');
+
+  assert.match(markup, /Реакция противников/);
+  assert.match(markup, /type="range" min="0" max="1" step="0\.05" value="0\.45" data-setting="gameplay\.enemyHitReaction"/);
+  assert.match(markup, /Снижение движения полностью отключает эффект/);
+  assert.match(markup, />45%<\/output>/);
+});
+
 test('achievements view renders the canonical AchievementSystem catalog', () => {
   const achievements = new AchievementSystem({
     saveManager: {

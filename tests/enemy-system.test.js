@@ -274,6 +274,198 @@ test('radial damage can return exact hit, kill and falloff totals without breaki
   assert.equal(system.damageInRadius(new THREE.Vector3(), 1, 1), 1);
 });
 
+test('directional hit reactions compose on the visual rig without moving gameplay state', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  const rightHit = system.spawn('trooper', new THREE.Vector3(-2, 0, 0));
+  const leftHit = system.spawn('trooper', new THREE.Vector3(2, 0, 0));
+  const snapshots = [rightHit, leftHit].map((enemy) => ({
+    position: enemy.root.position.clone(),
+    quaternion: enemy.root.quaternion.clone(),
+    velocity: enemy.velocity.clone(),
+    target: enemy.target.clone(),
+  }));
+
+  system.damage(rightHit, 12, { zone: 'body', direction: new THREE.Vector3(1, 0, 0) });
+  system.damage(leftHit, 12, { zone: 'body', direction: new THREE.Vector3(-1, 0, 0) });
+  updateEnemyVisual(rightHit, 1 / 60);
+  updateEnemyVisual(leftHit, 1 / 60);
+
+  const rightRig = rightHit.root.userData.visualParts.visualRoot;
+  const leftRig = leftHit.root.userData.visualParts.visualRoot;
+  assert.ok(rightRig.position.x > rightRig.userData.basePosition.x);
+  assert.ok(leftRig.position.x < leftRig.userData.basePosition.x);
+  assert.ok(rightRig.rotation.z < rightRig.userData.baseRotation.z);
+  assert.ok(leftRig.rotation.z > leftRig.userData.baseRotation.z);
+  [rightHit, leftHit].forEach((enemy, index) => {
+    assert.ok(enemy.root.position.equals(snapshots[index].position));
+    assert.equal(enemy.root.quaternion.angleTo(snapshots[index].quaternion), 0);
+    assert.ok(enemy.velocity.equals(snapshots[index].velocity));
+    assert.ok(enemy.target.equals(snapshots[index].target));
+  });
+
+  const turned = system.spawn('trooper', new THREE.Vector3(0, 0, 4));
+  turned.forward.set(1, 0, 0);
+  turned.root.rotation.y = Math.PI / 2;
+  system.damage(turned, 12, { zone: 'body', direction: new THREE.Vector3(1, 0, 0) });
+  updateEnemyVisual(turned, 1 / 60);
+  const turnedRig = turned.root.userData.visualParts.visualRoot;
+  assert.ok(turnedRig.rotation.x > turnedRig.userData.baseRotation.x, 'world +X must become local forward after a 90° turn');
+  assert.ok(Math.abs(turnedRig.rotation.z - turnedRig.userData.baseRotation.z) < 1e-8);
+});
+
+test('headshots react harder while bounded reactions decay independently of frame rate', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  const body = system.spawn('trooper', new THREE.Vector3(-2, 0, 0));
+  const head = system.spawn('trooper', new THREE.Vector3(2, 0, 0));
+  const direction = new THREE.Vector3(1, 0, -1).normalize();
+  system.damage(body, 10, { zone: 'body', direction });
+  system.damage(head, 10, { zone: 'head', direction });
+  updateEnemyVisual(body, 1 / 60);
+  updateEnemyVisual(head, 1 / 60);
+
+  const angleFromBase = (enemy) => {
+    const visualRoot = enemy.root.userData.visualParts.visualRoot;
+    const base = new THREE.Quaternion().setFromEuler(visualRoot.userData.baseRotation);
+    return base.angleTo(visualRoot.quaternion);
+  };
+  const bodyAngle = angleFromBase(body);
+  const headAngle = angleFromBase(head);
+  assert.ok(bodyAngle > 0 && bodyAngle < 0.2);
+  assert.ok(headAngle > bodyAngle * 1.1);
+
+  const sampleAt = (fps, seconds) => {
+    const enemy = system.spawn('trooper', new THREE.Vector3(0, 0, fps));
+    system.damage(enemy, 10, { zone: 'body', direction });
+    for (let frame = 0; frame < Math.round(fps * seconds); frame += 1) updateEnemyVisual(enemy, 1 / fps);
+    return angleFromBase(enemy);
+  };
+  assert.ok(Math.abs(sampleAt(60, 0.1) - sampleAt(120, 0.1)) < 1e-6);
+  assert.ok(sampleAt(60, 0.1) > sampleAt(60, 0.16));
+  assert.ok(sampleAt(60, 0.35) < 1e-8);
+});
+
+test('radial damage pushes visual rigs away from its own center', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  const left = system.spawn('trooper', new THREE.Vector3(-2, 0, 0));
+  const right = system.spawn('trooper', new THREE.Vector3(2, 0, 0));
+
+  system.damageInRadius(new THREE.Vector3(), 5, 8, { source: 'player', weapon: 'nova-blast' });
+  updateEnemyVisual(left, 1 / 60);
+  updateEnemyVisual(right, 1 / 60);
+
+  assert.ok(left.hitReaction.worldX < 0);
+  assert.ok(right.hitReaction.worldX > 0);
+  assert.ok(left.root.userData.visualParts.visualRoot.position.x < 0);
+  assert.ok(right.root.userData.visualParts.visualRoot.position.x > 0);
+});
+
+test('hit reaction intensity and reduced motion clear and suppress active impulses', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  const enemy = system.spawn('trooper', new THREE.Vector3());
+  const visualRoot = enemy.root.userData.visualParts.visualRoot;
+  const direction = new THREE.Vector3(1, 0, 0);
+
+  system.setHitReactionIntensity(0, false);
+  system.damage(enemy, 8, { zone: 'body', direction });
+  updateEnemyVisual(enemy, 1 / 60);
+  assert.equal(enemy.hitReaction.remaining, 0);
+  assert.equal(visualRoot.rotation.z, visualRoot.userData.baseRotation.z);
+
+  system.setHitReactionIntensity(1, false);
+  system.damage(enemy, 8, { zone: 'body', direction });
+  updateEnemyVisual(enemy, 1 / 60);
+  assert.ok(enemy.hitReaction.remaining > 0);
+  assert.notEqual(visualRoot.rotation.z, visualRoot.userData.baseRotation.z);
+
+  system.setHitReactionIntensity(0, false);
+  system.setHitReactionIntensity(0.5, false);
+  system.damage(enemy, 8, { zone: 'body', direction });
+  const halfStrength = enemy.hitReaction.strength;
+  system.setHitReactionIntensity(0, false);
+  system.setHitReactionIntensity(1, false);
+  system.damage(enemy, 8, { zone: 'body', direction });
+  assert.ok(enemy.hitReaction.strength > halfStrength * 1.9);
+  for (let pellet = 0; pellet < 12; pellet += 1) {
+    system.triggerHitReaction(enemy, 80, { zone: 'body', direction });
+  }
+  assert.ok(enemy.hitReaction.strength <= 1.2, 'automatic fire and scatter pellets must stay capped');
+
+  system.setHitReactionIntensity(0, false);
+  system.setHitReactionIntensity(0.85, false);
+  for (let plasmaHit = 0; plasmaHit < 30; plasmaHit += 1) {
+    system.triggerHitReaction(enemy, 10.5, { zone: 'body', direction, weapon: 'plasma' });
+  }
+  assert.ok(enemy.hitReaction.strength > 0.4 && enemy.hitReaction.strength < 0.7, 'plasma burst must not inherit heavy-weapon impact');
+  for (let frame = 0; frame < 20; frame += 1) updateEnemyVisual(enemy, 1 / 60);
+  assert.equal(enemy.hitReaction.strength, 0);
+
+  system.setHitReactionIntensity(1, true);
+  assert.equal(enemy.hitReaction.remaining, 0);
+  assert.equal(enemy.hitReaction.strength, 0);
+  assert.equal(visualRoot.rotation.z, visualRoot.userData.baseRotation.z);
+  system.damage(enemy, 8, { zone: 'body', direction });
+  assert.equal(enemy.hitReaction.remaining, 0);
+
+  system.setHitReactionIntensity(1, false);
+  const dying = system.spawn('trooper', new THREE.Vector3(4, 0, 0));
+  dying.health = 1;
+  system.damage(dying, 20, { zone: 'body', direction });
+  assert.notEqual(dying.deathLeanX, 0);
+  system.setHitReactionIntensity(1, true);
+  assert.equal(dying.deathLeanX, 0);
+  assert.equal(dying.deathLeanZ, 0);
+  assert.equal(dying.root.rotation.x, 0);
+  assert.equal(dying.root.rotation.z, 0);
+});
+
+test('opposite lethal hit directions mirror the death fall and hidden bodies stop updating', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  system.aiFrozen = true;
+  const cases = [
+    { direction: new THREE.Vector3(1, 0, 0), axis: 'z', sign: -1 },
+    { direction: new THREE.Vector3(-1, 0, 0), axis: 'z', sign: 1 },
+    { direction: new THREE.Vector3(0, 0, 1), axis: 'x', sign: 1 },
+    { direction: new THREE.Vector3(0, 0, -1), axis: 'x', sign: -1 },
+  ];
+  const enemies = cases.map((entry, index) => {
+    const enemy = system.spawn('trooper', new THREE.Vector3(index * 3, 0, 0));
+    enemy.health = 1;
+    const outcome = system.damage(enemy, 20, { zone: 'body', direction: entry.direction });
+    assert.equal(outcome.killed, true);
+    assert.ok(enemy.hitReaction.remaining > 0);
+    assert.ok(enemy.velocity.lengthSq() < 1e-8);
+    return enemy;
+  });
+  system.update(1 / 60);
+
+  enemies.forEach((enemy, index) => {
+    assert.equal(Math.sign(enemy.root.rotation[cases[index].axis]), cases[index].sign);
+    assert.equal(enemy.root.position.x, index * 3);
+    assert.equal(enemy.root.position.z, 0);
+    assert.notEqual(
+      enemy.root.userData.visualParts.visualRoot.quaternion.w,
+      new THREE.Quaternion().setFromEuler(enemy.root.userData.visualParts.visualRoot.userData.baseRotation).w,
+    );
+  });
+  assert.ok(Math.abs(Math.abs(enemies[0].root.rotation.z) - Math.abs(enemies[1].root.rotation.z)) < 1e-8);
+  assert.ok(Math.abs(Math.abs(enemies[2].root.rotation.x) - Math.abs(enemies[3].root.rotation.x)) < 1e-8);
+
+  system.update(1);
+  const hiddenTimes = enemies.map((enemy) => enemy.visualTime);
+  assert.ok(enemies.every((enemy) => enemy.root.visible === false));
+  system.update(1);
+  assert.deepEqual(enemies.map((enemy) => enemy.visualTime), hiddenTimes, 'hidden corpses must leave the animation hot path');
+});
+
+test('enemy visual hit-reaction update performs no constructor allocations', () => {
+  assert.doesNotMatch(updateEnemyVisual.toString(), /\bnew\s+[A-Z]/);
+});
+
 test('enemy rigs animate windups and phases without moving gameplay roots', (t) => {
   const { system } = createEnemies();
   t.after(() => system.dispose());
