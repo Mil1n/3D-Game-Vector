@@ -120,6 +120,19 @@ test('SettingsManager persists a bounded weapon recoil intensity', () => {
   assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.weaponRecoil, 1);
 });
 
+test('SettingsManager persists a bounded hit-stop intensity', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const settings = new SettingsManager({ storage });
+  assert.equal(settings.set('gameplay.hitStop', 0.35), 0.35);
+  assert.equal(settings.set('gameplay.hitStop', -3), 0);
+  assert.equal(settings.set('gameplay.hitStop', 8), 1);
+  assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.hitStop, 1);
+});
+
 test('legacy settings without weapon recoil receive the current default', () => {
   const values = new Map([
     ['vector-null:settings:v1', JSON.stringify({ gameplay: { cameraShake: 0.2 } })],
@@ -132,6 +145,7 @@ test('legacy settings without weapon recoil receive the current default', () => 
 
   assert.equal(settings.get('gameplay.cameraShake'), 0.2);
   assert.equal(settings.get('gameplay.weaponRecoil'), 0.85);
+  assert.equal(settings.get('gameplay.hitStop'), 0.8);
 });
 
 test('SaveManager fallback keeps root and nested progression aliases synchronized', async () => {

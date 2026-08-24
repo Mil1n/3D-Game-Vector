@@ -940,15 +940,22 @@ export class EnemySystem {
   damageInRadius(position, radius, damage, context = {}) {
     const radiusSq = radius * radius;
     let hits = 0;
+    let kills = 0;
+    let totalDamage = 0;
     for (const enemy of this.enemies) {
       if (enemy.dead || enemy.root.position.distanceToSquared(position) > radiusSq) continue;
       if (!(this.arena?.hasLineOfSight?.(position, enemy.root.position) ?? true)) continue;
       const distance = Math.sqrt(enemy.root.position.distanceToSquared(position));
       const amount = damage * (1 - THREE.MathUtils.clamp(distance / radius, 0, 1) * 0.72);
-      this.damage(enemy, amount, { ...context, point: enemy.root.position.clone(), zone: 'body' });
+      const outcome = this.damage(enemy, amount, { ...context, point: enemy.root.position.clone(), zone: 'body' });
       hits += 1;
+      kills += Number(Boolean(outcome?.killed));
+      const applied = Number(outcome?.applied);
+      totalDamage += Number.isFinite(applied) ? Math.max(0, applied) : amount;
     }
-    return hits;
+    return context.returnSummary === true
+      ? { hits, kills, damage: totalDamage }
+      : hits;
   }
 
   killAll() {

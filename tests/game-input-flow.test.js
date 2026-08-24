@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { Game } from '../src/core/Game.js';
 import { GAME_STATES } from '../src/core/GameStateManager.js';
+import { HitStopController } from '../src/core/HitStopController.js';
 
 function createStartMatchHarness() {
   const input = {
@@ -237,6 +238,271 @@ test('playing frame restores shake before the player pose and applies it after t
   ]);
 });
 
+test('frame composes debug time scale and hit-stop once while presentation systems keep real time', (t) => {
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = () => 11;
+  t.after(() => {
+    if (originalRequestAnimationFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  });
+
+  const observed = {};
+  const game = {
+    running: true,
+    disposed: false,
+    _frame() {},
+    raf: 0,
+    lastTimestamp: 1000,
+    timeScale: 0.5,
+    settings: { get: () => 0 },
+    state: { state: GAME_STATES.PLAYING },
+    hitStop: {
+      update(dt) {
+        observed.hitStopDelta = dt;
+        return 0.2;
+      },
+    },
+    gameplayInput: { consumeLook() { throw new Error('look input must remain buffered'); } },
+    cameraShake: {
+      restoreCamera() {},
+      update(dt) { observed.shakeDelta = dt; },
+    },
+    updateGameplay(delta, options) { observed.gameplay = { delta, options }; },
+    player: { update(_camera, dt) { observed.playerDelta = dt; } },
+    updateCameraFov(dt) { observed.fovDelta = dt; },
+    updateAudioListener() {},
+    updateDebug(dt) { observed.debugDelta = dt; },
+    sceneManager: {
+      camera: {},
+      render(dt) {
+        observed.renderDelta = dt;
+        return { fps: 60 };
+      },
+    },
+    updateAdaptiveQuality(dt) { observed.adaptiveDelta = dt; },
+    handleRuntimeError(error) { throw error; },
+  };
+
+  Game.prototype.frame.call(game, 1020);
+
+  assert.ok(Math.abs(observed.hitStopDelta - 0.02) < 1e-12);
+  assert.ok(Math.abs(observed.gameplay.delta - 0.002) < 1e-12);
+  assert.deepEqual(observed.gameplay.options, { hitStopped: true });
+  assert.ok(Math.abs(observed.playerDelta - 0.004) < 1e-12);
+  assert.ok(Math.abs(observed.fovDelta - 0.004) < 1e-12);
+  assert.equal(observed.shakeDelta, 0.02);
+  assert.equal(observed.renderDelta, 0.02);
+  assert.equal(observed.debugDelta, 0.02);
+  assert.equal(observed.adaptiveDelta, 0.02);
+  assert.equal(game.timeScale, 0.5);
+});
+
+test('a fully stopped frame clears fixed-step debt without consuming buffered actions', () => {
+  let endedFrames = 0;
+  const game = {
+    input: { wasPressed: () => false, endFrame: () => { endedFrames += 1; } },
+    physicsAccumulator: 1,
+    player: { position: { y: 1 }, fixedUpdate() { throw new Error('simulation advanced'); } },
+  };
+
+  Game.prototype.updateGameplay.call(game, 0, { hitStopped: true });
+
+  assert.equal(game.physicsAccumulator, 0);
+  assert.equal(endedFrames, 0);
+});
+
+test('pause remains responsive during a full hit-stop frame', () => {
+  const calls = [];
+  const game = {
+    input: {
+      wasPressed: (action) => action === 'pause',
+      endFrame: () => calls.push('end-frame'),
+    },
+    pause: (reason) => calls.push(`pause:${reason}`),
+    physicsAccumulator: 0.04,
+  };
+
+  Game.prototype.updateGameplay.call(game, 0, { hitStopped: true });
+
+  assert.deepEqual(calls, ['pause:manual', 'end-frame']);
+});
+
+test('Game.pause clears an active hit-stop and fixed-step debt through lifecycle wiring', () => {
+  const calls = [];
+  const hitStop = new HitStopController({ settings: { gameplay: { hitStop: 1 } } });
+  hitStop.request(0.05, { shotId: 1 });
+  const game = {
+    state: {
+      state: GAME_STATES.PLAYING,
+      pause() {
+        this.state = GAME_STATES.PAUSED;
+        return true;
+      },
+    },
+    physicsAccumulator: 0.04,
+    hitStop,
+    weapons: { clearInputBuffer: () => calls.push('weapon-input') },
+    resetSimulationTiming: Game.prototype.resetSimulationTiming,
+    input: {
+      exitPointerLock: () => calls.push('pointer-lock'),
+      clear: () => calls.push('input'),
+    },
+    ui: { showPause: () => calls.push('ui') },
+    resetCameraPresentation: () => calls.push('presentation'),
+    audio: { setVolume: () => calls.push('audio') },
+    settings: { get: () => 0.8 },
+  };
+
+  assert.equal(Game.prototype.pause.call(game), true);
+  assert.equal(game.state.state, GAME_STATES.PAUSED);
+  assert.equal(game.physicsAccumulator, 0);
+  assert.equal(hitStop.active, false);
+  assert.equal(hitStop.getState().triggerCount, 0);
+  assert.deepEqual(calls, ['weapon-input', 'pointer-lock', 'input', 'ui', 'presentation', 'audio']);
+  hitStop.dispose();
+});
+
+test('upgrade selection clears a queued shot before gameplay resumes', () => {
+  const weapons = {
+    fireBufferRemaining: 0.08,
+    firePressConsumed: true,
+    triggerReleased: false,
+    shotsFired: 0,
+    clearInputBuffer() {
+      this.fireBufferRemaining = 0;
+      this.firePressConsumed = false;
+      this.triggerReleased = true;
+    },
+    update() {
+      if (this.fireBufferRemaining <= 0) return;
+      this.shotsFired += 1;
+      this.fireBufferRemaining = 0;
+    },
+  };
+  const input = {
+    wasPressed: () => false,
+    endFrame() {},
+    clear() {},
+    exitPointerLock: async () => false,
+    requestPointerLock: async () => false,
+    focusElement: () => true,
+    isFallbackActive: false,
+    isPointerLocked: false,
+  };
+  const state = {
+    state: GAME_STATES.PLAYING,
+    transition(next) {
+      this.state = next;
+      return true;
+    },
+    is(expected) {
+      return this.state === expected;
+    },
+  };
+  const game = {
+    state,
+    input,
+    gameplayInput: {
+      beginStepBatch() {},
+      wasPressed: () => false,
+    },
+    physicsAccumulator: 0.04,
+    hitStop: { reset: () => true },
+    weapons,
+    resetSimulationTiming: Game.prototype.resetSimulationTiming,
+    resetCameraPresentation() {},
+    ui: {
+      showUpgrade() {},
+      showHUD() {},
+      showInputActivation() {},
+      hideInputActivation() {},
+    },
+    audio: { setVolume() {}, unlock: async () => true },
+    settings: { get: (_path, fallback) => fallback },
+    director: {
+      selectUpgrade: () => true,
+      update() {},
+    },
+    matchTutorial: false,
+    tutorialComplete: true,
+    player: {
+      horizontalSpeed: 0,
+      position: { y: 1 },
+      fixedUpdate() {},
+    },
+    world: { step() {} },
+    enemies: { update() {} },
+    effects: { update() {} },
+    arena: { update() {} },
+    momentum: {
+      getState: () => ({ overdrive: { active: false } }),
+      update() {},
+    },
+  };
+
+  Game.prototype.openUpgrade.call(game, [{ id: 'test-upgrade' }]);
+  assert.equal(state.state, GAME_STATES.UPGRADE_SELECTION);
+  assert.equal(game.physicsAccumulator, 0);
+  assert.equal(weapons.fireBufferRemaining, 0);
+  assert.equal(weapons.firePressConsumed, false);
+  assert.equal(weapons.triggerReleased, true);
+
+  assert.equal(Game.prototype.selectUpgrade.call(game, 'test-upgrade'), true);
+  assert.equal(state.state, GAME_STATES.PLAYING);
+  Game.prototype.updateGameplay.call(game, 1 / 60);
+  assert.equal(weapons.shotsFired, 0);
+});
+
+test('an impact in the first low-FPS substep freezes exact debt and preserves only its playable tail', () => {
+  const { game, calls } = createGameplayHarness();
+  game.timeScale = 0.1;
+  game.hitStop = new HitStopController({ settings: { gameplay: { hitStop: 1 } } });
+  game.weapons.update = (dt) => {
+    calls.weapons.push(dt);
+    game.hitStop.request(0.01, { shotId: 1 });
+  };
+
+  Game.prototype.updateGameplay.call(game, (1 / 60) * 2);
+
+  assert.equal(calls.player.length, 1);
+  assert.equal(calls.weapons.length, 1);
+  assert.equal(calls.enemies.length, 1);
+  assert.equal(calls.director.length, 1);
+  assert.equal(calls.arena.length, 1);
+  assert.equal(calls.momentum.length, 1);
+  assert.ok(Math.abs(game.physicsAccumulator - ((1 / 60) - 0.01 * game.timeScale)) < 1e-12);
+  assert.equal(game.hitStop.active, false);
+  game.hitStop.dispose();
+});
+
+test('a state transition inside a fixed step cannot leave negative simulation debt', () => {
+  const { game } = createGameplayHarness();
+  game.hitStop = { active: false };
+  game.director.update = () => {
+    game.physicsAccumulator = 0;
+    game.state.state = GAME_STATES.UPGRADE_SELECTION;
+  };
+
+  Game.prototype.updateGameplay.call(game, 1 / 60);
+
+  assert.equal(game.physicsAccumulator, 0);
+});
+
+test('resetSimulationTiming clears hit-stop, weapon input and accumulated simulation time', () => {
+  let clearedWeaponInput = 0;
+  const game = {
+    physicsAccumulator: 0.07,
+    timeScale: 0.4,
+    hitStop: { reset: () => 'reset' },
+    weapons: { clearInputBuffer: () => { clearedWeaponInput += 1; } },
+  };
+
+  assert.equal(Game.prototype.resetSimulationTiming.call(game), 'reset');
+  assert.equal(game.physicsAccumulator, 0);
+  assert.equal(clearedWeaponInput, 1);
+  assert.equal(game.timeScale, 0.4);
+});
+
 test('resetCameraPresentation clears shake, weapon recoil and dynamic FOV state', () => {
   const calls = [];
   const game = {
@@ -252,7 +518,7 @@ test('resetCameraPresentation clears shake, weapon recoil and dynamic FOV state'
   assert.equal(result, 'fov-reset');
 });
 
-test('applySettings sends weapon recoil intensity and reduced-motion state to both owners', (t) => {
+test('applySettings sends recoil and hit-stop accessibility settings to their owners', (t) => {
   const calls = [];
   const previousDocument = globalThis.document;
   globalThis.document = { documentElement: { style: { setProperty() {} } } };
@@ -263,6 +529,7 @@ test('applySettings sends weapon recoil intensity and reduced-motion state to bo
   const settings = {
     gameplay: {
       weaponRecoil: 0.4,
+      hitStop: 0.6,
       headBob: 0.6,
       crosshairColor: '#67f7e3',
     },
@@ -274,6 +541,7 @@ test('applySettings sends weapon recoil intensity and reduced-motion state to bo
     sceneManager: { applySettings() {} },
     cameraFov: { applySettings() {} },
     cameraShake: { applySettings() {} },
+    hitStop: { applySettings: (value) => calls.push(['hit-stop', value.gameplay.hitStop, value.accessibility.reducedMotion]) },
     player: {
       setRecoilIntensity: (...args) => calls.push(['player', ...args]),
       setHeadBobEnabled() {},
@@ -286,6 +554,7 @@ test('applySettings sends weapon recoil intensity and reduced-motion state to bo
   Game.prototype.applySettings.call(game, settings);
 
   assert.deepEqual(calls, [
+    ['hit-stop', 0.6, true],
     ['player', 0.4, true],
     ['weapons', 0.4, true],
   ]);

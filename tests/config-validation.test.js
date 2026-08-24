@@ -39,7 +39,7 @@ test('all five weapon configs expose the WeaponSystem contract', () => {
   assert.deepEqual(WEAPON_ORDER, ['carbine', 'scatter', 'rail', 'plasma', 'nova']);
   const required = [
     'id', 'name', 'shortName', 'description', 'type', 'damage', 'fireRate', 'magazine',
-    'reserve', 'reloadTime', 'spread', 'moveSpread', 'adsSpread', 'recoil', 'range',
+    'reserve', 'reloadTime', 'spread', 'moveSpread', 'adsSpread', 'recoil', 'hitStop', 'range',
     'falloffStart', 'falloffEnd', 'automatic', 'pellets', 'headMultiplier', 'color',
     'adsFovMultiplier',
   ];
@@ -65,9 +65,18 @@ test('all five weapon configs expose the WeaponSystem contract', () => {
     assert.ok(weapon.recoil.pitch <= 0.2, `${id}.recoil.pitch must stay within the camera cap`);
     assert.ok(weapon.recoil.yaw <= 0.05, `${id}.recoil.yaw must stay within the camera cap`);
     assert.ok(weapon.recoil.recovery <= 30, `${id}.recoil.recovery must stay within the supported range`);
+    for (const field of ['body', 'headshot', 'kill', 'critical', 'blast']) {
+      assert.ok(
+        Number.isFinite(weapon.hitStop[field]) && weapon.hitStop[field] >= 0 && weapon.hitStop[field] <= 0.075,
+        `${id}.hitStop.${field} must be finite and within [0, 0.075]`,
+      );
+    }
   }
   assert.equal(WEAPON_CONFIGS.plasma.automatic, true);
   assert.ok(WEAPON_CONFIGS.plasma.fireRate > WEAPON_CONFIGS.carbine.fireRate);
+  assert.ok(WEAPON_CONFIGS.nova.hitStop.body > WEAPON_CONFIGS.scatter.hitStop.body);
+  assert.equal(WEAPON_CONFIGS.carbine.hitStop.body, 0);
+  assert.equal(WEAPON_CONFIGS.plasma.hitStop.body, 0);
   positive(WEAPON_CONFIGS.nova.impactBlast.radius, 'nova.impactBlast.radius');
   positive(WEAPON_CONFIGS.nova.impactBlast.damage, 'nova.impactBlast.damage');
 });

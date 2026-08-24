@@ -251,6 +251,29 @@ test('hunter spawns with its configured shield and damage consumes it before hea
   assert.equal(hunter.health, initialHealth - overflow);
 });
 
+test('radial damage can return exact hit, kill and falloff totals without breaking the numeric contract', (t) => {
+  const { system } = createEnemies();
+  t.after(() => system.dispose());
+  const close = system.spawn('trooper', new THREE.Vector3(0, 0, 0));
+  const far = system.spawn('trooper', new THREE.Vector3(2, 0, 0));
+  close.health = 1;
+  far.health = 1;
+
+  const summary = system.damageInRadius(new THREE.Vector3(), 5, 10, {
+    source: 'player',
+    weapon: 'nova-blast',
+    returnSummary: true,
+  });
+
+  assert.equal(summary.hits, 2);
+  assert.equal(summary.kills, 2);
+  assert.ok(summary.damage > 10);
+  assert.ok(summary.damage < 20, 'reported blast damage must include radial falloff');
+
+  system.spawn('trooper', new THREE.Vector3(0, 0, 0));
+  assert.equal(system.damageInRadius(new THREE.Vector3(), 1, 1), 1);
+});
+
 test('enemy rigs animate windups and phases without moving gameplay roots', (t) => {
   const { system } = createEnemies();
   t.after(() => system.dispose());

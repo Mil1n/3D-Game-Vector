@@ -4,6 +4,8 @@ import * as THREE from 'three';
 
 import { WeaponSystem } from '../src/combat/WeaponSystem.js';
 import { WEAPON_CONFIGS, WEAPON_ORDER } from '../src/configs/weaponConfigs.js';
+import { Game } from '../src/core/Game.js';
+import { GAME_STATES } from '../src/core/GameStateManager.js';
 
 const noopEffects = {
   spawnTracer() {},
@@ -54,6 +56,286 @@ test('successful hits emit combat activity for Momentum decay tracking', () => {
   assert.equal(activity.payload.weapon, 'carbine');
   assert.equal(activity.payload.enemyType, 'trooper');
   assert.equal(activity.payload.killed, false);
+  weapons.dispose();
+});
+
+test('one scatter shot aggregates all pellets into one semantic combat impact', () => {
+  const events = [];
+  const enemy = { type: 'trooper' };
+  const weapons = new WeaponSystem({
+    camera: new THREE.PerspectiveCamera(),
+    scene: new THREE.Scene(),
+    eventBus: { emit: (name, payload) => events.push({ name, payload }) },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+    effects: noopEffects,
+    arena: { raycastWorld: () => null },
+    enemySystem: {
+      raycast: (_origin, _direction, distance) => ({
+        enemy,
+        distance: Math.min(2, distance),
+        point: new THREE.Vector3(0, 0, -2),
+        zone: 'body',
+      }),
+      damage: (_target, amount) => ({ applied: amount, killed: false }),
+    },
+    random: () => 0.5,
+  });
+  weapons.switchTo(1);
+  weapons.cooldown = 0;
+
+  assert.equal(weapons.tryFire(false), true);
+  const impacts = events.filter(({ name }) => name === 'combat:impact');
+  const pelletHits = events.filter(({ name }) => name === 'combat:hit');
+  assert.equal(impacts.length, 1);
+  assert.equal(pelletHits.length, WEAPON_CONFIGS.scatter.pellets);
+  assert.equal(impacts[0].payload.weapon, 'scatter');
+  assert.equal(impacts[0].payload.hitCount, WEAPON_CONFIGS.scatter.pellets);
+  assert.equal(impacts[0].payload.damage, WEAPON_CONFIGS.scatter.damage * WEAPON_CONFIGS.scatter.pellets);
+  assert.equal(impacts[0].payload.hitStop, WEAPON_CONFIGS.scatter.hitStop.body);
+  assert.equal(impacts[0].payload.shotId, 1);
+  weapons.dispose();
+});
+
+test('misses emit no combat impact while a lethal Nova wall blast emits exactly one promoted impact', () => {
+  const missEvents = [];
+  const miss = createWeapons(null, {
+    random: () => 0.5,
+    eventBus: { emit: (name, payload) => missEvents.push({ name, payload }) },
+  });
+  assert.equal(miss.tryFire(false), true);
+  assert.equal(missEvents.some(({ name }) => name === 'combat:impact'), false);
+  miss.dispose();
+
+  const blastEvents = [];
+  const nova = new WeaponSystem({
+    camera: new THREE.PerspectiveCamera(),
+    scene: new THREE.Scene(),
+    eventBus: { emit: (name, payload) => blastEvents.push({ name, payload }) },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+    effects: noopEffects,
+    arena: {
+      raycastWorld: () => ({
+        distance: 3,
+        normal: new THREE.Vector3(0, 0, 1),
+        material: 'metal',
+      }),
+    },
+    enemySystem: {
+      raycast: () => null,
+      damageInRadius: () => ({ hits: 2, kills: 1, damage: 13 }),
+    },
+    random: () => 0.5,
+  });
+  nova.switchTo(4);
+  nova.cooldown = 0;
+
+  assert.equal(nova.tryFire(false), true);
+  const impacts = blastEvents.filter(({ name }) => name === 'combat:impact');
+  assert.equal(impacts.length, 1);
+  assert.equal(impacts[0].payload.weapon, 'nova');
+  assert.equal(impacts[0].payload.blastHits, 2);
+  assert.equal(impacts[0].payload.hitCount, 2);
+  assert.equal(impacts[0].payload.damage, 13);
+  assert.equal(impacts[0].payload.killed, true);
+  assert.equal(impacts[0].payload.hitStop, WEAPON_CONFIGS.nova.hitStop.kill);
+  nova.dispose();
+});
+
+test('a complete automatic fire click buffered during hit-stop fires exactly once across catch-up steps', () => {
+  const weapons = createWeapons();
+  weapons.switchTo(3);
+  weapons.setEnabled(true);
+  weapons.cooldown = 0.05;
+  weapons.cooldownKind = 'fire';
+  const bufferedClick = {
+    wasPressed: (action) => action === 'fire',
+    wasReleased: (action) => action === 'fire',
+    isDown: () => false,
+    consumeWheel: () => 0,
+  };
+  const idle = {
+    wasPressed: () => false,
+    wasReleased: () => false,
+    isDown: () => false,
+    consumeWheel: () => 0,
+  };
+
+  for (let step = 0; step < 5; step += 1) weapons.update(1 / 60, bufferedClick);
+  weapons.update(1 / 60, idle);
+
+  assert.equal(weapons.shotsFired, 1);
+  assert.equal(weapons.triggerReleased, true);
+  weapons.fireBufferRemaining = 0.08;
+  weapons.firePressConsumed = true;
+  weapons.triggerReleased = false;
+  weapons.clearInputBuffer();
+  assert.equal(weapons.fireBufferRemaining, 0);
+  assert.equal(weapons.firePressConsumed, false);
+  assert.equal(weapons.triggerReleased, true);
+  weapons.dispose();
+});
+
+test('completed fire clicks survive fully frozen Game frames and fire exactly once after thaw', () => {
+  for (const weaponIndex of [1, 3]) {
+    const weapons = createWeapons();
+    weapons.switchTo(weaponIndex);
+    weapons.setEnabled(true);
+    weapons.cooldown = 0;
+    weapons.cooldownKind = null;
+
+    let edgePending = true;
+    let endedFrames = 0;
+    const gameplayInput = {
+      beginStepBatch() {},
+      wasPressed: (action) => action === 'fire' && edgePending,
+      wasReleased: (action) => action === 'fire' && edgePending,
+      isDown: () => false,
+      consumeWheel: () => 0,
+    };
+    const game = {
+      input: {
+        wasPressed: () => false,
+        endFrame() {
+          edgePending = false;
+          endedFrames += 1;
+        },
+      },
+      gameplayInput,
+      physicsAccumulator: 0,
+      state: { state: GAME_STATES.PLAYING },
+      player: {
+        horizontalSpeed: 0,
+        position: { y: 1 },
+        fixedUpdate() {},
+      },
+      world: { step() {} },
+      weapons,
+      enemies: { update() {} },
+      director: { update() {} },
+      effects: { update() {} },
+      arena: { update() {} },
+      momentum: {
+        getState: () => ({ overdrive: { active: false } }),
+        update() {},
+      },
+      matchTutorial: false,
+      tutorialComplete: true,
+    };
+
+    for (let frame = 0; frame < 3; frame += 1) {
+      Game.prototype.updateGameplay.call(game, 0, { hitStopped: true });
+    }
+    assert.equal(weapons.shotsFired, 0, `${weapons.currentId} must stay frozen`);
+    assert.equal(endedFrames, 0, `${weapons.currentId} input edges must stay buffered`);
+
+    Game.prototype.updateGameplay.call(game, 1 / 60);
+    assert.equal(weapons.shotsFired, 1, `${weapons.currentId} must fire once after thaw`);
+    assert.equal(endedFrames, 1);
+
+    Game.prototype.updateGameplay.call(game, 1 / 60);
+    assert.equal(weapons.shotsFired, 1, `${weapons.currentId} must not replay the completed click`);
+    weapons.dispose();
+  }
+});
+
+test('Nova direct and blast damage share one unique impact ID per shot', () => {
+  const events = [];
+  const enemy = { type: 'trooper' };
+  const nova = new WeaponSystem({
+    camera: new THREE.PerspectiveCamera(),
+    scene: new THREE.Scene(),
+    eventBus: { emit: (name, payload) => events.push({ name, payload }) },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+    effects: noopEffects,
+    arena: { raycastWorld: () => null },
+    enemySystem: {
+      raycast: (_origin, _direction, distance) => ({
+        enemy,
+        distance: Math.min(2, distance),
+        point: new THREE.Vector3(0, 0, -2),
+        zone: 'body',
+      }),
+      damage: (_target, amount) => ({ applied: amount, killed: false }),
+      damageInRadius: () => ({ hits: 2, kills: 1, damage: 13 }),
+    },
+    random: () => 0.5,
+  });
+  nova.switchTo(4);
+  nova.cooldown = 0;
+  nova.cooldownKind = null;
+
+  assert.equal(nova.tryFire(false), true);
+  nova.cooldown = 0;
+  nova.cooldownKind = null;
+  assert.equal(nova.tryFire(false), true);
+
+  const impacts = events.filter(({ name }) => name === 'combat:impact');
+  assert.deepEqual(impacts.map(({ payload }) => payload.shotId), [1, 2]);
+  for (const impact of impacts) {
+    assert.equal(impact.payload.hitCount, 3);
+    assert.equal(impact.payload.blastHits, 2);
+    assert.equal(impact.payload.killed, true);
+    assert.equal(impact.payload.damage, WEAPON_CONFIGS.nova.damage + 13);
+    assert.equal(impact.payload.hitStop, WEAPON_CONFIGS.nova.hitStop.kill);
+  }
+  for (const eventName of ['combat:hit', 'combat:blast', 'combat:shot']) {
+    assert.deepEqual(
+      events.filter(({ name }) => name === eventName).map(({ payload }) => payload.shotId),
+      [1, 2],
+      `${eventName} must preserve the unique ID of each resolved shot`,
+    );
+  }
+  nova.dispose();
+});
+
+test('a rail ricochet is folded into the same impact and promotes a secondary kill', () => {
+  const events = [];
+  const sourceEnemy = { type: 'trooper', dead: false, root: { position: new THREE.Vector3(0, 0, -3) } };
+  const targetEnemy = { type: 'hunter', dead: false, root: { position: new THREE.Vector3(2, 0, -4) } };
+  const weapons = new WeaponSystem({
+    camera: new THREE.PerspectiveCamera(),
+    scene: new THREE.Scene(),
+    eventBus: { emit: (name, payload) => events.push({ name, payload }) },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+    effects: noopEffects,
+    arena: { raycastWorld: () => null, hasLineOfSight: () => true },
+    enemySystem: {
+      enemies: [sourceEnemy, targetEnemy],
+      raycast: () => ({
+        enemy: sourceEnemy,
+        distance: 2,
+        point: new THREE.Vector3(0, 0, -2),
+        zone: 'body',
+      }),
+      damage: (enemy, amount) => ({ applied: amount, killed: enemy === targetEnemy }),
+    },
+    random: () => 0.5,
+  });
+  weapons.switchTo(2);
+  weapons.cooldown = 0;
+  weapons.modifiers.railRicochet = 1;
+
+  assert.equal(weapons.tryFire(false), true);
+  const impacts = events.filter(({ name }) => name === 'combat:impact');
+  assert.equal(impacts.length, 1);
+  assert.equal(impacts[0].payload.hitCount, 2);
+  assert.equal(impacts[0].payload.killed, true);
+  assert.ok(impacts[0].payload.damage > WEAPON_CONFIGS.rail.damage);
+  assert.equal(impacts[0].payload.hitStop, WEAPON_CONFIGS.rail.hitStop.kill);
+  weapons.dispose();
+});
+
+test('hit-stop profiles promote headshots, critical hits and kills without exceeding the cap', () => {
+  const weapons = createWeapons();
+
+  for (const id of WEAPON_ORDER) {
+    const config = WEAPON_CONFIGS[id];
+    assert.equal(weapons.resolveHitStopDuration(config), config.hitStop.body);
+    assert.equal(weapons.resolveHitStopDuration(config, { headshot: true }), Math.max(config.hitStop.body, config.hitStop.headshot));
+    assert.equal(weapons.resolveHitStopDuration(config, { critical: true }), Math.max(config.hitStop.body, config.hitStop.critical));
+    assert.equal(weapons.resolveHitStopDuration(config, { killed: true }), Math.max(config.hitStop.body, config.hitStop.kill));
+    assert.ok(weapons.resolveHitStopDuration(config, { headshot: true, critical: true, killed: true, blastHits: 99 }) <= 0.075);
+  }
   weapons.dispose();
 });
 
@@ -166,7 +448,9 @@ test('WeaponSystem creates and switches across the five configured weapons', () 
   const blast = weapons.applyImpactBlast(new THREE.Vector3(1, 2, 3), weapons.currentConfig);
   assert.equal(blast.hits, 2);
   assert.equal(blast.radius, 5.2);
+  assert.equal(blast.totalDamage, WEAPON_CONFIGS.nova.impactBlast.damage * 2);
   assert.equal(blastCall[3].weapon, 'nova-blast');
+  assert.equal(blastCall[3].returnSummary, true);
 
   const ownedResources = new Set();
   for (const model of weapons.models.values()) {

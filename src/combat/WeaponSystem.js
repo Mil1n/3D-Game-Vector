@@ -2,6 +2,13 @@ import * as THREE from 'three';
 import { WEAPON_CONFIGS, WEAPON_ORDER } from '../configs/weaponConfigs.js';
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const MAX_HIT_STOP_DURATION = 0.075;
+const FIRE_INPUT_BUFFER = 0.12;
+
+function hitStopValue(profile, key) {
+  const value = Number(profile?.[key]);
+  return Number.isFinite(value) ? THREE.MathUtils.clamp(value, 0, MAX_HIT_STOP_DURATION) : 0;
+}
 
 function resolveConfig(id) {
   const config = Array.isArray(WEAPON_CONFIGS)
@@ -433,9 +440,12 @@ export class WeaponSystem {
     this.recoilIntensity = 1;
     this.adsAmount = 0;
     this.triggerReleased = true;
+    this.firePressConsumed = false;
+    this.fireBufferRemaining = 0;
     this.infiniteAmmo = false;
     this.shotsFired = 0;
     this.shotsHit = 0;
+    this.shotSequence = 0;
     this.modifiers = this.defaultModifiers();
     this.runtimeModifiers = this.defaultRuntimeModifiers();
     this.ammo = new Map();
@@ -509,11 +519,18 @@ export class WeaponSystem {
     this.enabled = Boolean(enabled);
     if (this.enabled && !wasEnabled) this.primeEquipPose(this.currentModel);
     if (!this.enabled) {
+      this.clearInputBuffer();
       this.clearModelRecoil();
       this.restoreModelParts(this.currentModel);
     }
     this.currentModel.visible = this.enabled;
     return this.enabled;
+  }
+
+  clearInputBuffer() {
+    this.triggerReleased = true;
+    this.firePressConsumed = false;
+    this.fireBufferRemaining = 0;
   }
 
   setRecoilIntensity(intensity = 1, reducedMotion = false) {
@@ -574,10 +591,11 @@ export class WeaponSystem {
     this.recoilKick = 0;
     this.clearModelRecoil();
     this.adsAmount = 0;
-    this.triggerReleased = true;
+    this.clearInputBuffer();
     this.index = 0;
     this.shotsFired = 0;
     this.shotsHit = 0;
+    this.shotSequence = 0;
     this.modifiers = this.defaultModifiers();
     this.runtimeModifiers = this.defaultRuntimeModifiers();
     for (const id of this.weaponOrder) {
@@ -697,12 +715,22 @@ export class WeaponSystem {
     const aiming = Boolean(input.isDown?.('aim'));
     this.adsAmount = THREE.MathUtils.damp(this.adsAmount, aiming ? 1 : 0, 14, dt);
     this.player?.setAiming?.(this.adsAmount);
-    const trigger = Boolean(input.isDown?.('fire'));
+    this.fireBufferRemaining = Math.max(0, this.fireBufferRemaining - dt);
+    const firePressedEdge = Boolean(input.wasPressed?.('fire'));
+    if (!firePressedEdge) this.firePressConsumed = false;
+    if (firePressedEdge && !this.firePressConsumed) {
+      this.firePressConsumed = true;
+      this.fireBufferRemaining = FIRE_INPUT_BUFFER;
+    }
+    const triggerHeld = Boolean(input.isDown?.('fire'));
+    if (input.wasReleased?.('fire')) this.triggerReleased = true;
+    const trigger = triggerHeld || this.fireBufferRemaining > 0;
     const config = this.currentConfig;
     const canTrigger = config.automatic ? trigger : trigger && this.triggerReleased;
-    if (canTrigger && this.reloadRemaining <= 0) this.tryFire(aiming);
+    const fired = canTrigger && this.reloadRemaining <= 0 && this.tryFire(aiming);
+    if (fired) this.fireBufferRemaining = 0;
     if (!trigger) this.triggerReleased = true;
-    else if (!config.automatic) this.triggerReleased = false;
+    else if (!config.automatic && fired) this.triggerReleased = false;
 
     this.animateModel(dt, aiming);
   }
@@ -830,6 +858,8 @@ export class WeaponSystem {
     );
     this.recoilKick = Math.min(3, this.recoilKick + 1);
     this.shotsFired += 1;
+    this.shotSequence += 1;
+    const shotId = this.shotSequence;
     this.camera.getWorldPosition(this.tempOrigin);
     if (typeof this.player?.getAimDirection === 'function') {
       this.player.getAimDirection(this.tempDirection);
@@ -844,17 +874,26 @@ export class WeaponSystem {
     let anyHit = false;
     let headshot = false;
     let lethalHeadshot = false;
+    let killed = false;
+    let critical = false;
+    let hitCount = 0;
+    let totalDamage = 0;
+    let blastHits = 0;
     let lastPoint = null;
     let lastResult = null;
     const traceThisShot = (config.tracerEvery ?? 1) <= 1 || this.shotsFired % config.tracerEvery === 0;
     for (let pellet = 0; pellet < pellets; pellet += 1) {
       const direction = this.spreadDirection(this.tempDirection, spread, pellet, pellets);
-      const result = this.traceShot(this.tempOrigin, direction, config);
+      const result = this.traceShot(this.tempOrigin, direction, config, { shotId });
       lastResult = result;
       if (result.enemyHit) {
         anyHit = true;
         headshot ||= result.zone === 'head';
         lethalHeadshot ||= result.zone === 'head' && result.killed;
+        killed ||= result.killed || result.secondaryKilled;
+        critical ||= result.critical;
+        hitCount += 1 + result.secondaryHits;
+        totalDamage += result.damage + result.secondaryDamage;
       }
       lastPoint = result.point;
       if (traceThisShot && (pellet < 5 || config.id !== 'scatter')) {
@@ -868,8 +907,12 @@ export class WeaponSystem {
       }
     }
     if (config.impactBlast && lastResult?.point) {
-      const blast = this.applyImpactBlast(lastResult.point, config);
+      const blast = this.applyImpactBlast(lastResult.point, config, { shotId });
+      blastHits = blast.hits;
+      hitCount += blast.hits;
+      totalDamage += blast.totalDamage;
       anyHit ||= blast.hits > 0;
+      killed ||= blast.killed;
     }
     if (headshot && !lethalHeadshot) {
       this.eventBus?.emit?.('combat:precision-hit', { weapon: config.id, enemyType: lastResult?.enemy?.type });
@@ -884,7 +927,22 @@ export class WeaponSystem {
     );
     this.player?.addRecoil?.(recoilPitch, recoilYaw, config.recoil?.recovery ?? 12);
     this.audio?.playWeapon?.(config.sound ?? config.id, { position: this.tempOrigin, pitch: 0.96 + this.randomUnit() * 0.08 });
+    if (anyHit) {
+      this.eventBus?.emit?.('combat:impact', {
+        shotId,
+        weapon: config.id,
+        damage: totalDamage,
+        hitCount,
+        headshot,
+        killed,
+        critical,
+        blastHits,
+        hitStop: this.resolveHitStopDuration(config, { headshot, killed, critical, blastHits }),
+        point: lastPoint?.clone?.(),
+      });
+    }
     this.eventBus?.emit?.('combat:shot', {
+      shotId,
       weapon: config.id,
       origin: this.tempOrigin.clone(),
       direction: this.tempDirection.clone(),
@@ -896,6 +954,16 @@ export class WeaponSystem {
     this.eventBus?.emit?.('weapon:fired', this.getState());
     this.emitState();
     return true;
+  }
+
+  resolveHitStopDuration(config = this.currentConfig, context = {}) {
+    const profile = config?.hitStop;
+    let duration = hitStopValue(profile, 'body');
+    if (context.headshot) duration = Math.max(duration, hitStopValue(profile, 'headshot'));
+    if (context.killed) duration = Math.max(duration, hitStopValue(profile, 'kill'));
+    if (context.critical) duration = Math.max(duration, hitStopValue(profile, 'critical'));
+    if (Number(context.blastHits) > 0) duration = Math.max(duration, hitStopValue(profile, 'blast'));
+    return THREE.MathUtils.clamp(duration, 0, MAX_HIT_STOP_DURATION);
   }
 
   spreadDirection(base, spread, pellet, pellets) {
@@ -912,7 +980,7 @@ export class WeaponSystem {
     return direction;
   }
 
-  traceShot(origin, direction, config) {
+  traceShot(origin, direction, config, { shotId = null } = {}) {
     const worldHit = this.arena?.raycastWorld?.(origin, direction, config.range);
     const worldDistance = Number.isFinite(worldHit?.distance) ? worldHit.distance : config.range;
     const enemyHit = this.enemySystem?.raycast?.(origin, direction, worldDistance);
@@ -930,8 +998,10 @@ export class WeaponSystem {
       const outcome = this.enemySystem.damage(hit.enemy, damage, {
         source: 'player', weapon: config.id, zone: hit.zone, point, direction,
       });
+      const reportedDamage = Number(outcome?.applied);
+      const appliedDamage = Number.isFinite(reportedDamage) ? Math.max(0, reportedDamage) : damage;
       this.eventBus?.emit?.('combat:damage-dealt', {
-        damage: Number(outcome?.applied ?? damage),
+        damage: appliedDamage,
         weapon: config.id,
         enemyType: hit.enemy?.type,
         zone: hit.zone,
@@ -948,16 +1018,29 @@ export class WeaponSystem {
       );
       this.audio?.playEffect?.(hit.zone === 'head' ? 'headshot' : 'hit', { position: point });
       this.eventBus?.emit?.('combat:hit', {
+        shotId,
+        weapon: config.id,
         damage,
         zone: hit.zone,
         killed: Boolean(outcome?.killed),
         critical: randomCrit > 1,
         point: point.clone(),
       });
-      if (config.id === 'rail' && this.modifiers.railRicochet > 0) {
-        this.applyRailRicochet(hit.enemy, point, damage * 0.48, config);
-      }
-      return { point, enemyHit: true, enemy: hit.enemy, zone: hit.zone, killed: Boolean(outcome?.killed) };
+      const ricochet = config.id === 'rail' && this.modifiers.railRicochet > 0
+        ? this.applyRailRicochet(hit.enemy, point, damage * 0.48, config, { shotId })
+        : null;
+      return {
+        point,
+        enemyHit: true,
+        enemy: hit.enemy,
+        zone: hit.zone,
+        killed: Boolean(outcome?.killed),
+        critical: randomCrit > 1,
+        damage: appliedDamage,
+        secondaryHits: ricochet ? 1 : 0,
+        secondaryKilled: Boolean(ricochet?.killed),
+        secondaryDamage: Number(ricochet?.damage) || 0,
+      };
     }
     if (worldHit) {
       this.effects.spawnImpact(
@@ -968,46 +1051,81 @@ export class WeaponSystem {
       );
       this.audio?.playEffect?.('impact', { position: point, material: worldHit.material ?? 'metal' });
     }
-    return { point, enemyHit: false, zone: null, killed: false };
+    return {
+      point,
+      enemyHit: false,
+      zone: null,
+      killed: false,
+      critical: false,
+      damage: 0,
+      secondaryHits: 0,
+      secondaryKilled: false,
+      secondaryDamage: 0,
+    };
   }
 
-  applyImpactBlast(point, config) {
+  applyImpactBlast(point, config, { shotId = null } = {}) {
     const blast = config.impactBlast;
-    if (!blast || !point) return { hits: 0, radius: 0, damage: 0 };
+    if (!blast || !point) return { hits: 0, kills: 0, killed: false, radius: 0, damage: 0, totalDamage: 0 };
     const lowHealthBonus = (this.player?.health ?? 100) / (this.player?.maxHealth ?? 100) < 0.35
       ? 1 + this.modifiers.lowHealthDamage
       : 1;
     const damage = blast.damage * this.modifiers.damage * lowHealthBonus;
     const radius = blast.radius;
-    const hits = this.enemySystem?.damageInRadius?.(point, radius, damage, {
+    const reported = this.enemySystem?.damageInRadius?.(point, radius, damage, {
       source: 'player',
       weapon: `${config.id}-blast`,
       zone: 'body',
       direction: this.tempDirection.clone(),
+      returnSummary: true,
     }) ?? 0;
+    const summary = reported && typeof reported === 'object' ? reported : null;
+    const hits = Math.max(0, Math.floor(Number(summary?.hits ?? reported) || 0));
+    const kills = Math.min(hits, Math.max(0, Math.floor(Number(summary?.kills) || 0)));
+    const reportedDamage = Number(summary?.damage);
+    const totalDamage = Number.isFinite(reportedDamage) ? Math.max(0, reportedDamage) : damage * hits;
     this.effects.spawnExplosion?.(point, radius, blast.color ?? config.color);
     this.audio?.playEffect?.('explosion', { position: point, pitch: 0.78, volume: 0.92 });
-    this.eventBus?.emit?.('combat:blast', { weapon: config.id, point: point.clone(), radius, damage, hits });
-    return { hits, radius, damage };
+    this.eventBus?.emit?.('combat:blast', {
+      shotId,
+      weapon: config.id,
+      point: point.clone(),
+      radius,
+      damage,
+      totalDamage,
+      hits,
+      kills,
+    });
+    return { hits, kills, killed: kills > 0, radius, damage, totalDamage };
   }
 
-  applyRailRicochet(sourceEnemy, sourcePoint, damage, config) {
+  applyRailRicochet(sourceEnemy, sourcePoint, damage, config, { shotId = null } = {}) {
     const target = this.enemySystem?.enemies
       ?.filter((enemy) => !enemy.dead && enemy !== sourceEnemy)
       .filter((enemy) => enemy.root.position.distanceToSquared(sourcePoint) <= 14 ** 2)
       .filter((enemy) => this.arena?.hasLineOfSight?.(sourcePoint, enemy.root.position.clone().add(new THREE.Vector3(0, 1, 0))) ?? true)
       .sort((a, b) => a.root.position.distanceToSquared(sourcePoint) - b.root.position.distanceToSquared(sourcePoint))[0];
-    if (!target) return false;
+    if (!target) return null;
     const targetPoint = target.root.position.clone().add(new THREE.Vector3(0, target.type === 'warden' ? 1.45 : 1.05, 0));
     const direction = targetPoint.clone().sub(sourcePoint).normalize();
     const outcome = this.enemySystem.damage(target, damage, {
       source: 'player', weapon: `${config.id}-ricochet`, zone: 'body', point: targetPoint, direction,
     });
+    const reportedDamage = Number(outcome?.applied);
+    const appliedDamage = Number.isFinite(reportedDamage) ? Math.max(0, reportedDamage) : damage;
     this.effects.spawnTracer(sourcePoint, targetPoint, config.color, 1.45);
     this.effects.spawnImpact(targetPoint, direction.clone().negate(), config.color, 8);
     this.audio?.playEffect?.('hit', { position: targetPoint, pitch: 1.24 });
-    this.eventBus?.emit?.('combat:hit', { damage, zone: 'body', killed: Boolean(outcome?.killed), ricochet: true, point: targetPoint.clone() });
-    return true;
+    this.eventBus?.emit?.('combat:hit', {
+      shotId,
+      weapon: config.id,
+      damage,
+      zone: 'body',
+      killed: Boolean(outcome?.killed),
+      ricochet: true,
+      point: targetPoint.clone(),
+    });
+    return { damage: appliedDamage, killed: Boolean(outcome?.killed) };
   }
 
   startReload() {

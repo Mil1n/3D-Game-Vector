@@ -116,6 +116,17 @@ test('accessibility settings expose independent weapon recoil intensity', () => 
   assert.match(markup, /Сила управляемого отклонения прицела/);
 });
 
+test('accessibility settings expose a saved hit-stop intensity slider', () => {
+  const ui = Object.create(UIManager.prototype);
+  ui.settings = { gameplay: { hitStop: 0.35 } };
+
+  const markup = ui._settingsTabMarkup('accessibility');
+
+  assert.match(markup, /Стоп-кадр попаданий/);
+  assert.match(markup, /type="range" min="0" max="1" step="0\.05" value="0\.35" data-setting="gameplay\.hitStop"/);
+  assert.match(markup, />35%<\/output>/);
+});
+
 test('achievements view renders the canonical AchievementSystem catalog', () => {
   const achievements = new AchievementSystem({
     saveManager: {

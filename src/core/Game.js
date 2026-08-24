@@ -5,6 +5,7 @@ import { GameStateManager, GAME_STATES } from './GameStateManager.js';
 import { SceneManager } from './SceneManager.js';
 import { CameraFovController } from './CameraFovController.js';
 import { CameraShakeController } from './CameraShakeController.js';
+import { HitStopController } from './HitStopController.js';
 import { AssetManager } from './AssetManager.js';
 import { InputManager } from './InputManager.js';
 import { AudioManager } from './AudioManager.js';
@@ -129,6 +130,7 @@ export class Game {
     this.sceneManager = null;
     this.cameraFov = null;
     this.cameraShake = null;
+    this.hitStop = null;
     this.cameraFovContext = { sprinting: false, adsAmount: 0, adsFovMultiplier: 1 };
     this.world = null;
     this.arena = null;
@@ -234,6 +236,11 @@ export class Game {
       eventBus: this.eventBus,
       positionProvider: () => this.player?.position,
       settings,
+    });
+    this.hitStop = new HitStopController({
+      eventBus: this.eventBus,
+      settings,
+      canTrigger: () => PLAYING_STATES.has(this.state.state),
     });
     this.effects = new EffectsSystem({
       scene: this.sceneManager.scene,
@@ -480,6 +487,11 @@ export class Game {
       return `${THREE.MathUtils.radToDeg(recoil.pitch).toFixed(1)}° / ${THREE.MathUtils.radToDeg(recoil.yaw).toFixed(1)}°`;
     });
     this.debug.registerMetric('Model recoil', () => this.weapons.getRecoilState().modelKick.toFixed(2));
+    this.debug.registerMetric('Hit stop', () => {
+      const state = this.hitStop.getState();
+      if (state.active) return `${Math.ceil(state.remaining * 1000)} ms`;
+      return state.lastDuration > 0 ? `last ${Math.round(state.lastDuration * 1000)} ms ×${state.triggerCount}` : 'ready';
+    });
     this.debug.registerMetric('Time scale', () => this.timeScale.toFixed(2));
     this.debug.registerMetric('Momentum', () => `${this.momentum.getState().momentum.toFixed(1)} / 100`);
     this.debug.registerMetric('Style rank', () => this.momentum.getState().rank);
@@ -519,6 +531,7 @@ export class Game {
     this.matchTutorial = Boolean(tutorial);
     this.timeScale = 1;
     this.physicsAccumulator = 0;
+    this.hitStop?.reset();
     this.adaptiveQualityReduced = false;
     this.lowFpsTime = 0;
     this.gameplayInput.reset();
@@ -558,6 +571,7 @@ export class Game {
     if (!PLAYING_STATES.has(this.state.state)) return false;
     const paused = this.state.pause({ reason });
     if (!paused) return false;
+    this.resetSimulationTiming();
     void this.input.exitPointerLock();
     this.input.clear();
     this.ui.showPause();
@@ -592,6 +606,7 @@ export class Game {
   openUpgrade(options) {
     if (![GAME_STATES.PLAYING, GAME_STATES.TUTORIAL].includes(this.state.state)) return;
     this.state.transition(GAME_STATES.UPGRADE_SELECTION, { reason: 'upgrade' });
+    this.resetSimulationTiming();
     void this.input.exitPointerLock();
     this.input.clear();
     this.ui.showUpgrade(options);
@@ -621,6 +636,7 @@ export class Game {
     const overdriveWasActive = this.momentum?.endOverdrive?.('match-ended') === true;
     if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'match-ended');
     this.state.transition(resultState, { cause });
+    this.resetSimulationTiming();
     this.resetCameraPresentation?.();
     this.weapons.setEnabled(false);
     void this.input.exitPointerLock();
@@ -642,6 +658,7 @@ export class Game {
   }
 
   returnToMenu({ show = true } = {}) {
+    this.resetSimulationTiming();
     if (this.director) this.director.running = false;
     this.weapons?.setEnabled(false);
     const overdriveWasActive = this.momentum?.endOverdrive?.('menu') === true;
@@ -712,6 +729,7 @@ export class Game {
     this.sceneManager?.applySettings(settings);
     this.cameraFov?.applySettings(settings, { immediate: true });
     this.cameraShake?.applySettings(settings);
+    this.hitStop?.applySettings(settings);
     this.player?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.weapons?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.input.setBindings(settings.controls.bindings, { replace: true, silent: true });
@@ -739,15 +757,18 @@ export class Game {
     if (fpsLimit > 0 && timestamp - this.lastTimestamp < 1000 / fpsLimit - 0.35) return;
     const realDelta = Math.min(MAX_FRAME_DELTA, Math.max(0, (timestamp - this.lastTimestamp) / 1000));
     this.lastTimestamp = timestamp;
-    const delta = realDelta * this.timeScale;
+    const playing = PLAYING_STATES.has(this.state.state);
+    const hitStopMultiplier = playing ? (this.hitStop?.update(realDelta) ?? 1) : 1;
+    const delta = realDelta * this.timeScale * hitStopMultiplier;
+    const presentationDelta = realDelta * hitStopMultiplier;
 
     try {
       this.cameraShake?.restoreCamera();
-      if (PLAYING_STATES.has(this.state.state)) this.updateGameplay(delta);
+      if (playing) this.updateGameplay(delta, { hitStopped: hitStopMultiplier < 1 });
       if ([GAME_STATES.PLAYING, GAME_STATES.TUTORIAL, GAME_STATES.PAUSED, GAME_STATES.UPGRADE_SELECTION].includes(this.state.state)) {
-        this.player?.update(this.sceneManager.camera, PLAYING_STATES.has(this.state.state) ? realDelta : 0);
+        this.player?.update(this.sceneManager.camera, PLAYING_STATES.has(this.state.state) ? presentationDelta : 0);
       }
-      if (PLAYING_STATES.has(this.state.state)) this.updateCameraFov(realDelta);
+      if (PLAYING_STATES.has(this.state.state)) this.updateCameraFov(presentationDelta);
       this.updateAudioListener();
       if (PLAYING_STATES.has(this.state.state)) this.cameraShake?.update(realDelta);
       this.updateDebug(realDelta);
@@ -758,10 +779,14 @@ export class Game {
     }
   }
 
-  updateGameplay(delta) {
+  updateGameplay(delta, { hitStopped = false } = {}) {
     if (this.input.wasPressed('pause')) {
       this.pause('manual');
       this.input.endFrame();
+      return;
+    }
+    if (hitStopped && delta <= 0) {
+      this.physicsAccumulator = 0;
       return;
     }
     this.physicsAccumulator = Math.min(FIXED_STEP * MAX_SUB_STEPS, this.physicsAccumulator + delta);
@@ -787,8 +812,17 @@ export class Game {
         moving: this.player.horizontalSpeed > 0.35,
         speed: this.player.horizontalSpeed,
       });
-      this.physicsAccumulator -= FIXED_STEP;
+      this.physicsAccumulator = Math.max(0, this.physicsAccumulator - FIXED_STEP);
       steps += 1;
+      if (this.hitStop?.active) {
+        const discardedSimulationTime = this.physicsAccumulator;
+        this.physicsAccumulator = 0;
+        if (discardedSimulationTime > 0 && this.timeScale > 0) {
+          const playableFraction = this.hitStop.update(discardedSimulationTime / this.timeScale);
+          this.physicsAccumulator = discardedSimulationTime * playableFraction;
+        }
+        break;
+      }
     }
     if (steps > 0) this.input.endFrame();
 
@@ -827,6 +861,12 @@ export class Game {
     this.player?.resetRecoil?.();
     this.weapons?.clearModelRecoil?.();
     return this.cameraFov?.reset();
+  }
+
+  resetSimulationTiming() {
+    this.physicsAccumulator = 0;
+    this.weapons?.clearInputBuffer?.();
+    return this.hitStop?.reset();
   }
 
   pushMomentumHUD(state = this.momentum?.getState?.(), actionLabel = null) {
@@ -1004,6 +1044,7 @@ export class Game {
     console.error('[Game] Runtime failure.', error);
     const overdriveWasActive = this.momentum?.endOverdrive?.('runtime-error') === true;
     if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'runtime-error');
+    this.resetSimulationTiming?.();
     this.running = false;
     cancelAnimationFrame(this.raf);
     this.resetCameraPresentation?.();
@@ -1018,6 +1059,7 @@ export class Game {
     window.clearTimeout(this.profileSaveTimer);
     const overdriveWasActive = this.momentum?.endOverdrive?.('dispose') === true;
     if (!overdriveWasActive) this.setOverdriveEffects?.(false, {}, 'dispose');
+    this.resetSimulationTiming?.();
     for (const unsubscribe of this.unsubscribers) unsubscribe?.();
     this.unsubscribers.length = 0;
     this.clearDebugVisuals();
@@ -1031,6 +1073,7 @@ export class Game {
     this.player?.dispose();
     this.arena?.dispose();
     this.cameraShake?.dispose?.();
+    this.hitStop?.dispose?.();
     this.cameraFov?.dispose?.();
     this.sceneManager?.dispose();
     this.audio?.dispose();
