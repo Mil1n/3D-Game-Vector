@@ -65,6 +65,10 @@ test('all five weapon configs expose the WeaponSystem contract', () => {
     assert.ok(weapon.recoil.pitch <= 0.2, `${id}.recoil.pitch must stay within the camera cap`);
     assert.ok(weapon.recoil.yaw <= 0.05, `${id}.recoil.yaw must stay within the camera cap`);
     assert.ok(weapon.recoil.recovery <= 30, `${id}.recoil.recovery must stay within the supported range`);
+    assert.ok(weapon.viewModel?.sway, `${id}.viewModel.sway missing`);
+    assert.ok(weapon.viewModel.sway.amount > 0 && weapon.viewModel.sway.amount <= 1.6);
+    assert.ok(weapon.viewModel.sway.recovery >= 4 && weapon.viewModel.sway.recovery <= 24);
+    assert.ok(weapon.viewModel.sway.adsMultiplier > 0 && weapon.viewModel.sway.adsMultiplier <= 1);
     for (const field of ['body', 'headshot', 'kill', 'critical', 'blast']) {
       assert.ok(
         Number.isFinite(weapon.hitStop[field]) && weapon.hitStop[field] >= 0 && weapon.hitStop[field] <= 0.075,

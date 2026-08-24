@@ -41,6 +41,7 @@ export const WEAPON_CONFIGS = deepFreeze({
       baseYaw: 0.12,
       scale: 0.88,
       kick: 0.48,
+      sway: { amount: 0.92, recovery: 10.5, adsMultiplier: 0.26 },
       armRig: {
         rightOrigin: [0.27, -0.72, 0.28],
         rightGrip: [0.025, -0.22, -0.13],
@@ -85,6 +86,7 @@ export const WEAPON_CONFIGS = deepFreeze({
       baseYaw: 0.14,
       scale: 0.87,
       kick: 1.4,
+      sway: { amount: 1.04, recovery: 8.4, adsMultiplier: 0.24 },
       armRig: {
         rightOrigin: [0.29, -0.74, 0.31],
         rightGrip: [0.025, -0.215, -0.14],
@@ -129,6 +131,7 @@ export const WEAPON_CONFIGS = deepFreeze({
       baseYaw: 0.1,
       scale: 0.84,
       kick: 1.65,
+      sway: { amount: 1.12, recovery: 7.4, adsMultiplier: 0.2 },
       armRig: {
         rightOrigin: [0.3, -0.74, 0.32],
         rightGrip: [0.02, -0.205, -0.16],
@@ -177,6 +180,7 @@ export const WEAPON_CONFIGS = deepFreeze({
       baseYaw: 0.14,
       scale: 0.86,
       kick: 0.34,
+      sway: { amount: 0.78, recovery: 13, adsMultiplier: 0.3 },
       armRig: {
         rightOrigin: [0.26, -0.7, 0.27],
         rightGrip: [0.025, -0.195, -0.13],
@@ -226,6 +230,7 @@ export const WEAPON_CONFIGS = deepFreeze({
       baseYaw: 0.11,
       scale: 0.88,
       kick: 1.85,
+      sway: { amount: 1.2, recovery: 6.6, adsMultiplier: 0.18 },
       armRig: {
         rightOrigin: [0.32, -0.78, 0.35],
         rightGrip: [0.035, -0.245, -0.14],

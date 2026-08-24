@@ -4,6 +4,15 @@ import { WEAPON_CONFIGS, WEAPON_ORDER } from '../configs/weaponConfigs.js';
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const MAX_HIT_STOP_DURATION = 0.075;
 const FIRE_INPUT_BUFFER = 0.12;
+const MAX_SWAY_LOOK_SPEED = 6;
+const MAX_SWAY_YAW = 0.072;
+const MAX_SWAY_PITCH = 0.052;
+const SWAY_YAW_PER_SPEED = 0.012;
+const SWAY_PITCH_PER_SPEED = 0.009;
+const SWAY_POSITION_X = 0.38;
+const SWAY_POSITION_Y = 0.28;
+const SWAY_ROLL_SCALE = 0.34;
+const SWAY_REST_EPSILON = 0.00001;
 
 function hitStopValue(profile, key) {
   const value = Number(profile?.[key]);
@@ -438,6 +447,9 @@ export class WeaponSystem {
     this.modelSideKick = 0;
     this.modelRollKick = 0;
     this.recoilIntensity = 1;
+    this.modelSwayYaw = 0;
+    this.modelSwayPitch = 0;
+    this.swayIntensity = 0.8;
     this.adsAmount = 0;
     this.triggerReleased = true;
     this.firePressConsumed = false;
@@ -457,6 +469,8 @@ export class WeaponSystem {
     this.tempEnd = new THREE.Vector3();
     this.tempMuzzle = new THREE.Vector3();
     this.tempModelPosition = new THREE.Vector3();
+    this.tempLookDelta = new THREE.Vector2();
+    this.tempViewBob = new THREE.Vector2();
 
     for (const id of this.weaponOrder) {
       const config = resolveConfig(id);
@@ -520,7 +534,7 @@ export class WeaponSystem {
     if (this.enabled && !wasEnabled) this.primeEquipPose(this.currentModel);
     if (!this.enabled) {
       this.clearInputBuffer();
-      this.clearModelRecoil();
+      this.clearViewmodelMotion();
       this.restoreModelParts(this.currentModel);
     }
     this.currentModel.visible = this.enabled;
@@ -542,10 +556,36 @@ export class WeaponSystem {
     return this.getRecoilState();
   }
 
+  setSwayIntensity(intensity = 0.8, reducedMotion = false) {
+    const numeric = Number(intensity);
+    this.swayIntensity = reducedMotion === true
+      ? 0
+      : THREE.MathUtils.clamp(Number.isFinite(numeric) ? numeric : 0.8, 0, 1);
+    if (this.swayIntensity <= 0) this.clearModelSway();
+    return this.getSwayState();
+  }
+
   clearModelRecoil({ snap = true } = {}) {
     this.modelKick = 0;
     this.modelSideKick = 0;
     this.modelRollKick = 0;
+    if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
+      this.animateModel(0, { snap: true });
+    }
+  }
+
+  clearModelSway({ snap = true } = {}) {
+    this.modelSwayYaw = 0;
+    this.modelSwayPitch = 0;
+    this.tempLookDelta.set(0, 0);
+    if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
+      this.animateModel(0, { snap: true });
+    }
+  }
+
+  clearViewmodelMotion({ snap = true } = {}) {
+    this.clearModelRecoil({ snap: false });
+    this.clearModelSway({ snap: false });
     if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
       this.animateModel(0, { snap: true });
     }
@@ -563,6 +603,18 @@ export class WeaponSystem {
       modelSide: this.modelSideKick,
       modelRoll: this.modelRollKick,
       intensity: this.recoilIntensity,
+    };
+  }
+
+  getSwayState() {
+    return {
+      positionX: -this.modelSwayYaw * SWAY_POSITION_X,
+      positionY: this.modelSwayPitch * SWAY_POSITION_Y,
+      pitch: this.modelSwayPitch,
+      yaw: this.modelSwayYaw,
+      roll: -this.modelSwayYaw * SWAY_ROLL_SCALE,
+      intensity: this.swayIntensity,
+      enabled: this.swayIntensity > 0,
     };
   }
 
@@ -589,7 +641,7 @@ export class WeaponSystem {
     this.reloadRemaining = 0;
     this.reloadDuration = 0;
     this.recoilKick = 0;
-    this.clearModelRecoil();
+    this.clearViewmodelMotion({ snap: false });
     this.adsAmount = 0;
     this.clearInputBuffer();
     this.index = 0;
@@ -715,6 +767,7 @@ export class WeaponSystem {
     const aiming = Boolean(input.isDown?.('aim'));
     this.adsAmount = THREE.MathUtils.damp(this.adsAmount, aiming ? 1 : 0, 14, dt);
     this.player?.setAiming?.(this.adsAmount);
+    this.updateModelSway(dt);
     this.fireBufferRemaining = Math.max(0, this.fireBufferRemaining - dt);
     const firePressedEdge = Boolean(input.wasPressed?.('fire'));
     if (!firePressedEdge) this.firePressConsumed = false;
@@ -735,10 +788,44 @@ export class WeaponSystem {
     this.animateModel(dt, aiming);
   }
 
+  updateModelSway(dt) {
+    this.tempLookDelta.set(0, 0);
+    const lookDelta = this.player?.getLookDelta?.(this.tempLookDelta) ?? this.tempLookDelta;
+    const yawDelta = Number.isFinite(lookDelta?.x) ? lookDelta.x : 0;
+    const pitchDelta = Number.isFinite(lookDelta?.y) ? lookDelta.y : 0;
+    const delta = THREE.MathUtils.clamp(Number(dt) || 0, 0, 0.05);
+    if (delta <= 0 || this.swayIntensity <= 0) return;
+
+    const profile = this.currentConfig.viewModel?.sway;
+    const amount = THREE.MathUtils.clamp(Number(profile?.amount ?? 1), 0.25, 1.6);
+    const recovery = THREE.MathUtils.clamp(Number(profile?.recovery ?? 10), 4, 24);
+    const adsMultiplier = THREE.MathUtils.clamp(Number(profile?.adsMultiplier ?? 0.28), 0.1, 1);
+    const scale = this.swayIntensity
+      * amount
+      * THREE.MathUtils.lerp(1, adsMultiplier, this.adsAmount);
+    const yawSpeed = THREE.MathUtils.clamp(yawDelta / delta, -MAX_SWAY_LOOK_SPEED, MAX_SWAY_LOOK_SPEED);
+    const pitchSpeed = THREE.MathUtils.clamp(pitchDelta / delta, -MAX_SWAY_LOOK_SPEED, MAX_SWAY_LOOK_SPEED);
+    const targetYaw = THREE.MathUtils.clamp(
+      -yawSpeed * SWAY_YAW_PER_SPEED * scale,
+      -MAX_SWAY_YAW * scale,
+      MAX_SWAY_YAW * scale,
+    );
+    const targetPitch = THREE.MathUtils.clamp(
+      -pitchSpeed * SWAY_PITCH_PER_SPEED * scale,
+      -MAX_SWAY_PITCH * scale,
+      MAX_SWAY_PITCH * scale,
+    );
+    this.modelSwayYaw = THREE.MathUtils.damp(this.modelSwayYaw, targetYaw, recovery, delta);
+    this.modelSwayPitch = THREE.MathUtils.damp(this.modelSwayPitch, targetPitch, recovery, delta);
+    if (Math.abs(this.modelSwayYaw) < SWAY_REST_EPSILON && yawDelta === 0) this.modelSwayYaw = 0;
+    if (Math.abs(this.modelSwayPitch) < SWAY_REST_EPSILON && pitchDelta === 0) this.modelSwayPitch = 0;
+  }
+
   animateModel(dt, { snap = false } = {}) {
     const model = this.currentModel;
     const config = this.currentConfig;
-    const bob = this.player?.getViewBob?.() ?? { x: 0, y: 0 };
+    this.tempViewBob.set(0, 0);
+    const bob = this.player?.getViewBob?.(this.tempViewBob) ?? this.tempViewBob;
     const reloadDuration = this.reloadDuration || this.getReloadDuration(config);
     const reloadProgress = this.reloadRemaining > 0 && reloadDuration > 0
       ? THREE.MathUtils.clamp(1 - this.reloadRemaining / reloadDuration, 0, 1)
@@ -757,20 +844,26 @@ export class WeaponSystem {
       .copy(model.userData.basePosition)
       .lerp(model.userData.adsPosition, poseAds);
     this.tempModelPosition.x += (bob.x ?? 0) * bobScale;
+    this.tempModelPosition.x -= this.modelSwayYaw * SWAY_POSITION_X;
     this.tempModelPosition.x += this.modelSideKick * 0.018;
     this.tempModelPosition.x += reloadArc * 0.11 + equipAmount * 0.13;
     this.tempModelPosition.y += (bob.y ?? 0) * bobScale
+      + this.modelSwayPitch * SWAY_POSITION_Y
       - this.modelKick * 0.025
       - reloadArc * 0.18
       - equipAmount * 0.42;
     this.tempModelPosition.z += this.modelKick * 0.04 + reloadArc * 0.06 + equipAmount * 0.08;
     model.position.lerp(this.tempModelPosition, snap ? 1 : 1 - Math.exp(-dt * 15));
-    model.rotation.x = -this.modelKick * 0.055 + reloadArc * 0.3 + equipAmount * 0.16;
+    model.rotation.x = this.modelSwayPitch - this.modelKick * 0.055 + reloadArc * 0.3 + equipAmount * 0.16;
     model.rotation.y = THREE.MathUtils.lerp(model.userData.baseYaw, 0, poseAds)
+      + this.modelSwayYaw
       + this.modelSideKick * 0.035
       + reloadArc * 0.4
       + equipAmount * 0.24;
-    model.rotation.z = this.modelRollKick * 0.045 + reloadArc * 0.3 + equipAmount * 0.2;
+    model.rotation.z = -this.modelSwayYaw * SWAY_ROLL_SCALE
+      + this.modelRollKick * 0.045
+      + reloadArc * 0.3
+      + equipAmount * 0.2;
     model.userData.animationTime += dt;
     for (const part of model.userData.pulseParts ?? []) {
       const amount = 1 + Math.sin(model.userData.animationTime * part.speed + part.phase) * part.amplitude;
@@ -809,7 +902,7 @@ export class WeaponSystem {
     nextModel.visible = this.enabled;
     this.reloadRemaining = 0;
     this.reloadDuration = 0;
-    this.clearModelRecoil();
+    this.clearViewmodelMotion();
     const switchCooldown = 0.18 / this.runtimeModifiers.switchSpeed;
     if (switchCooldown >= this.cooldown) {
       this.cooldown = switchCooldown;
@@ -1192,7 +1285,7 @@ export class WeaponSystem {
 
   dispose() {
     if (this.disposed) return;
-    this.clearModelRecoil({ snap: false });
+    this.clearViewmodelMotion({ snap: false });
     const geometries = new Set();
     const materials = new Set();
     for (const model of this.models.values()) {

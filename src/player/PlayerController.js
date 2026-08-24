@@ -154,6 +154,9 @@ export class PlayerController {
     this._recoilIntensity = 1;
     this._appliedRecoilPitch = 0;
     this._appliedRecoilYaw = 0;
+    this._lastLookYawDelta = 0;
+    this._lastLookPitchDelta = 0;
+    this._lookDeltaView = new THREE.Vector2();
     this._lastViewBob = { x: 0, y: 0 };
     this._positionView = new THREE.Vector3();
     this._velocityView = new THREE.Vector3();
@@ -196,6 +199,8 @@ export class PlayerController {
   }
 
   fixedUpdate(input = {}, deltaSeconds = 1 / 60) {
+    this._lastLookYawDelta = 0;
+    this._lastLookPitchDelta = 0;
     if (this._disposed || this.dead) return;
     const dt = clamp(Number(deltaSeconds) || 0, 0, 0.05);
     if (dt <= 0) return;
@@ -298,9 +303,13 @@ export class PlayerController {
       * (Number(input.lookSensitivityScale) || 1);
     // InputManager already applies its invert-Y preference while accumulating look.
     const invert = typeof input.consumeLook === 'function' ? 1 : input.invertY ? -1 : 1;
-    this.yaw -= deltaX * sensitivity;
+    const yawDelta = -deltaX * sensitivity;
+    const previousPitch = this.pitch;
+    this.yaw += yawDelta;
     this.pitch -= deltaY * sensitivity * invert;
     this.pitch = clamp(this.pitch, -this.config.maxPitch, this.config.maxPitch);
+    this._lastLookYawDelta = yawDelta;
+    this._lastLookPitchDelta = this.pitch - previousPitch;
     if (Math.abs(this.yaw) > Math.PI * 8) this.yaw %= TAU;
   }
 
@@ -522,6 +531,8 @@ export class PlayerController {
     if (!preserveRecoil) this.resetRecoil();
     this.yaw = Number(yaw) || 0;
     this.pitch = clamp(Number(pitch) || 0, -this.config.maxPitch, this.config.maxPitch);
+    this._lastLookYawDelta = 0;
+    this._lastLookPitchDelta = 0;
   }
 
   setHeadBobEnabled(enabled) {
@@ -596,8 +607,20 @@ export class PlayerController {
     if (Math.abs(this._recoilYaw) < RECOIL_REST_EPSILON) this._recoilYaw = 0;
   }
 
-  getViewBob() {
+  getViewBob(target = null) {
+    if (target && typeof target.set === 'function') {
+      return target.set(this._lastViewBob.x, this._lastViewBob.y);
+    }
+    if (target && typeof target === 'object') {
+      target.x = this._lastViewBob.x;
+      target.y = this._lastViewBob.y;
+      return target;
+    }
     return { ...this._lastViewBob };
+  }
+
+  getLookDelta(target = this._lookDeltaView) {
+    return target.set(this._lastLookYawDelta, this._lastLookPitchDelta);
   }
 
   setMouseSensitivity(value) {
@@ -819,6 +842,8 @@ export class PlayerController {
     this._overdriveSpeedScale = 1;
     this.overdriveActive = false;
     this.resetRecoil();
+    this._lastLookYawDelta = 0;
+    this._lastLookPitchDelta = 0;
     this._cameraHeight = this.config.standingEyeOffset;
     this._bobTime = 0;
     this._bobAmount = 0;
@@ -915,6 +940,8 @@ export class PlayerController {
   dispose() {
     if (this._disposed) return;
     this.resetRecoil();
+    this._lastLookYawDelta = 0;
+    this._lastLookPitchDelta = 0;
     this._disposed = true;
     this.world?.removeBody(this.body);
     this.camera = null;

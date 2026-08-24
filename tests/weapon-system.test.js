@@ -712,6 +712,175 @@ test('viewmodel recoil moves backward, stays bounded and settles at any frame ra
   assert.ok(at144.state.modelKick < 0.0001);
 });
 
+test('mouse turns create mirrored bounded viewmodel sway without reading input twice', () => {
+  const sample = (yaw, pitch, { ads = false, intensity = 1 } = {}) => {
+    const look = new THREE.Vector2(yaw, pitch);
+    let reads = 0;
+    const player = {
+      getLookDelta(target) {
+        reads += 1;
+        return target.copy(look);
+      },
+      getViewBob: (target) => target.set(0, 0),
+      setAiming() {},
+    };
+    const weapons = createWeapons(player);
+    weapons.setEnabled(true);
+    weapons.setSwayIntensity(intensity);
+    weapons.adsAmount = ads ? 1 : 0;
+    const model = weapons.currentModel;
+    model.userData.equipAmount = 0;
+    model.position.copy(model.userData.basePosition);
+    model.rotation.set(0, model.userData.baseYaw, 0);
+    weapons.update(1 / 60, {
+      wasPressed: () => false,
+      isDown: (action) => ads && action === 'aim',
+      consumeWheel: () => 0,
+    });
+    const result = {
+      reads,
+      state: weapons.getSwayState(),
+      position: model.position.clone(),
+      base: model.userData.basePosition.clone(),
+    };
+    weapons.dispose();
+    return result;
+  };
+
+  const left = sample(0.08, -0.05);
+  const right = sample(-0.08, 0.05);
+  assert.equal(left.reads, 1);
+  assert.equal(right.reads, 1);
+  assert.ok(left.state.yaw < 0 && right.state.yaw > 0);
+  assert.ok(left.state.pitch > 0 && right.state.pitch < 0);
+  assert.ok(Math.abs(left.state.yaw + right.state.yaw) < 1e-12);
+  assert.ok(Math.abs(left.state.pitch + right.state.pitch) < 1e-12);
+  assert.ok(Math.abs(left.state.yaw) <= 0.072);
+  assert.ok(Math.abs(left.state.pitch) <= 0.052);
+  assert.ok(left.position.distanceTo(left.base) > 0.0001);
+
+  const hip = sample(0.08, -0.05);
+  const ads = sample(0.08, -0.05, { ads: true });
+  assert.ok(Math.abs(ads.state.yaw) < Math.abs(hip.state.yaw));
+  assert.ok(Math.abs(ads.state.pitch) < Math.abs(hip.state.pitch));
+  assert.equal(Math.sign(ads.state.yaw), Math.sign(hip.state.yaw));
+});
+
+test('viewmodel sway follows and settles consistently at different frame rates', () => {
+  const sample = (fps) => {
+    const look = new THREE.Vector2();
+    const player = {
+      getLookDelta: (target) => target.copy(look),
+      getViewBob: (target) => target.set(0, 0),
+      setAiming() {},
+    };
+    const weapons = createWeapons(player);
+    const idle = { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 };
+    weapons.setEnabled(true);
+    weapons.setSwayIntensity(1);
+    const model = weapons.currentModel;
+    model.userData.equipAmount = 0;
+    model.position.copy(model.userData.basePosition);
+    model.rotation.set(0, model.userData.baseYaw, 0);
+    for (let frame = 0; frame < fps * 0.25; frame += 1) {
+      look.set(1.8 / fps, -1.1 / fps);
+      weapons.update(1 / fps, idle);
+    }
+    const moving = weapons.getSwayState();
+    look.set(0, 0);
+    for (let frame = 0; frame < fps * 1.5; frame += 1) weapons.update(1 / fps, idle);
+    const result = {
+      moving,
+      settled: weapons.getSwayState(),
+      position: model.position.clone(),
+      base: model.userData.basePosition.clone(),
+      rotation: new THREE.Vector3(model.rotation.x, model.rotation.y, model.rotation.z),
+      baseYaw: model.userData.baseYaw,
+    };
+    weapons.dispose();
+    return result;
+  };
+
+  const at60 = sample(60);
+  const at144 = sample(144);
+  assert.ok(Math.abs(at60.moving.yaw - at144.moving.yaw) < 0.001);
+  assert.ok(Math.abs(at60.moving.pitch - at144.moving.pitch) < 0.001);
+  assert.ok(at60.position.distanceTo(at60.base) < 0.001);
+  assert.ok(at144.position.distanceTo(at144.base) < 0.001);
+  assert.ok(at60.position.distanceTo(at144.position) < 0.001);
+  assert.equal(at60.settled.yaw, 0);
+  assert.equal(at60.settled.pitch, 0);
+  assert.equal(at144.settled.yaw, 0);
+  assert.equal(at144.settled.pitch, 0);
+  assert.ok(Math.abs(at60.rotation.y - at60.baseYaw) < 0.001);
+});
+
+test('sway intensity, reduced motion and lifecycle clears leave no hidden viewmodel impulse', () => {
+  const impulseAt = (intensity, reducedMotion = false) => {
+    const look = new THREE.Vector2(0.08, -0.05);
+    const player = {
+      getLookDelta: (target) => target.copy(look),
+      getViewBob: (target) => target.set(0, 0),
+      setAiming() {},
+    };
+    const weapons = createWeapons(player);
+    weapons.setEnabled(true);
+    weapons.currentModel.userData.equipAmount = 0;
+    weapons.currentModel.position.copy(weapons.currentModel.userData.basePosition);
+    weapons.currentModel.rotation.set(0, weapons.currentModel.userData.baseYaw, 0);
+    weapons.setSwayIntensity(intensity, reducedMotion);
+    weapons.update(1 / 60, { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 });
+    const state = weapons.getSwayState();
+    const position = weapons.currentModel.position.clone();
+    const base = weapons.currentModel.userData.basePosition.clone();
+    return { weapons, look, state, position, base };
+  };
+
+  const full = impulseAt(1);
+  const partial = impulseAt(0.4);
+  const reduced = impulseAt(1, true);
+  assert.ok(Math.abs(partial.state.yaw - full.state.yaw * 0.4) < 1e-12);
+  assert.ok(Math.abs(partial.state.pitch - full.state.pitch * 0.4) < 1e-12);
+  assert.equal(reduced.state.enabled, false);
+  assert.equal(reduced.state.yaw, 0);
+  assert.equal(reduced.state.pitch, 0);
+  assert.ok(reduced.position.distanceTo(reduced.base) < 1e-12);
+
+  full.weapons.clearViewmodelMotion();
+  assert.equal(full.weapons.getSwayState().yaw, 0);
+  assert.ok(full.weapons.currentModel.position.distanceTo(full.base) < 1e-12);
+  full.look.set(0.08, -0.05);
+  full.weapons.update(1 / 60, { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 });
+  assert.notEqual(full.weapons.getSwayState().yaw, 0);
+  full.weapons.switchTo(1);
+  assert.equal(full.weapons.getSwayState().yaw, 0);
+  full.weapons.setEnabled(false);
+  assert.equal(full.weapons.getSwayState().yaw, 0);
+
+  full.weapons.dispose();
+  partial.weapons.dispose();
+  reduced.weapons.dispose();
+});
+
+test('steady-state sway update reuses preallocated vectors', () => {
+  const source = WeaponSystem.prototype.updateModelSway.toString();
+  assert.doesNotMatch(source, /new\s+(?:THREE\.)?(?:Vector2|Vector3|Quaternion)\s*\(/);
+  const weapons = createWeapons({
+    getLookDelta: (target) => target.set(0, 0),
+    getViewBob: (target) => target.set(0, 0),
+    setAiming() {},
+  });
+  const lookTarget = weapons.tempLookDelta;
+  const bobTarget = weapons.tempViewBob;
+  for (let frame = 0; frame < 120; frame += 1) {
+    weapons.updateModelSway(1 / 60);
+    weapons.animateModel(1 / 60);
+  }
+  assert.equal(weapons.tempLookDelta, lookTarget);
+  assert.equal(weapons.tempViewBob, bobTarget);
+  weapons.dispose();
+});
+
 test('all five weapons expose distinct recoil impulses in the intended weight order', () => {
   const peaks = {};
   for (const id of WEAPON_ORDER) {

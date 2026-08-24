@@ -110,6 +110,40 @@ test('mouse input changes the base look while recoil returns around the new aim'
   player.dispose();
 });
 
+test('applied mouse look is exposed once per fixed step without a second input read', () => {
+  const { player } = createHarness();
+  let lookReads = 0;
+  const beforeYaw = player.yaw;
+  const beforePitch = player.pitch;
+  player.fixedUpdate({
+    ...IDLE_INPUT,
+    consumeLook() {
+      lookReads += 1;
+      return { x: 40, y: -24 };
+    },
+  }, FRAME);
+
+  const target = new THREE.Vector2();
+  const delta = player.getLookDelta(target);
+  assert.equal(lookReads, 1);
+  assert.equal(delta, target, 'the caller-provided target must be reused');
+  assert.ok(Math.abs(delta.x - (player.yaw - beforeYaw)) < 1e-12);
+  assert.ok(Math.abs(delta.y - (player.pitch - beforePitch)) < 1e-12);
+
+  player.fixedUpdate(IDLE_INPUT, FRAME);
+  assert.equal(player.getLookDelta(target).lengthSq(), 0);
+
+  player.setLook(0, player.config.maxPitch - 0.001);
+  const pitchBeforeClamp = player.pitch;
+  player.fixedUpdate({
+    ...IDLE_INPUT,
+    consumeLook: () => ({ x: 0, y: -10000 }),
+  }, FRAME);
+  assert.equal(player.pitch, player.config.maxPitch);
+  assert.ok(Math.abs(player.getLookDelta(target).y - (player.config.maxPitch - pitchBeforeClamp)) < 1e-12);
+  player.dispose();
+});
+
 test('recoil settings, setLook, reset and dispose clear active offsets without replay', () => {
   const { camera, player } = createHarness();
   player.addRecoil(0.1, 0.04, 8);

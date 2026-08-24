@@ -181,6 +181,18 @@ test('accessibility settings expose independent weapon recoil intensity', () => 
   assert.match(markup, /Сила управляемого отклонения прицела/);
 });
 
+test('accessibility settings expose saved viewmodel sway intensity', () => {
+  const ui = Object.create(UIManager.prototype);
+  ui.settings = { gameplay: { weaponSway: 0.55 } };
+
+  const markup = ui._settingsTabMarkup('accessibility');
+
+  assert.match(markup, /Инерция оружия/);
+  assert.match(markup, /type="range" min="0" max="1" step="0\.05" value="0\.55" data-setting="gameplay\.weaponSway"/);
+  assert.match(markup, /ADS ослабляет эффект/);
+  assert.match(markup, />55%<\/output>/);
+});
+
 test('accessibility settings expose a saved hit-stop intensity slider', () => {
   const ui = Object.create(UIManager.prototype);
   ui.settings = { gameplay: { hitStop: 0.35 } };

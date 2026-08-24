@@ -503,18 +503,18 @@ test('resetSimulationTiming clears hit-stop, weapon input and accumulated simula
   assert.equal(game.timeScale, 0.4);
 });
 
-test('resetCameraPresentation clears shake, weapon recoil and dynamic FOV state', () => {
+test('resetCameraPresentation clears shake, viewmodel motion and dynamic FOV state', () => {
   const calls = [];
   const game = {
     cameraShake: { reset: () => calls.push('shake') },
     player: { resetRecoil: () => calls.push('camera-recoil') },
-    weapons: { clearModelRecoil: () => calls.push('model-recoil') },
+    weapons: { clearViewmodelMotion: () => calls.push('viewmodel-motion') },
     cameraFov: { reset: () => { calls.push('fov'); return 'fov-reset'; } },
   };
 
   const result = Game.prototype.resetCameraPresentation.call(game);
 
-  assert.deepEqual(calls, ['shake', 'camera-recoil', 'model-recoil', 'fov']);
+  assert.deepEqual(calls, ['shake', 'camera-recoil', 'viewmodel-motion', 'fov']);
   assert.equal(result, 'fov-reset');
 });
 
@@ -529,6 +529,7 @@ test('applySettings sends recoil and hit-stop accessibility settings to their ow
   const settings = {
     gameplay: {
       weaponRecoil: 0.4,
+      weaponSway: 0.55,
       hitStop: 0.6,
       enemyHitReaction: 0.75,
       headBob: 0.6,
@@ -548,7 +549,10 @@ test('applySettings sends recoil and hit-stop accessibility settings to their ow
       setRecoilIntensity: (...args) => calls.push(['player', ...args]),
       setHeadBobEnabled() {},
     },
-    weapons: { setRecoilIntensity: (...args) => calls.push(['weapons', ...args]) },
+    weapons: {
+      setRecoilIntensity: (...args) => calls.push(['weapons', ...args]),
+      setSwayIntensity: (...args) => calls.push(['sway', ...args]),
+    },
     input: { setBindings() {}, setMouseOptions() {} },
     audio: { setVolumes() {}, setMuted() {} },
   };
@@ -560,5 +564,6 @@ test('applySettings sends recoil and hit-stop accessibility settings to their ow
     ['enemies', 0.75, true],
     ['player', 0.4, true],
     ['weapons', 0.4, true],
+    ['sway', 0.55, true],
   ]);
 });

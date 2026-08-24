@@ -120,6 +120,19 @@ test('SettingsManager persists a bounded weapon recoil intensity', () => {
   assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.weaponRecoil, 1);
 });
 
+test('SettingsManager persists a bounded weapon sway intensity', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const settings = new SettingsManager({ storage });
+  assert.equal(settings.set('gameplay.weaponSway', 0.45), 0.45);
+  assert.equal(settings.set('gameplay.weaponSway', -5), 0);
+  assert.equal(settings.set('gameplay.weaponSway', 3), 1);
+  assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.weaponSway, 1);
+});
+
 test('SettingsManager persists a bounded hit-stop intensity', () => {
   const values = new Map();
   const storage = {
@@ -146,9 +159,9 @@ test('SettingsManager persists a bounded enemy hit-reaction intensity', () => {
   assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.enemyHitReaction, 1);
 });
 
-test('legacy settings without weapon recoil receive the current default', () => {
+test('legacy settings receive current recoil defaults and a normalized sway step', () => {
   const values = new Map([
-    ['vector-null:settings:v1', JSON.stringify({ gameplay: { cameraShake: 0.2 } })],
+    ['vector-null:settings:v1', JSON.stringify({ gameplay: { cameraShake: 0.2, weaponSway: 0.78 } })],
   ]);
   const storage = {
     getItem: (key) => values.get(key) ?? null,
@@ -158,6 +171,7 @@ test('legacy settings without weapon recoil receive the current default', () => 
 
   assert.equal(settings.get('gameplay.cameraShake'), 0.2);
   assert.equal(settings.get('gameplay.weaponRecoil'), 0.85);
+  assert.equal(settings.get('gameplay.weaponSway'), 0.8);
   assert.equal(settings.get('gameplay.hitStop'), 0.8);
   assert.equal(settings.get('gameplay.enemyHitReaction'), 0.85);
 });
