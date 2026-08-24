@@ -12,6 +12,10 @@ const MAX_RECOIL_RECOVERY = 30;
 const MAX_RECOIL_PITCH = 0.22;
 const MAX_RECOIL_YAW = 0.1;
 const RECOIL_REST_EPSILON = 0.0001;
+const MAX_SLIDE_TILT_ROLL = 0.048;
+const SLIDE_TILT_ENTER_RATE = 14;
+const SLIDE_TILT_EXIT_RATE = 9;
+const SLIDE_TILT_REST_EPSILON = 0.0001;
 
 export const DEFAULT_PLAYER_CONFIG = Object.freeze({
   height: 1.8,
@@ -142,6 +146,9 @@ export class PlayerController {
     this._cameraHeight = this.config.standingEyeOffset;
     this._bobTime = 0;
     this._bobAmount = 0;
+    this._slideTiltAmount = 0;
+    this._slideTiltIntensity = 0.75;
+    this._appliedSlideTiltRoll = 0;
     this._previousVerticalVelocity = 0;
     this._speedBoostRemaining = 0;
     this._speedBoostScale = 1;
@@ -501,8 +508,10 @@ export class PlayerController {
     const bobX = Math.sin(this._bobTime * 0.5) * 0.026 * this._bobAmount * bobScale;
     this._lastViewBob.x = bobX;
     this._lastViewBob.y = bobY;
-    const roll = Math.sin(this._bobTime * 0.5) * 0.007 * this._bobAmount
-      + (this.isSliding ? -0.035 : 0);
+    this.updateSlideTilt(dt);
+    const bobRoll = Math.sin(this._bobTime * 0.5) * 0.007 * this._bobAmount;
+    const slideRoll = -this._slideTiltAmount * MAX_SLIDE_TILT_ROLL * this._slideTiltIntensity;
+    const roll = bobRoll + slideRoll;
 
     // Game owns the fixed-step accumulator and calls world.step(dt) in simple
     // mode, where cannon-es does not refresh interpolatedPosition.
@@ -518,6 +527,7 @@ export class PlayerController {
     );
     const visualYaw = this.yaw + this._recoilYaw;
     camera.rotation.set(visualPitch, visualYaw, roll, 'YXZ');
+    this._appliedSlideTiltRoll = slideRoll;
     this._appliedRecoilPitch = visualPitch - this.pitch;
     this._appliedRecoilYaw = visualYaw - this.yaw;
     camera.updateMatrixWorld();
@@ -537,6 +547,45 @@ export class PlayerController {
 
   setHeadBobEnabled(enabled) {
     this.config.headBob = Boolean(enabled);
+  }
+
+  setSlideTiltIntensity(intensity = 0.75, reducedMotion = false) {
+    const numeric = Number(intensity);
+    this._slideTiltIntensity = reducedMotion === true
+      ? 0
+      : clamp(Number.isFinite(numeric) ? numeric : 0.75, 0, 1);
+    if (this._slideTiltIntensity <= 0) this.resetSlideTilt();
+    return this.getSlideTiltState();
+  }
+
+  updateSlideTilt(deltaSeconds) {
+    const dt = clamp(Number(deltaSeconds) || 0, 0, 0.1);
+    const target = this.isSliding && this._slideTiltIntensity > 0 ? 1 : 0;
+    const rate = target > this._slideTiltAmount ? SLIDE_TILT_ENTER_RATE : SLIDE_TILT_EXIT_RATE;
+    this._slideTiltAmount = THREE.MathUtils.damp(this._slideTiltAmount, target, rate, dt);
+    if (Math.abs(this._slideTiltAmount - target) < SLIDE_TILT_REST_EPSILON) {
+      this._slideTiltAmount = target;
+    }
+    return this._slideTiltAmount;
+  }
+
+  resetSlideTilt() {
+    if (this.camera && this._appliedSlideTiltRoll !== 0) {
+      this.camera.rotation.z -= this._appliedSlideTiltRoll;
+      this.camera.updateMatrixWorld?.();
+    }
+    this._slideTiltAmount = 0;
+    this._appliedSlideTiltRoll = 0;
+    return this.getSlideTiltState();
+  }
+
+  getSlideTiltState() {
+    return {
+      amount: this._slideTiltAmount,
+      intensity: this._slideTiltIntensity,
+      roll: -this._slideTiltAmount * MAX_SLIDE_TILT_ROLL * this._slideTiltIntensity,
+      enabled: this._slideTiltIntensity > 0,
+    };
   }
 
   setAiming(amount) {
@@ -847,6 +896,7 @@ export class PlayerController {
     this._cameraHeight = this.config.standingEyeOffset;
     this._bobTime = 0;
     this._bobAmount = 0;
+    this.resetSlideTilt();
     this._previousInput = { jump: false, crouch: false, dash: false };
     this._emit('player:reset', { health: this.health, armor: this.armor });
   }
@@ -940,6 +990,7 @@ export class PlayerController {
   dispose() {
     if (this._disposed) return;
     this.resetRecoil();
+    this.resetSlideTilt();
     this._lastLookYawDelta = 0;
     this._lastLookPitchDelta = 0;
     this._disposed = true;

@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS = Object.freeze({
     rawInput: true,
     bindings: { forward: 'KeyW', backward: 'KeyS', left: 'KeyA', right: 'KeyD', jump: 'Space', sprint: 'ShiftLeft', crouch: 'ControlLeft', dash: 'KeyQ', overdrive: 'KeyF', interact: 'KeyE', reload: 'KeyR' },
   },
-  gameplay: { difficulty: 'normal', fov: 82, sprintFov: 92, headBob: 0.55, cameraShake: 0.65, weaponRecoil: 0.85, weaponSway: 0.8, hitStop: 0.8, enemyHitReaction: 0.85, subtitles: true, crosshairColor: '#64f4ff', aimMode: 'hold', crouchMode: 'hold' },
+  gameplay: { difficulty: 'normal', fov: 82, sprintFov: 92, headBob: 0.55, cameraShake: 0.65, weaponRecoil: 0.85, weaponSway: 0.8, slideTilt: 0.75, hitStop: 0.8, enemyHitReaction: 0.85, subtitles: true, crosshairColor: '#64f4ff', aimMode: 'hold', crouchMode: 'hold' },
   accessibility: { reducedMotion: false, highContrast: false, colorBlindMode: 'none', screenFlash: 0.65, uiScale: 1 },
 });
 
@@ -676,7 +676,8 @@ export class UIManager {
           ${this._rangeSetting('gameplay.headBob', 'Покачивание камеры', 'Амплитуда камеры при движении.', value('gameplay.headBob'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.cameraShake', 'Тряска камеры', 'Сила отклика на прыжок и приземление, урон и близкие взрывы.', value('gameplay.cameraShake'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.weaponRecoil', 'Оружейная отдача', 'Сила управляемого отклонения прицела и движения модели оружия.', value('gameplay.weaponRecoil'), 0, 1, 0.05, 'percent')}
-          ${this._rangeSetting('gameplay.weaponSway', 'Инерция оружия', 'Отставание оружия при повороте, прыжке и приземлении. ADS ослабляет эффект, а снижение движения полностью отключает.', value('gameplay.weaponSway'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('gameplay.weaponSway', 'Инерция оружия', 'Отставание оружия при повороте, прыжке, приземлении и скольжении. ADS ослабляет эффект, а снижение движения полностью отключает.', value('gameplay.weaponSway'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('gameplay.slideTilt', 'Наклон при скольжении', 'Плавно наклоняет камеру и всю модель оружия с руками, не меняя направление выстрела.', value('gameplay.slideTilt'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.hitStop', 'Стоп-кадр попаданий', 'Коротко останавливает симуляцию при мощных попаданиях, критах и добиваниях.', value('gameplay.hitStop'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.enemyHitReaction', 'Реакция противников', 'Сила направленного отклонения корпуса при попадании. Снижение движения полностью отключает эффект.', value('gameplay.enemyHitReaction'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('accessibility.screenFlash', 'Экранные вспышки', 'Яркость вспышек и эффектов попадания.', value('accessibility.screenFlash'), 0, 1, 0.05, 'percent')}

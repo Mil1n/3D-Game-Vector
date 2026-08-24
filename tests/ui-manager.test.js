@@ -189,9 +189,22 @@ test('accessibility settings expose saved viewmodel sway intensity', () => {
 
   assert.match(markup, /Инерция оружия/);
   assert.match(markup, /type="range" min="0" max="1" step="0\.05" value="0\.55" data-setting="gameplay\.weaponSway"/);
-  assert.match(markup, /повороте, прыжке и приземлении/);
+  assert.match(markup, /повороте, прыжке, приземлении и скольжении/);
   assert.match(markup, /ADS ослабляет эффект/);
   assert.match(markup, />55%<\/output>/);
+});
+
+test('accessibility settings expose a saved slide tilt for the camera and complete weapon rig', () => {
+  const ui = Object.create(UIManager.prototype);
+  ui.settings = { gameplay: { slideTilt: 0.65 } };
+
+  const markup = ui._settingsTabMarkup('accessibility');
+
+  assert.match(markup, /Наклон при скольжении/);
+  assert.match(markup, /камеру и всю модель оружия с руками/);
+  assert.match(markup, /не меняя направление выстрела/);
+  assert.match(markup, /type="range" min="0" max="1" step="0\.05" value="0\.65" data-setting="gameplay\.slideTilt"/);
+  assert.match(markup, />65%<\/output>/);
 });
 
 test('accessibility settings expose a saved hit-stop intensity slider', () => {

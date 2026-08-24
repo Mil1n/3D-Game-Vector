@@ -882,6 +882,144 @@ test('steady-state sway update reuses preallocated vectors', () => {
   weapons.dispose();
 });
 
+test('sliding tilts the complete weapon rig smoothly with FPS-stable intensity and ADS attenuation', () => {
+  const sample = (fps, { intensity = 1, ads = 0 } = {}) => {
+    const player = {
+      isSliding: true,
+      getLookDelta: (target) => target.set(0, 0),
+      getViewBob: (target) => target.set(0, 0),
+      setAiming() {},
+    };
+    const weapons = createWeapons(player);
+    weapons.setEnabled(true);
+    weapons.setSwayIntensity(1);
+    weapons.setSlideTiltIntensity(intensity);
+    weapons.adsAmount = ads;
+    const model = weapons.currentModel;
+    model.userData.equipAmount = 0;
+    model.position.copy(model.userData.basePosition);
+    model.rotation.set(0, model.userData.baseYaw, 0);
+    const input = {
+      wasPressed: () => false,
+      isDown: (action) => ads > 0 && action === 'aim',
+      consumeWheel: () => 0,
+    };
+    for (let frame = 0; frame < fps * 0.25; frame += 1) {
+      weapons.update(1 / fps, input);
+    }
+    const state = weapons.getSlideTiltState();
+    const livePosition = model.position.clone();
+    const liveRotation = model.rotation.clone();
+    weapons.animateModel(0, { snap: true });
+    const position = model.position.clone();
+    const rotation = model.rotation.clone();
+    player.isSliding = false;
+    for (let frame = 0; frame < fps * 0.25; frame += 1) weapons.update(1 / fps, input);
+    const result = {
+      state,
+      exiting: weapons.getSlideTiltState(),
+      livePosition,
+      liveRotation,
+      position,
+      rotation,
+      base: model.userData.basePosition.clone(),
+      baseYaw: model.userData.baseYaw,
+    };
+    weapons.dispose();
+    return result;
+  };
+
+  const at60 = sample(60);
+  const at144 = sample(144);
+  const partial = sample(60, { intensity: 0.4 });
+  const ads = sample(60, { ads: 1 });
+  assert.ok(at60.state.amount > 0 && at60.state.amount < 1);
+  assert.ok(Math.abs(at60.state.amount - at144.state.amount) < 1e-12);
+  assert.ok(Math.abs(at60.state.roll - at144.state.roll) < 1e-12);
+  assert.ok(Math.abs(at60.exiting.amount - at144.exiting.amount) < 1e-12);
+  assert.ok(Math.abs(at60.exiting.roll - at144.exiting.roll) < 1e-12);
+  assert.ok(at60.livePosition.distanceTo(at144.livePosition) < 0.002);
+  assert.ok(Math.abs(at60.liveRotation.z - at144.liveRotation.z) < 0.002);
+  assert.ok(Math.abs(partial.state.roll - at60.state.roll * 0.4) < 1e-12);
+  assert.ok(Math.abs(ads.state.roll) < Math.abs(at60.state.roll));
+  assert.equal(Math.sign(ads.state.roll), Math.sign(at60.state.roll));
+
+  assert.ok(at60.state.positionX < 0);
+  assert.ok(at60.state.positionY < 0);
+  assert.ok(at60.state.positionZ > 0);
+  assert.ok(at60.state.yaw < 0);
+  assert.ok(at60.state.roll < 0);
+  assert.ok(at60.position.x < at60.base.x);
+  assert.ok(at60.position.y < at60.base.y);
+  assert.ok(at60.position.z > at60.base.z);
+  assert.ok(at60.rotation.y < at60.baseYaw);
+  assert.ok(at60.rotation.z < 0);
+  assert.ok(Math.abs((at60.position.x - at60.base.x) - at60.state.positionX) < 1e-12);
+  assert.ok(Math.abs((at60.position.y - at60.base.y) - at60.state.positionY) < 1e-12);
+  assert.ok(Math.abs((at60.position.z - at60.base.z) - at60.state.positionZ) < 1e-12);
+  assert.ok(Math.abs((at60.rotation.y - at60.baseYaw) - at60.state.yaw) < 1e-12);
+  assert.ok(Math.abs(at60.rotation.z - at60.state.roll) < 1e-12);
+});
+
+test('slide viewmodel tilt polls the real slide state and clears on every lifecycle boundary', () => {
+  const player = {
+    isSliding: true,
+    getLookDelta: (target) => target.set(0, 0),
+    getViewBob: (target) => target.set(0, 0),
+    setAiming() {},
+  };
+  const weapons = createWeapons(player);
+  weapons.setEnabled(true);
+  weapons.setSwayIntensity(1);
+  weapons.setSlideTiltIntensity(1);
+  weapons.currentModel.userData.equipAmount = 0;
+  const enter = () => {
+    player.isSliding = true;
+    weapons.updateModelSlideTilt(1 / 60);
+    assert.ok(weapons.getSlideTiltState().amount > 0);
+  };
+
+  for (let frame = 0; frame < 30; frame += 1) weapons.updateModelSlideTilt(1 / 60);
+  player.isSliding = false; // jumping out of a slide emits no slideEnded event
+  let previous = weapons.getSlideTiltState().amount;
+  for (let frame = 0; frame < 120; frame += 1) {
+    weapons.updateModelSlideTilt(1 / 60);
+    const current = weapons.getSlideTiltState().amount;
+    assert.ok(current >= 0 && current <= previous, 'viewmodel tilt must return without overshoot');
+    previous = current;
+  }
+  weapons.animateModel(1 / 60, { snap: true });
+  assert.equal(weapons.getSlideTiltState().amount, 0);
+  assert.ok(weapons.currentModel.position.distanceTo(weapons.currentModel.userData.basePosition) < 1e-12);
+
+  enter();
+  weapons.clearViewmodelMotion();
+  assert.equal(weapons.getSlideTiltState().amount, 0);
+  enter();
+  weapons.switchTo(1);
+  assert.equal(weapons.getSlideTiltState().amount, 0);
+  enter();
+  weapons.setEnabled(false);
+  assert.equal(weapons.getSlideTiltState().amount, 0);
+  weapons.setEnabled(true);
+  weapons.setSlideTiltIntensity(0);
+  player.isSliding = true;
+  weapons.updateModelSlideTilt(1 / 60);
+  assert.deepEqual(weapons.getSlideTiltState(), {
+    amount: 0,
+    positionX: -0,
+    positionY: -0,
+    positionZ: 0,
+    yaw: -0,
+    roll: -0,
+    intensity: 0,
+    enabled: false,
+  });
+  weapons.setSlideTiltIntensity(1, true);
+  assert.equal(weapons.getSlideTiltState().amount, 0);
+  weapons.dispose();
+});
+
 test('jump, soft landing and hard landing create distinct bounded viewmodel air impulses', () => {
   const sample = (event, payload) => {
     const eventBus = new EventBus();
@@ -1038,10 +1176,14 @@ test('air motion respects intensity, ADS, lifecycle clears and releases event li
   reduced.weapons.dispose();
 });
 
-test('viewmodel air-motion update uses scalar state without constructor allocations', () => {
-  const source = WeaponSystem.prototype.updateModelAirMotion.toString();
-  assert.doesNotMatch(source, /\bnew\s+/);
-  assert.doesNotMatch(source, /(?:Vector2|Vector3|Quaternion)/);
+test('viewmodel air-motion and slide-tilt updates use scalar state without constructor allocations', () => {
+  for (const source of [
+    WeaponSystem.prototype.updateModelAirMotion.toString(),
+    WeaponSystem.prototype.updateModelSlideTilt.toString(),
+  ]) {
+    assert.doesNotMatch(source, /\bnew\s+/);
+    assert.doesNotMatch(source, /(?:Vector2|Vector3|Quaternion)/);
+  }
 });
 
 test('all five weapons expose distinct recoil impulses in the intended weight order', () => {

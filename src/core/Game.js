@@ -741,6 +741,8 @@ export class Game {
     this.player?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.weapons?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.weapons?.setSwayIntensity?.(settings.gameplay.weaponSway, settings.accessibility.reducedMotion);
+    this.player?.setSlideTiltIntensity?.(settings.gameplay.slideTilt, settings.accessibility.reducedMotion);
+    this.weapons?.setSlideTiltIntensity?.(settings.gameplay.slideTilt, settings.accessibility.reducedMotion);
     this.input.setBindings(settings.controls.bindings, { replace: true, silent: true });
     this.input.setMouseOptions({ sensitivity: settings.controls.mouseSensitivity, invertY: settings.controls.invertY });
     this.player?.setHeadBobEnabled(settings.gameplay.headBob && !settings.accessibility.reducedMotion);
@@ -868,6 +870,7 @@ export class Game {
   resetCameraPresentation() {
     this.cameraShake?.reset();
     this.player?.resetRecoil?.();
+    this.player?.resetSlideTilt?.();
     if (this.weapons?.clearViewmodelMotion) this.weapons.clearViewmodelMotion();
     else this.weapons?.clearModelRecoil?.();
     return this.cameraFov?.reset();

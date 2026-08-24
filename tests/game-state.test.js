@@ -133,6 +133,19 @@ test('SettingsManager persists a bounded weapon sway intensity', () => {
   assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.weaponSway, 1);
 });
 
+test('SettingsManager persists a bounded slide tilt on the visible five-percent step', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const settings = new SettingsManager({ storage });
+  assert.equal(settings.set('gameplay.slideTilt', 0.73), 0.75);
+  assert.equal(settings.set('gameplay.slideTilt', -5), 0);
+  assert.equal(settings.set('gameplay.slideTilt', 3), 1);
+  assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.slideTilt, 1);
+});
+
 test('SettingsManager persists a bounded hit-stop intensity', () => {
   const values = new Map();
   const storage = {
@@ -159,7 +172,7 @@ test('SettingsManager persists a bounded enemy hit-reaction intensity', () => {
   assert.equal(JSON.parse(values.get(settings.storageKey)).gameplay.enemyHitReaction, 1);
 });
 
-test('legacy settings receive current recoil defaults and a normalized sway step', () => {
+test('legacy settings receive current recoil and slide defaults plus a normalized sway step', () => {
   const values = new Map([
     ['vector-null:settings:v1', JSON.stringify({ gameplay: { cameraShake: 0.2, weaponSway: 0.78 } })],
   ]);
@@ -172,6 +185,7 @@ test('legacy settings receive current recoil defaults and a normalized sway step
   assert.equal(settings.get('gameplay.cameraShake'), 0.2);
   assert.equal(settings.get('gameplay.weaponRecoil'), 0.85);
   assert.equal(settings.get('gameplay.weaponSway'), 0.8);
+  assert.equal(settings.get('gameplay.slideTilt'), 0.75);
   assert.equal(settings.get('gameplay.hitStop'), 0.8);
   assert.equal(settings.get('gameplay.enemyHitReaction'), 0.85);
 });

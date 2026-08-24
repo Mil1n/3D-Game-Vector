@@ -232,3 +232,92 @@ test('reset clears stale fall velocity before the player touches the spawn floor
 
   harness.player.dispose();
 });
+
+test('slide tilt eases the camera in and out without changing the shot direction or sticking after a jump exit', () => {
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+  const camera = new THREE.PerspectiveCamera();
+  const spawn = new THREE.Vector3(0, 2, 0);
+  const player = new PlayerController({ world, camera, spawn });
+  player.setHeadBobEnabled(false);
+  player.setLook(0.72, -0.18);
+  player.setSlideTiltIntensity(1);
+  const originalAim = player.getAimDirection(new THREE.Vector3()).clone();
+
+  player.isSliding = true;
+  player.update(camera, FIXED_STEP);
+  const entering = player.getSlideTiltState();
+  assert.ok(entering.amount > 0 && entering.amount < 1, 'slide entry must be smoothed');
+  assert.ok(entering.roll < 0 && entering.roll >= -0.048, 'camera roll must remain bounded');
+  assert.ok(Math.abs(camera.rotation.z - entering.roll) < 1e-12);
+
+  for (let frame = 1; frame < 120; frame += 1) player.update(camera, FIXED_STEP);
+  assert.equal(player.getSlideTiltState().amount, 1);
+  const hipRoll = player.getSlideTiltState().roll;
+  player.setAiming(1);
+  player.update(camera, FIXED_STEP);
+  assert.equal(player.getSlideTiltState().roll, hipRoll, 'ADS must attenuate only the weapon rig, not camera roll');
+  assert.ok(player.getAimDirection(new THREE.Vector3()).distanceTo(originalAim) < 1e-12);
+  player.setAiming(0);
+  player.resetSlideTilt();
+  assert.equal(player.getSlideTiltState().amount, 0);
+  assert.equal(camera.rotation.z, 0, 'lifecycle reset must remove the already-applied camera roll immediately');
+  for (let frame = 0; frame < 120; frame += 1) player.update(camera, FIXED_STEP);
+  assert.equal(player.getSlideTiltState().amount, 1);
+
+  // Jumping cancels isSliding directly and intentionally emits no slideEnded event.
+  player.isSliding = false;
+  const beforeExit = player.getSlideTiltState().amount;
+  player.update(camera, FIXED_STEP);
+  assert.ok(player.getSlideTiltState().amount < beforeExit);
+  assert.ok(player.getSlideTiltState().amount > 0, 'slide exit must not snap in one frame');
+  let previous = player.getSlideTiltState().amount;
+  for (let frame = 0; frame < 180; frame += 1) {
+    player.update(camera, FIXED_STEP);
+    const current = player.getSlideTiltState().amount;
+    assert.ok(current >= 0 && current <= previous, 'slide tilt must return without overshoot');
+    previous = current;
+  }
+  assert.equal(player.getSlideTiltState().amount, 0);
+  assert.equal(camera.rotation.z, 0);
+  assert.ok(
+    player.getAimDirection(new THREE.Vector3()).distanceTo(originalAim) < 1e-12,
+    'decorative roll must not alter ballistic aim',
+  );
+  assert.equal(player.yaw, 0.72);
+  assert.equal(player.pitch, -0.18);
+
+  player.isSliding = true;
+  player.setSlideTiltIntensity(1, true);
+  player.update(camera, FIXED_STEP);
+  assert.deepEqual(player.getSlideTiltState(), { amount: 0, intensity: 0, roll: -0, enabled: false });
+  player.dispose();
+});
+
+test('slide tilt is frame-rate independent, intensity-scaled and allocation-free in its update path', () => {
+  const sample = (fps, intensity = 1) => {
+    const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+    const player = new PlayerController({ world, spawn: new THREE.Vector3(0, 2, 0) });
+    player.setSlideTiltIntensity(intensity);
+    player.isSliding = true;
+    for (let frame = 0; frame < fps * 0.25; frame += 1) player.updateSlideTilt(1 / fps);
+    const entering = player.getSlideTiltState();
+    player.isSliding = false;
+    for (let frame = 0; frame < fps * 0.25; frame += 1) player.updateSlideTilt(1 / fps);
+    const exiting = player.getSlideTiltState();
+    player.dispose();
+    return { entering, exiting };
+  };
+
+  const at60 = sample(60);
+  const at144 = sample(144);
+  const partial = sample(60, 0.4);
+  assert.ok(Math.abs(at60.entering.amount - at144.entering.amount) < 1e-12);
+  assert.ok(Math.abs(at60.entering.roll - at144.entering.roll) < 1e-12);
+  assert.ok(Math.abs(at60.exiting.amount - at144.exiting.amount) < 1e-12);
+  assert.ok(Math.abs(at60.exiting.roll - at144.exiting.roll) < 1e-12);
+  assert.ok(Math.abs(partial.entering.roll - at60.entering.roll * 0.4) < 1e-12);
+
+  const source = PlayerController.prototype.updateSlideTilt.toString();
+  assert.doesNotMatch(source, /\bnew\s+/);
+  assert.doesNotMatch(source, /(?:Vector2|Vector3|Quaternion)/);
+});

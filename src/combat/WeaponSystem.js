@@ -21,6 +21,12 @@ const MAX_AIR_MOTION_OFFSET = 0.02;
 const AIR_MOTION_POSITION_Z = 0.46;
 const AIR_MOTION_PITCH_SCALE = 0.62;
 const AIR_MOTION_REST_EPSILON = 0.0001;
+const SLIDE_TILT_POSITION_X = 0.03;
+const SLIDE_TILT_POSITION_Y = 0.021;
+const SLIDE_TILT_POSITION_Z = 0.018;
+const SLIDE_TILT_YAW = 0.014;
+const SLIDE_TILT_ROLL = 0.043;
+const SLIDE_TILT_REST_EPSILON = 0.0001;
 
 function hitStopValue(profile, key) {
   const value = Number(profile?.[key]);
@@ -459,6 +465,8 @@ export class WeaponSystem {
     this.modelSwayPitch = 0;
     this.modelAirOffset = 0;
     this.modelAirVelocity = 0;
+    this.modelSlideTiltAmount = 0;
+    this.slideTiltIntensity = 0.75;
     this.swayIntensity = 0.8;
     this.adsAmount = 0;
     this.triggerReleased = true;
@@ -577,6 +585,15 @@ export class WeaponSystem {
     return this.getSwayState();
   }
 
+  setSlideTiltIntensity(intensity = 0.75, reducedMotion = false) {
+    const numeric = Number(intensity);
+    this.slideTiltIntensity = reducedMotion === true
+      ? 0
+      : THREE.MathUtils.clamp(Number.isFinite(numeric) ? numeric : 0.75, 0, 1);
+    if (this.slideTiltIntensity <= 0) this.clearModelSlideTilt();
+    return this.getSlideTiltState();
+  }
+
   subscribeViewmodelMotion() {
     if (this.motionUnsubscribers.length > 0 || typeof this.eventBus?.on !== 'function') return;
     this.motionUnsubscribers.push(
@@ -635,6 +652,7 @@ export class WeaponSystem {
     this.modelSwayPitch = 0;
     this.tempLookDelta.set(0, 0);
     this.clearModelAirMotion({ snap: false });
+    this.clearModelSlideTilt({ snap: false });
     if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
       this.animateModel(0, { snap: true });
     }
@@ -643,6 +661,13 @@ export class WeaponSystem {
   clearModelAirMotion({ snap = true } = {}) {
     this.modelAirOffset = 0;
     this.modelAirVelocity = 0;
+    if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
+      this.animateModel(0, { snap: true });
+    }
+  }
+
+  clearModelSlideTilt({ snap = true } = {}) {
+    this.modelSlideTiltAmount = 0;
     if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
       this.animateModel(0, { snap: true });
     }
@@ -692,6 +717,34 @@ export class WeaponSystem {
       pitch: this.modelAirOffset * AIR_MOTION_PITCH_SCALE,
       intensity: this.swayIntensity,
       enabled: this.swayIntensity > 0,
+    };
+  }
+
+  getSlideTiltScale() {
+    const profile = this.currentConfig.viewModel?.sway;
+    const amount = THREE.MathUtils.clamp(Number(profile?.amount ?? 1), 0.75, 1.15);
+    const adsMultiplier = Math.max(
+      0.4,
+      THREE.MathUtils.clamp(Number(profile?.adsMultiplier ?? 0.4), 0.1, 1),
+    );
+    return this.modelSlideTiltAmount
+      * this.slideTiltIntensity
+      * this.swayIntensity
+      * amount
+      * THREE.MathUtils.lerp(1, adsMultiplier, this.adsAmount);
+  }
+
+  getSlideTiltState() {
+    const scale = this.getSlideTiltScale();
+    return {
+      amount: this.modelSlideTiltAmount,
+      positionX: -scale * SLIDE_TILT_POSITION_X,
+      positionY: -scale * SLIDE_TILT_POSITION_Y,
+      positionZ: scale * SLIDE_TILT_POSITION_Z,
+      yaw: -scale * SLIDE_TILT_YAW,
+      roll: -scale * SLIDE_TILT_ROLL,
+      intensity: this.slideTiltIntensity,
+      enabled: this.slideTiltIntensity > 0 && this.swayIntensity > 0,
     };
   }
 
@@ -846,6 +899,7 @@ export class WeaponSystem {
     this.player?.setAiming?.(this.adsAmount);
     this.updateModelSway(dt);
     this.updateModelAirMotion(dt);
+    this.updateModelSlideTilt(dt);
     this.fireBufferRemaining = Math.max(0, this.fireBufferRemaining - dt);
     const firePressedEdge = Boolean(input.wasPressed?.('fire'));
     if (!firePressedEdge) this.firePressConsumed = false;
@@ -930,6 +984,31 @@ export class WeaponSystem {
     }
   }
 
+  updateModelSlideTilt(dt) {
+    const delta = THREE.MathUtils.clamp(Number(dt) || 0, 0, 0.05);
+    if (delta <= 0) return this.modelSlideTiltAmount;
+    const enabled = this.slideTiltIntensity > 0 && this.swayIntensity > 0;
+    const target = enabled && this.player?.isSliding === true ? 1 : 0;
+    const recovery = THREE.MathUtils.clamp(
+      Number(this.currentConfig.viewModel?.sway?.recovery ?? 10),
+      4,
+      24,
+    );
+    const rate = target > this.modelSlideTiltAmount
+      ? THREE.MathUtils.clamp(recovery * 1.45, 10, 24)
+      : THREE.MathUtils.clamp(recovery, 6, 20);
+    this.modelSlideTiltAmount = THREE.MathUtils.damp(
+      this.modelSlideTiltAmount,
+      target,
+      rate,
+      delta,
+    );
+    if (Math.abs(this.modelSlideTiltAmount - target) < SLIDE_TILT_REST_EPSILON) {
+      this.modelSlideTiltAmount = target;
+    }
+    return this.modelSlideTiltAmount;
+  }
+
   animateModel(dt, { snap = false } = {}) {
     const model = this.currentModel;
     const config = this.currentConfig;
@@ -949,21 +1028,25 @@ export class WeaponSystem {
     );
     const poseAds = this.adsAmount * (1 - reloadArc);
     const bobScale = 1 - poseAds * 0.75;
+    const slideScale = this.getSlideTiltScale();
     this.tempModelPosition
       .copy(model.userData.basePosition)
       .lerp(model.userData.adsPosition, poseAds);
     this.tempModelPosition.x += (bob.x ?? 0) * bobScale;
     this.tempModelPosition.x -= this.modelSwayYaw * SWAY_POSITION_X;
+    this.tempModelPosition.x -= slideScale * SLIDE_TILT_POSITION_X;
     this.tempModelPosition.x += this.modelSideKick * 0.018;
     this.tempModelPosition.x += reloadArc * 0.11 + equipAmount * 0.13;
     this.tempModelPosition.y += (bob.y ?? 0) * bobScale
       + this.modelSwayPitch * SWAY_POSITION_Y
       + this.modelAirOffset
+      - slideScale * SLIDE_TILT_POSITION_Y
       - this.modelKick * 0.025
       - reloadArc * 0.18
       - equipAmount * 0.42;
     this.tempModelPosition.z += this.modelKick * 0.04
       - this.modelAirOffset * AIR_MOTION_POSITION_Z
+      + slideScale * SLIDE_TILT_POSITION_Z
       + reloadArc * 0.06
       + equipAmount * 0.08;
     model.position.lerp(this.tempModelPosition, snap ? 1 : 1 - Math.exp(-dt * 15));
@@ -975,9 +1058,11 @@ export class WeaponSystem {
     model.rotation.y = THREE.MathUtils.lerp(model.userData.baseYaw, 0, poseAds)
       + this.modelSwayYaw
       + this.modelSideKick * 0.035
+      - slideScale * SLIDE_TILT_YAW
       + reloadArc * 0.4
       + equipAmount * 0.24;
     model.rotation.z = -this.modelSwayYaw * SWAY_ROLL_SCALE
+      - slideScale * SLIDE_TILT_ROLL
       + this.modelRollKick * 0.045
       + reloadArc * 0.3
       + equipAmount * 0.2;
