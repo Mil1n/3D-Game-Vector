@@ -189,6 +189,7 @@ test('accessibility settings expose saved viewmodel sway intensity', () => {
 
   assert.match(markup, /Инерция оружия/);
   assert.match(markup, /type="range" min="0" max="1" step="0\.05" value="0\.55" data-setting="gameplay\.weaponSway"/);
+  assert.match(markup, /повороте, прыжке и приземлении/);
   assert.match(markup, /ADS ослабляет эффект/);
   assert.match(markup, />55%<\/output>/);
 });

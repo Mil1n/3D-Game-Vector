@@ -4,6 +4,7 @@ import * as THREE from 'three';
 
 import { WeaponSystem } from '../src/combat/WeaponSystem.js';
 import { WEAPON_CONFIGS, WEAPON_ORDER } from '../src/configs/weaponConfigs.js';
+import { EventBus } from '../src/core/EventBus.js';
 import { Game } from '../src/core/Game.js';
 import { GAME_STATES } from '../src/core/GameStateManager.js';
 
@@ -879,6 +880,168 @@ test('steady-state sway update reuses preallocated vectors', () => {
   assert.equal(weapons.tempLookDelta, lookTarget);
   assert.equal(weapons.tempViewBob, bobTarget);
   weapons.dispose();
+});
+
+test('jump, soft landing and hard landing create distinct bounded viewmodel air impulses', () => {
+  const sample = (event, payload) => {
+    const eventBus = new EventBus();
+    const player = {
+      getLookDelta: (target) => target.set(0, 0),
+      getViewBob: (target) => target.set(0, 0),
+      setAiming() {},
+    };
+    const weapons = createWeapons(player, { eventBus });
+    weapons.setEnabled(true);
+    weapons.setSwayIntensity(1);
+    const model = weapons.currentModel;
+    model.userData.equipAmount = 0;
+    model.position.copy(model.userData.basePosition);
+    model.rotation.set(0, model.userData.baseYaw, 0);
+    eventBus.emit(event, payload);
+    weapons.update(1 / 60, { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 });
+    const result = {
+      state: weapons.getAirMotionState(),
+      position: model.position.clone(),
+      base: model.userData.basePosition.clone(),
+    };
+    weapons.dispose();
+    return result;
+  };
+
+  const jump = sample('player:jumped', { speed: 7.25 });
+  const soft = sample('player:landed', { impact: 6, hard: false });
+  const hard = sample('player:landed', { impact: 15, hard: true });
+  for (const result of [jump, soft, hard]) {
+    assert.ok(result.state.positionY < 0, 'air inertia should pull the complete rig downward');
+    assert.ok(result.state.positionZ > 0, 'air inertia should lag the rig toward the camera');
+    assert.ok(result.state.pitch < 0, 'air inertia should pitch the rig downward');
+    assert.ok(result.position.y < result.base.y);
+    assert.ok(result.position.z > result.base.z);
+    assert.ok(result.state.positionY >= -0.085);
+    assert.ok(result.state.positionZ <= 0.085 * 0.46);
+    assert.ok(Math.abs(result.state.pitch) <= 0.085 * 0.62);
+  }
+  assert.ok(Math.abs(soft.state.offset) > Math.abs(jump.state.offset));
+  assert.ok(Math.abs(hard.state.offset) > Math.abs(soft.state.offset));
+
+  const eventBus = new EventBus();
+  const capped = createWeapons({
+    getLookDelta: (target) => target.set(0, 0),
+    getViewBob: (target) => target.set(0, 0),
+    setAiming() {},
+  }, { eventBus });
+  capped.setEnabled(true);
+  capped.setSwayIntensity(1);
+  for (let index = 0; index < 100; index += 1) {
+    eventBus.emit('player:landed', { impact: 1000, hard: true });
+    eventBus.emit('player:jumped', { speed: 1000 });
+    capped.updateModelAirMotion(1 / 60);
+  }
+  assert.ok(capped.getAirMotionState().offset >= -0.085);
+  assert.ok(Math.abs(capped.getAirMotionState().velocity) <= 2.4);
+  capped.dispose();
+});
+
+test('viewmodel air spring is deterministic across frame rates and returns without overshoot', () => {
+  const sample = (fps) => {
+    const eventBus = new EventBus();
+    const player = {
+      getLookDelta: (target) => target.set(0, 0),
+      getViewBob: (target) => target.set(0, 0),
+      setAiming() {},
+    };
+    const weapons = createWeapons(player, { eventBus });
+    weapons.setEnabled(true);
+    weapons.setSwayIntensity(1);
+    const model = weapons.currentModel;
+    model.userData.equipAmount = 0;
+    model.position.copy(model.userData.basePosition);
+    model.rotation.set(0, model.userData.baseYaw, 0);
+    const idle = { wasPressed: () => false, isDown: () => false, consumeWheel: () => 0 };
+    eventBus.emit('player:landed', { impact: 15, hard: true });
+    for (let frame = 0; frame < fps * 0.25; frame += 1) {
+      weapons.update(1 / fps, idle);
+      assert.ok(weapons.getAirMotionState().offset <= 0, 'critical return must not overshoot');
+    }
+    const quarterSecond = weapons.getAirMotionState();
+    for (let frame = fps * 0.25; frame < fps * 2; frame += 1) weapons.update(1 / fps, idle);
+    const result = {
+      quarterSecond,
+      settled: weapons.getAirMotionState(),
+      position: model.position.clone(),
+      base: model.userData.basePosition.clone(),
+    };
+    weapons.dispose();
+    return result;
+  };
+
+  const at60 = sample(60);
+  const at144 = sample(144);
+  assert.ok(Math.abs(at60.quarterSecond.offset - at144.quarterSecond.offset) < 1e-9);
+  assert.ok(Math.abs(at60.quarterSecond.velocity - at144.quarterSecond.velocity) < 1e-9);
+  assert.equal(at60.settled.offset, 0);
+  assert.equal(at60.settled.velocity, 0);
+  assert.equal(at144.settled.offset, 0);
+  assert.equal(at144.settled.velocity, 0);
+  assert.ok(at60.position.distanceTo(at60.base) < 0.001);
+  assert.ok(at144.position.distanceTo(at144.base) < 0.001);
+});
+
+test('air motion respects intensity, ADS, lifecycle clears and releases event listeners', () => {
+  const impulseAt = (intensity, { ads = false, reducedMotion = false } = {}) => {
+    const eventBus = new EventBus();
+    const weapons = createWeapons({
+      getLookDelta: (target) => target.set(0, 0),
+      getViewBob: (target) => target.set(0, 0),
+      setAiming() {},
+    }, { eventBus });
+    weapons.setEnabled(true);
+    weapons.setSwayIntensity(intensity, reducedMotion);
+    weapons.adsAmount = ads ? 1 : 0;
+    eventBus.emit('player:jumped', { speed: 7.25 });
+    return { eventBus, weapons, state: weapons.getAirMotionState() };
+  };
+
+  const full = impulseAt(1);
+  const partial = impulseAt(0.4);
+  const ads = impulseAt(1, { ads: true });
+  const reduced = impulseAt(1, { reducedMotion: true });
+  assert.ok(Math.abs(partial.state.velocity - full.state.velocity * 0.4) < 1e-12);
+  assert.ok(Math.abs(ads.state.velocity) < Math.abs(full.state.velocity));
+  assert.equal(reduced.state.enabled, false);
+  assert.equal(reduced.state.offset, 0);
+  assert.equal(reduced.state.velocity, 0);
+
+  assert.equal(full.eventBus.listenerCount('player:jumped'), 1);
+  assert.equal(full.eventBus.listenerCount('player:landed'), 1);
+  full.weapons.clearViewmodelMotion();
+  assert.equal(full.weapons.getAirMotionState().velocity, 0);
+  full.eventBus.emit('player:landed', { impact: 2, hard: true });
+  full.eventBus.emit('player:jumped', { speed: Number.POSITIVE_INFINITY });
+  assert.equal(full.weapons.getAirMotionState().velocity, 0, 'micro and invalid events must be ignored');
+  full.eventBus.emit('player:landed', { impact: 15, hard: true });
+  assert.notEqual(full.weapons.getAirMotionState().velocity, 0);
+  full.weapons.switchTo(1);
+  assert.equal(full.weapons.getAirMotionState().velocity, 0);
+  full.eventBus.emit('player:jumped', { speed: 7.25 });
+  full.weapons.setEnabled(false);
+  assert.equal(full.weapons.getAirMotionState().velocity, 0);
+  full.eventBus.emit('player:landed', { impact: 24, hard: true });
+  full.weapons.setEnabled(true);
+  assert.equal(full.weapons.getAirMotionState().velocity, 0, 'disabled events must not replay later');
+  full.weapons.dispose();
+  assert.equal(full.eventBus.listenerCount('player:jumped'), 0);
+  assert.equal(full.eventBus.listenerCount('player:landed'), 0);
+
+  partial.weapons.dispose();
+  ads.weapons.dispose();
+  reduced.weapons.dispose();
+});
+
+test('viewmodel air-motion update uses scalar state without constructor allocations', () => {
+  const source = WeaponSystem.prototype.updateModelAirMotion.toString();
+  assert.doesNotMatch(source, /\bnew\s+/);
+  assert.doesNotMatch(source, /(?:Vector2|Vector3|Quaternion)/);
 });
 
 test('all five weapons expose distinct recoil impulses in the intended weight order', () => {

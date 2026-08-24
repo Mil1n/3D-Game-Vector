@@ -90,7 +90,7 @@ test('damage events add a bounded impulse that scales with received damage', () 
   harness.controller.dispose();
 });
 
-test('landing events ignore soft contact and add a bounded impulse that scales with hard impact', () => {
+test('landing events keep soft contacts noise-free and add bounded shake for hard impact', () => {
   const harness = createHarness();
 
   harness.eventBus.emit('player:landed', { impact: 8.5, hard: false });
@@ -133,6 +133,57 @@ test('landing events ignore soft contact and add a bounded impulse that scales w
   harness.controller.dispose();
 });
 
+test('jump and soft landing add deterministic camera motion without shake trauma', () => {
+  const jump = createHarness();
+  jump.eventBus.emit('player:jumped', { speed: 7.25 });
+  assert.equal(jump.controller.getState().trauma, 0);
+  assert.ok(jump.controller.takeoffPitchKick < 0);
+  assert.ok(jump.controller.takeoffVerticalKick < 0);
+  jump.controller.update(FRAME);
+  assert.ok(jump.controller.getState().offset.pitch < 0);
+  assert.ok(jump.controller.getState().offset.y < 0);
+  jump.controller.dispose();
+
+  const soft = createHarness();
+  soft.eventBus.emit('player:landed', { impact: 6, hard: false });
+  assert.equal(soft.controller.getState().trauma, 0);
+  assert.ok(soft.controller.landingPitchKick < 0);
+  assert.ok(soft.controller.landingVerticalKick < 0);
+  soft.controller.update(FRAME);
+  assert.ok(soft.controller.getState().offset.pitch < 0);
+  assert.ok(soft.controller.getState().offset.y < 0);
+
+  const at60 = createHarness();
+  const at120 = createHarness();
+  at60.eventBus.emit('player:landed', { impact: 6, hard: false });
+  at120.eventBus.emit('player:landed', { impact: 6, hard: false });
+  for (let frame = 0; frame < 60; frame += 1) {
+    at60.controller.restoreCamera();
+    at60.controller.update(1 / 60);
+  }
+  for (let frame = 0; frame < 120; frame += 1) {
+    at120.controller.restoreCamera();
+    at120.controller.update(1 / 120);
+  }
+  closeTo(at60.controller.landingPitchKick, at120.controller.landingPitchKick, 1e-9);
+  closeTo(at60.controller.landingVerticalKick, at120.controller.landingVerticalKick, 1e-9);
+  assert.equal(at60.controller.getState().trauma, 0);
+  assert.equal(at120.controller.getState().trauma, 0);
+
+  const hard = createHarness();
+  hard.eventBus.emit('player:landed', { impact: 15, hard: true });
+  assert.ok(hard.controller.getState().trauma > 0, 'hard landings keep their additional shake layer');
+  assert.ok(
+    Math.abs(hard.controller.landingPitchKick) > Math.abs(soft.controller.landingPitchKick),
+    'deterministic landing dip should scale with impact',
+  );
+
+  soft.controller.dispose();
+  at60.controller.dispose();
+  at120.controller.dispose();
+  hard.controller.dispose();
+});
+
 test('cameraShake intensity and reducedMotion disable hard-landing impulses', () => {
   const disabled = createHarness({
     settings: {
@@ -141,9 +192,12 @@ test('cameraShake intensity and reducedMotion disable hard-landing impulses', ()
     },
   });
   disabled.eventBus.emit('player:landed', { impact: 30, hard: true });
+  disabled.eventBus.emit('player:jumped', { speed: 7.25 });
   assert.equal(disabled.controller.getState().trauma, 0);
   assert.equal(disabled.controller.landingPitchKick, 0);
   assert.equal(disabled.controller.landingVerticalKick, 0);
+  assert.equal(disabled.controller.takeoffPitchKick, 0);
+  assert.equal(disabled.controller.takeoffVerticalKick, 0);
   disabled.controller.applySettings(ENABLED_SETTINGS);
   disabled.eventBus.emit('player:damaged', { amount: 1 });
   disabled.controller.update(FRAME);
@@ -160,9 +214,12 @@ test('cameraShake intensity and reducedMotion disable hard-landing impulses', ()
     },
   });
   reducedMotion.eventBus.emit('player:landed', { impact: 30, hard: true });
+  reducedMotion.eventBus.emit('player:jumped', { speed: 7.25 });
   assert.equal(reducedMotion.controller.getState().trauma, 0);
   assert.equal(reducedMotion.controller.landingPitchKick, 0);
   assert.equal(reducedMotion.controller.landingVerticalKick, 0);
+  assert.equal(reducedMotion.controller.takeoffPitchKick, 0);
+  assert.equal(reducedMotion.controller.takeoffVerticalKick, 0);
   reducedMotion.controller.dispose();
 });
 
@@ -304,6 +361,7 @@ test('reset and dispose restore the camera and release all event listeners', () 
   const base = snapshotCamera(harness.camera);
   assert.equal(harness.eventBus.listenerCount('player:damaged'), 1);
   assert.equal(harness.eventBus.listenerCount('effects:explosion'), 1);
+  assert.equal(harness.eventBus.listenerCount('player:jumped'), 1);
   assert.equal(harness.eventBus.listenerCount('player:landed'), 1);
 
   harness.controller.impulse(1);
@@ -320,6 +378,7 @@ test('reset and dispose restore the camera and release all event listeners', () 
   assertCameraTransform(harness.camera, base);
   assert.equal(harness.eventBus.listenerCount('player:damaged'), 0);
   assert.equal(harness.eventBus.listenerCount('effects:explosion'), 0);
+  assert.equal(harness.eventBus.listenerCount('player:jumped'), 0);
   assert.equal(harness.eventBus.listenerCount('player:landed'), 0);
 
   const stateAfterDispose = harness.controller.getState();

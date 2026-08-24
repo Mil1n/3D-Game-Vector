@@ -13,6 +13,14 @@ const SWAY_POSITION_X = 0.38;
 const SWAY_POSITION_Y = 0.28;
 const SWAY_ROLL_SCALE = 0.34;
 const SWAY_REST_EPSILON = 0.00001;
+const MIN_AIR_MOTION_LANDING_IMPACT = 2.5;
+const MAX_AIR_MOTION_LANDING_IMPACT = 24;
+const MAX_AIR_MOTION_VELOCITY = 2.4;
+const MIN_AIR_MOTION_OFFSET = -0.085;
+const MAX_AIR_MOTION_OFFSET = 0.02;
+const AIR_MOTION_POSITION_Z = 0.46;
+const AIR_MOTION_PITCH_SCALE = 0.62;
+const AIR_MOTION_REST_EPSILON = 0.0001;
 
 function hitStopValue(profile, key) {
   const value = Number(profile?.[key]);
@@ -449,6 +457,8 @@ export class WeaponSystem {
     this.recoilIntensity = 1;
     this.modelSwayYaw = 0;
     this.modelSwayPitch = 0;
+    this.modelAirOffset = 0;
+    this.modelAirVelocity = 0;
     this.swayIntensity = 0.8;
     this.adsAmount = 0;
     this.triggerReleased = true;
@@ -471,6 +481,7 @@ export class WeaponSystem {
     this.tempModelPosition = new THREE.Vector3();
     this.tempLookDelta = new THREE.Vector2();
     this.tempViewBob = new THREE.Vector2();
+    this.motionUnsubscribers = [];
 
     for (const id of this.weaponOrder) {
       const config = resolveConfig(id);
@@ -481,6 +492,7 @@ export class WeaponSystem {
       this.models.set(id, model);
     }
     this.currentModel.visible = this.enabled;
+    this.subscribeViewmodelMotion();
   }
 
   defaultModifiers() {
@@ -565,6 +577,50 @@ export class WeaponSystem {
     return this.getSwayState();
   }
 
+  subscribeViewmodelMotion() {
+    if (this.motionUnsubscribers.length > 0 || typeof this.eventBus?.on !== 'function') return;
+    this.motionUnsubscribers.push(
+      this.eventBus.on('player:jumped', (event = {}) => this.onPlayerJumped(event)),
+      this.eventBus.on('player:landed', (event = {}) => this.onPlayerLanded(event)),
+    );
+  }
+
+  addAirMotionImpulse(strength) {
+    if (this.disposed || !this.enabled || this.swayIntensity <= 0) return false;
+    const numeric = Number(strength);
+    if (!Number.isFinite(numeric) || numeric <= 0) return false;
+    const profile = this.currentConfig.viewModel?.sway;
+    const amount = THREE.MathUtils.clamp(Number(profile?.amount ?? 1), 0.25, 1.6);
+    const adsMultiplier = THREE.MathUtils.clamp(Number(profile?.adsMultiplier ?? 0.28), 0.1, 1);
+    const scale = amount
+      * this.swayIntensity
+      * THREE.MathUtils.lerp(1, adsMultiplier, this.adsAmount);
+    this.modelAirVelocity = THREE.MathUtils.clamp(
+      this.modelAirVelocity - numeric * scale,
+      -MAX_AIR_MOTION_VELOCITY,
+      MAX_AIR_MOTION_VELOCITY,
+    );
+    return true;
+  }
+
+  onPlayerJumped({ speed } = {}) {
+    const numeric = Number(speed);
+    if (!Number.isFinite(numeric)) return false;
+    const jumpSpeed = THREE.MathUtils.clamp(numeric, 0, 12);
+    if (jumpSpeed <= 0) return false;
+    return this.addAirMotionImpulse(0.38 * jumpSpeed / 7.25);
+  }
+
+  onPlayerLanded({ impact } = {}) {
+    const numeric = Number(impact);
+    if (!Number.isFinite(numeric)) return false;
+    const landingImpact = THREE.MathUtils.clamp(numeric, 0, MAX_AIR_MOTION_LANDING_IMPACT);
+    if (landingImpact <= MIN_AIR_MOTION_LANDING_IMPACT) return false;
+    const severity = (landingImpact - MIN_AIR_MOTION_LANDING_IMPACT)
+      / (MAX_AIR_MOTION_LANDING_IMPACT - MIN_AIR_MOTION_LANDING_IMPACT);
+    return this.addAirMotionImpulse(0.34 + severity * 1.5);
+  }
+
   clearModelRecoil({ snap = true } = {}) {
     this.modelKick = 0;
     this.modelSideKick = 0;
@@ -578,6 +634,15 @@ export class WeaponSystem {
     this.modelSwayYaw = 0;
     this.modelSwayPitch = 0;
     this.tempLookDelta.set(0, 0);
+    this.clearModelAirMotion({ snap: false });
+    if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
+      this.animateModel(0, { snap: true });
+    }
+  }
+
+  clearModelAirMotion({ snap = true } = {}) {
+    this.modelAirOffset = 0;
+    this.modelAirVelocity = 0;
     if (snap && !this.disposed && this.models.size > 0 && this.currentModel) {
       this.animateModel(0, { snap: true });
     }
@@ -613,6 +678,18 @@ export class WeaponSystem {
       pitch: this.modelSwayPitch,
       yaw: this.modelSwayYaw,
       roll: -this.modelSwayYaw * SWAY_ROLL_SCALE,
+      intensity: this.swayIntensity,
+      enabled: this.swayIntensity > 0,
+    };
+  }
+
+  getAirMotionState() {
+    return {
+      offset: this.modelAirOffset,
+      velocity: this.modelAirVelocity,
+      positionY: this.modelAirOffset,
+      positionZ: -this.modelAirOffset * AIR_MOTION_POSITION_Z,
+      pitch: this.modelAirOffset * AIR_MOTION_PITCH_SCALE,
       intensity: this.swayIntensity,
       enabled: this.swayIntensity > 0,
     };
@@ -768,6 +845,7 @@ export class WeaponSystem {
     this.adsAmount = THREE.MathUtils.damp(this.adsAmount, aiming ? 1 : 0, 14, dt);
     this.player?.setAiming?.(this.adsAmount);
     this.updateModelSway(dt);
+    this.updateModelAirMotion(dt);
     this.fireBufferRemaining = Math.max(0, this.fireBufferRemaining - dt);
     const firePressedEdge = Boolean(input.wasPressed?.('fire'));
     if (!firePressedEdge) this.firePressConsumed = false;
@@ -821,6 +899,37 @@ export class WeaponSystem {
     if (Math.abs(this.modelSwayPitch) < SWAY_REST_EPSILON && pitchDelta === 0) this.modelSwayPitch = 0;
   }
 
+  updateModelAirMotion(dt) {
+    const delta = THREE.MathUtils.clamp(Number(dt) || 0, 0, 0.05);
+    if (delta <= 0 || (this.modelAirOffset === 0 && this.modelAirVelocity === 0)) return;
+    if (this.swayIntensity <= 0) {
+      this.clearModelAirMotion({ snap: false });
+      return;
+    }
+    const recovery = THREE.MathUtils.clamp(
+      Number(this.currentConfig.viewModel?.sway?.recovery ?? 10),
+      4,
+      24,
+    );
+    const damping = Math.exp(-recovery * delta);
+    const springVelocity = this.modelAirVelocity + recovery * this.modelAirOffset;
+    this.modelAirOffset = THREE.MathUtils.clamp(
+      (this.modelAirOffset + springVelocity * delta) * damping,
+      MIN_AIR_MOTION_OFFSET,
+      MAX_AIR_MOTION_OFFSET,
+    );
+    this.modelAirVelocity = THREE.MathUtils.clamp(
+      (this.modelAirVelocity - recovery * springVelocity * delta) * damping,
+      -MAX_AIR_MOTION_VELOCITY,
+      MAX_AIR_MOTION_VELOCITY,
+    );
+    if (Math.abs(this.modelAirOffset) < AIR_MOTION_REST_EPSILON
+      && Math.abs(this.modelAirVelocity) < AIR_MOTION_REST_EPSILON) {
+      this.modelAirOffset = 0;
+      this.modelAirVelocity = 0;
+    }
+  }
+
   animateModel(dt, { snap = false } = {}) {
     const model = this.currentModel;
     const config = this.currentConfig;
@@ -849,12 +958,20 @@ export class WeaponSystem {
     this.tempModelPosition.x += reloadArc * 0.11 + equipAmount * 0.13;
     this.tempModelPosition.y += (bob.y ?? 0) * bobScale
       + this.modelSwayPitch * SWAY_POSITION_Y
+      + this.modelAirOffset
       - this.modelKick * 0.025
       - reloadArc * 0.18
       - equipAmount * 0.42;
-    this.tempModelPosition.z += this.modelKick * 0.04 + reloadArc * 0.06 + equipAmount * 0.08;
+    this.tempModelPosition.z += this.modelKick * 0.04
+      - this.modelAirOffset * AIR_MOTION_POSITION_Z
+      + reloadArc * 0.06
+      + equipAmount * 0.08;
     model.position.lerp(this.tempModelPosition, snap ? 1 : 1 - Math.exp(-dt * 15));
-    model.rotation.x = this.modelSwayPitch - this.modelKick * 0.055 + reloadArc * 0.3 + equipAmount * 0.16;
+    model.rotation.x = this.modelSwayPitch
+      + this.modelAirOffset * AIR_MOTION_PITCH_SCALE
+      - this.modelKick * 0.055
+      + reloadArc * 0.3
+      + equipAmount * 0.16;
     model.rotation.y = THREE.MathUtils.lerp(model.userData.baseYaw, 0, poseAds)
       + this.modelSwayYaw
       + this.modelSideKick * 0.035
@@ -1286,6 +1403,8 @@ export class WeaponSystem {
   dispose() {
     if (this.disposed) return;
     this.clearViewmodelMotion({ snap: false });
+    for (const unsubscribe of this.motionUnsubscribers) unsubscribe?.();
+    this.motionUnsubscribers.length = 0;
     const geometries = new Set();
     const materials = new Set();
     for (const model of this.models.values()) {

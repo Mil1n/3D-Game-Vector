@@ -671,12 +671,12 @@ export class UIManager {
     if (tab === 'accessibility') {
       return `${this._settingsHeader('ACCESS // CLARITY', 'Доступность', 'Настройте движение и визуальные сигналы под свои потребности.')}
         <div class="settings-groups"><section class="settings-group"><h3>Движение и камера</h3>
-          ${this._toggleSetting('accessibility.reducedMotion', 'Снижение движения', 'Отключает декоративные анимации и сокращает переходы.', value('accessibility.reducedMotion'))}
+          ${this._toggleSetting('accessibility.reducedMotion', 'Снижение движения', 'Отключает декоративную инерцию камеры и оружия и сокращает переходы.', value('accessibility.reducedMotion'))}
           ${this._rangeSetting('accessibility.uiScale', 'Размер интерфейса', 'Масштаб боевого HUD и контекстных подсказок.', value('accessibility.uiScale'), 0.8, 1.3, 0.05, 'ratio')}
           ${this._rangeSetting('gameplay.headBob', 'Покачивание камеры', 'Амплитуда камеры при движении.', value('gameplay.headBob'), 0, 1, 0.05, 'percent')}
-          ${this._rangeSetting('gameplay.cameraShake', 'Тряска камеры', 'Сила затухающих импульсов от урона, близких взрывов и жёстких приземлений.', value('gameplay.cameraShake'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('gameplay.cameraShake', 'Тряска камеры', 'Сила отклика на прыжок и приземление, урон и близкие взрывы.', value('gameplay.cameraShake'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.weaponRecoil', 'Оружейная отдача', 'Сила управляемого отклонения прицела и движения модели оружия.', value('gameplay.weaponRecoil'), 0, 1, 0.05, 'percent')}
-          ${this._rangeSetting('gameplay.weaponSway', 'Инерция оружия', 'Насколько оружие отстаёт от резкого поворота камеры. ADS ослабляет эффект, а снижение движения полностью отключает.', value('gameplay.weaponSway'), 0, 1, 0.05, 'percent')}
+          ${this._rangeSetting('gameplay.weaponSway', 'Инерция оружия', 'Отставание оружия при повороте, прыжке и приземлении. ADS ослабляет эффект, а снижение движения полностью отключает.', value('gameplay.weaponSway'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.hitStop', 'Стоп-кадр попаданий', 'Коротко останавливает симуляцию при мощных попаданиях, критах и добиваниях.', value('gameplay.hitStop'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('gameplay.enemyHitReaction', 'Реакция противников', 'Сила направленного отклонения корпуса при попадании. Снижение движения полностью отключает эффект.', value('gameplay.enemyHitReaction'), 0, 1, 0.05, 'percent')}
           ${this._rangeSetting('accessibility.screenFlash', 'Экранные вспышки', 'Яркость вспышек и эффектов попадания.', value('accessibility.screenFlash'), 0, 1, 0.05, 'percent')}

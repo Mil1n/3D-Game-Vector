@@ -9,9 +9,14 @@ const MAX_POSITION_X = 0.026;
 const MAX_POSITION_Y = 0.032;
 const MAX_LANDING_PITCH = 0.018;
 const MAX_LANDING_POSITION_Y = 0.018;
+const MAX_TAKEOFF_PITCH = 0.01;
+const MAX_TAKEOFF_POSITION_Y = 0.009;
 const LANDING_KICK_DECAY = 8;
+const TAKEOFF_KICK_DECAY = 10;
 const REST_EPSILON = 0.0005;
 const HARD_LANDING_IMPACT = 9;
+const MIN_PRESENTATION_LANDING_IMPACT = 2.5;
+const MAX_PRESENTATION_LANDING_IMPACT = 24;
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -45,6 +50,8 @@ export class CameraShakeController {
     this.rollBias = 0;
     this.landingPitchKick = 0;
     this.landingVerticalKick = 0;
+    this.takeoffPitchKick = 0;
+    this.takeoffVerticalKick = 0;
     this.offsetPitch = 0;
     this.offsetYaw = 0;
     this.offsetRoll = 0;
@@ -103,7 +110,11 @@ export class CameraShakeController {
   }
 
   update(deltaSeconds) {
-    if (this.disposed || !this.enabled || this.trauma <= 0) return this.trauma;
+    const movementKickActive = Math.abs(this.landingPitchKick) >= REST_EPSILON
+      || Math.abs(this.landingVerticalKick) >= REST_EPSILON
+      || Math.abs(this.takeoffPitchKick) >= REST_EPSILON
+      || Math.abs(this.takeoffVerticalKick) >= REST_EPSILON;
+    if (this.disposed || !this.enabled || (this.trauma <= 0 && !movementKickActive)) return this.trauma;
     const rawDelta = Number(deltaSeconds);
     const dt = Number.isFinite(rawDelta) ? clamp(rawDelta, 0, MAX_DELTA) : 0;
     if (dt <= 0) return this.trauma;
@@ -115,11 +126,15 @@ export class CameraShakeController {
     const waveC = Math.sin(this.phase * 2.37 + 1.91);
     const landingPitch = this.landingPitchKick * MAX_LANDING_PITCH * this.intensity;
     const landingY = this.landingVerticalKick * MAX_LANDING_POSITION_Y * this.intensity;
-    this.offsetPitch = (waveA * 0.55 + this.pitchBias) * MAX_PITCH * envelope + landingPitch;
+    const takeoffPitch = this.takeoffPitchKick * MAX_TAKEOFF_PITCH * this.intensity;
+    const takeoffY = this.takeoffVerticalKick * MAX_TAKEOFF_POSITION_Y * this.intensity;
+    this.offsetPitch = (waveA * 0.55 + this.pitchBias) * MAX_PITCH * envelope
+      + landingPitch
+      + takeoffPitch;
     this.offsetYaw = (waveB * 0.65 + this.yawBias) * MAX_YAW * envelope;
     this.offsetRoll = (waveC * 0.7 + this.rollBias) * MAX_ROLL * envelope;
     this.offsetX = waveB * MAX_POSITION_X * envelope;
-    this.offsetY = waveA * MAX_POSITION_Y * envelope + landingY;
+    this.offsetY = waveA * MAX_POSITION_Y * envelope + landingY + takeoffY;
 
     this.camera.position.x += this.offsetX;
     this.camera.position.y += this.offsetY;
@@ -137,11 +152,19 @@ export class CameraShakeController {
     const landingDamping = Math.exp(-LANDING_KICK_DECAY * dt);
     this.landingPitchKick *= landingDamping;
     this.landingVerticalKick *= landingDamping;
+    const takeoffDamping = Math.exp(-TAKEOFF_KICK_DECAY * dt);
+    this.takeoffPitchKick *= takeoffDamping;
+    this.takeoffVerticalKick *= takeoffDamping;
     if (this.trauma < REST_EPSILON) {
       this.trauma = 0;
-      this.landingPitchKick = 0;
-      this.landingVerticalKick = 0;
+      this.pitchBias = 0;
+      this.yawBias = 0;
+      this.rollBias = 0;
     }
+    if (Math.abs(this.landingPitchKick) < REST_EPSILON) this.landingPitchKick = 0;
+    if (Math.abs(this.landingVerticalKick) < REST_EPSILON) this.landingVerticalKick = 0;
+    if (Math.abs(this.takeoffPitchKick) < REST_EPSILON) this.takeoffPitchKick = 0;
+    if (Math.abs(this.takeoffVerticalKick) < REST_EPSILON) this.takeoffVerticalKick = 0;
     return this.trauma;
   }
 
@@ -154,6 +177,8 @@ export class CameraShakeController {
     this.rollBias = 0;
     this.landingPitchKick = 0;
     this.landingVerticalKick = 0;
+    this.takeoffPitchKick = 0;
+    this.takeoffVerticalKick = 0;
     this._clearOffset();
     return this.getState();
   }
@@ -186,6 +211,7 @@ export class CameraShakeController {
     this.unsubscribers.push(
       this.eventBus.on('player:damaged', (event = {}) => this._onPlayerDamaged(event)),
       this.eventBus.on('effects:explosion', (event = {}) => this._onExplosion(event)),
+      this.eventBus.on('player:jumped', (event = {}) => this._onPlayerJumped(event)),
       this.eventBus.on('player:landed', (event = {}) => this._onPlayerLanded(event)),
     );
   }
@@ -221,14 +247,33 @@ export class CameraShakeController {
   }
 
   _onPlayerLanded(event) {
-    const impact = clamp(finite(event.impact), 0, 30);
+    if (this.disposed || !this.enabled) return;
+    const impact = clamp(finite(event.impact), 0, MAX_PRESENTATION_LANDING_IMPACT);
+    if (impact > MIN_PRESENTATION_LANDING_IMPACT) {
+      const presentationSeverity = clamp(
+        (impact - MIN_PRESENTATION_LANDING_IMPACT)
+          / (MAX_PRESENTATION_LANDING_IMPACT - MIN_PRESENTATION_LANDING_IMPACT),
+        0,
+        1,
+      );
+      const presentationKick = 0.16 + presentationSeverity * 0.84;
+      this.landingPitchKick = clamp(this.landingPitchKick - presentationKick, -1, 0);
+      this.landingVerticalKick = clamp(this.landingVerticalKick - presentationKick, -1, 0);
+    }
     if (impact <= HARD_LANDING_IMPACT) return;
     const severity = clamp((impact - HARD_LANDING_IMPACT) / 11, 0, 1);
     const strength = 0.3 + severity * 0.48;
     if (!this.impulse(strength)) return;
-    const landingKick = 0.35 + severity * 0.65;
-    this.landingPitchKick = clamp(this.landingPitchKick - landingKick, -1, 0);
-    this.landingVerticalKick = clamp(this.landingVerticalKick - landingKick, -1, 0);
+  }
+
+  _onPlayerJumped(event) {
+    if (this.disposed || !this.enabled) return;
+    const speed = clamp(finite(event.speed), 0, 12);
+    if (speed <= 0) return;
+    const severity = clamp(speed / 7.25, 0, 1.5);
+    const takeoffKick = clamp(0.14 + severity * 0.14, 0, 0.38);
+    this.takeoffPitchKick = clamp(this.takeoffPitchKick - takeoffKick, -0.7, 0);
+    this.takeoffVerticalKick = clamp(this.takeoffVerticalKick - takeoffKick, -0.7, 0);
   }
 
   _clearOffset() {
