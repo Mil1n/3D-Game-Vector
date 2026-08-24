@@ -61,12 +61,13 @@ test('successful hits emit combat activity for Momentum decay tracking', () => {
 
 test('one scatter shot aggregates all pellets into one semantic combat impact', () => {
   const events = [];
+  const enemyHitSounds = [];
   const enemy = { type: 'trooper' };
   const weapons = new WeaponSystem({
     camera: new THREE.PerspectiveCamera(),
     scene: new THREE.Scene(),
     eventBus: { emit: (name, payload) => events.push({ name, payload }) },
-    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect: (id) => enemyHitSounds.push(id) },
     effects: noopEffects,
     arena: { raycastWorld: () => null },
     enemySystem: {
@@ -91,9 +92,53 @@ test('one scatter shot aggregates all pellets into one semantic combat impact', 
   assert.equal(impacts[0].payload.weapon, 'scatter');
   assert.equal(impacts[0].payload.hitCount, WEAPON_CONFIGS.scatter.pellets);
   assert.equal(impacts[0].payload.damage, WEAPON_CONFIGS.scatter.damage * WEAPON_CONFIGS.scatter.pellets);
+  assert.equal(impacts[0].payload.headshot, false);
+  assert.equal(impacts[0].payload.killed, false);
   assert.equal(impacts[0].payload.hitStop, WEAPON_CONFIGS.scatter.hitStop.body);
   assert.equal(impacts[0].payload.shotId, 1);
+  assert.deepEqual(enemyHitSounds, [], 'per-pellet enemy sounds must be replaced by one aggregate confirmation');
   weapons.dispose();
+});
+
+test('direct body, headshot and lethal headshot impacts preserve their aggregate flags', () => {
+  const cases = [
+    { zone: 'body', killed: false, headshot: false },
+    { zone: 'head', killed: false, headshot: true },
+    { zone: 'head', killed: true, headshot: true },
+  ];
+
+  for (const expected of cases) {
+    const events = [];
+    const enemy = { type: 'trooper' };
+    const weapons = new WeaponSystem({
+      camera: new THREE.PerspectiveCamera(),
+      scene: new THREE.Scene(),
+      eventBus: { emit: (name, payload) => events.push({ name, payload }) },
+      audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+      effects: noopEffects,
+      arena: { raycastWorld: () => null },
+      enemySystem: {
+        raycast: (_origin, _direction, distance) => ({
+          enemy,
+          distance: Math.min(2, distance),
+          point: new THREE.Vector3(0, 0, -2),
+          zone: expected.zone,
+        }),
+        damage: (_target, amount) => ({ applied: amount, killed: expected.killed }),
+      },
+      random: () => 0.5,
+    });
+    weapons.cooldown = 0;
+
+    assert.equal(weapons.tryFire(false), true);
+    const impacts = events.filter(({ name }) => name === 'combat:impact');
+    assert.equal(impacts.length, 1);
+    assert.equal(impacts[0].payload.shotId, 1);
+    assert.equal(impacts[0].payload.headshot, expected.headshot);
+    assert.equal(impacts[0].payload.killed, expected.killed);
+    assert.equal(impacts[0].payload.hitCount, 1);
+    weapons.dispose();
+  }
 });
 
 test('misses emit no combat impact while a lethal Nova wall blast emits exactly one promoted impact', () => {
@@ -290,13 +335,14 @@ test('Nova direct and blast damage share one unique impact ID per shot', () => {
 
 test('a rail ricochet is folded into the same impact and promotes a secondary kill', () => {
   const events = [];
+  const enemyHitSounds = [];
   const sourceEnemy = { type: 'trooper', dead: false, root: { position: new THREE.Vector3(0, 0, -3) } };
   const targetEnemy = { type: 'hunter', dead: false, root: { position: new THREE.Vector3(2, 0, -4) } };
   const weapons = new WeaponSystem({
     camera: new THREE.PerspectiveCamera(),
     scene: new THREE.Scene(),
     eventBus: { emit: (name, payload) => events.push({ name, payload }) },
-    audioManager: { playUI() {}, playWeapon() {}, playEffect() {} },
+    audioManager: { playUI() {}, playWeapon() {}, playEffect: (id) => enemyHitSounds.push(id) },
     effects: noopEffects,
     arena: { raycastWorld: () => null, hasLineOfSight: () => true },
     enemySystem: {
@@ -322,6 +368,7 @@ test('a rail ricochet is folded into the same impact and promotes a secondary ki
   assert.equal(impacts[0].payload.killed, true);
   assert.ok(impacts[0].payload.damage > WEAPON_CONFIGS.rail.damage);
   assert.equal(impacts[0].payload.hitStop, WEAPON_CONFIGS.rail.hitStop.kill);
+  assert.deepEqual(enemyHitSounds, [], 'ricochets must fold into the aggregate confirmation instead of playing another hit cue');
   weapons.dispose();
 });
 

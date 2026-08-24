@@ -43,6 +43,12 @@ const TUTORIAL_STEPS = [
   ['ПРОТОКОЛ // 05', 'Сдвиг реальности', 'Магентовая метка обозначает перестраиваемые секции. До Сдвига займите безопасный маршрут.', []],
 ];
 
+const HITMARKER_PROFILES = Object.freeze({
+  body: Object.freeze({ duration: 110, label: '', strength: 1 }),
+  headshot: Object.freeze({ duration: 165, label: 'ТОЧНО', strength: 2 }),
+  kill: Object.freeze({ duration: 225, label: 'ЛИКВ', strength: 3 }),
+});
+
 const NUMBER_FORMAT = new Intl.NumberFormat('ru-RU');
 const clamp = (value, min = 0, max = 1) => {
   const number = Number(value);
@@ -560,14 +566,26 @@ export class UIManager {
 
   setHitmarker(hit = 'body') {
     this._ensureInit();
-    const data = typeof hit === 'object' ? hit : { type: hit };
-    const type = String(data.type ?? (data.headshot ? 'headshot' : 'body'));
+    const data = hit && typeof hit === 'object' ? hit : { type: hit };
+    const requested = String(data.type ?? '').toLowerCase();
+    const resolved = data.killed
+      ? 'kill'
+      : data.headshot || data.critical
+        ? 'headshot'
+        : requested;
+    const type = Object.hasOwn(HITMARKER_PROFILES, resolved) ? resolved : 'body';
+    const profile = HITMARKER_PROFILES[type];
+    const duration = clamp(data.duration ?? profile.duration, 60, 500);
+    const label = data.label ?? (data.critical && !data.headshot && type === 'headshot' ? 'КРИТ' : profile.label);
     window.clearTimeout(this.hitmarkerTimer);
     this.hitmarker.dataset.type = type;
+    this.hitmarker.dataset.label = String(label);
+    this.hitmarker.dataset.strength = String(profile.strength);
+    this.hitmarker.style.setProperty('--hitmarker-duration', `${duration}ms`);
     this.hitmarker.classList.remove('is-active');
     void this.hitmarker.offsetWidth;
     this.hitmarker.classList.add('is-active');
-    this.hitmarkerTimer = window.setTimeout(() => this.hitmarker?.classList.remove('is-active'), clamp(data.duration ?? 130, 60, 500));
+    this.hitmarkerTimer = window.setTimeout(() => this.hitmarker?.classList.remove('is-active'), duration);
   }
 
   dispose() {

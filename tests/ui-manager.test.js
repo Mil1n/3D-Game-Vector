@@ -92,6 +92,71 @@ test('HUD shell exposes Momentum, Overdrive and the default activation key', () 
   assert.match(markup, /overdrive-screen-effect/);
 });
 
+test('tiered hitmarkers prioritize kills, expose distinct profiles and safely retrigger', (t) => {
+  const previousWindow = globalThis.window;
+  const cleared = [];
+  const scheduled = [];
+  let nextTimer = 1;
+  globalThis.window = {
+    clearTimeout: (timer) => cleared.push(timer),
+    setTimeout(callback, duration) {
+      const timer = nextTimer;
+      nextTimer += 1;
+      scheduled.push({ timer, callback, duration });
+      return timer;
+    },
+  };
+  t.after(() => {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  });
+
+  const classes = new Set();
+  const style = new Map();
+  const ui = Object.create(UIManager.prototype);
+  ui._ensureInit = () => {};
+  ui.hitmarkerTimer = 77;
+  ui.hitmarker = {
+    dataset: {},
+    offsetWidth: 26,
+    style: { setProperty: (name, value) => style.set(name, value) },
+    classList: {
+      add: (...names) => names.forEach((name) => classes.add(name)),
+      remove: (...names) => names.forEach((name) => classes.delete(name)),
+    },
+  };
+
+  ui.setHitmarker(null);
+  assert.equal(ui.hitmarker.dataset.type, 'body');
+  assert.equal(ui.hitmarker.dataset.strength, '1');
+  assert.equal(style.get('--hitmarker-duration'), '110ms');
+  assert.equal(scheduled.at(-1).duration, 110);
+
+  ui.setHitmarker({ critical: true });
+  assert.equal(ui.hitmarker.dataset.type, 'headshot');
+  assert.equal(ui.hitmarker.dataset.label, 'КРИТ');
+  assert.equal(ui.hitmarker.dataset.strength, '2');
+  assert.equal(scheduled.at(-1).duration, 165);
+
+  ui.setHitmarker({ type: 'headshot', headshot: true, killed: true });
+  assert.equal(ui.hitmarker.dataset.type, 'kill');
+  assert.equal(ui.hitmarker.dataset.label, 'ЛИКВ');
+  assert.equal(ui.hitmarker.dataset.strength, '3');
+  assert.equal(scheduled.at(-1).duration, 225);
+
+  ui.setHitmarker({ type: 'unsupported', duration: 9999 });
+  assert.equal(ui.hitmarker.dataset.type, 'body');
+  assert.equal(scheduled.at(-1).duration, 500);
+  assert.equal(classes.has('is-active'), true);
+  assert.deepEqual(cleared, [77, 1, 2, 3]);
+  scheduled.at(-1).callback();
+  assert.equal(classes.has('is-active'), false);
+
+  const shell = ui._shellMarkup();
+  assert.equal((shell.match(/data-ui-hitmarker/g) ?? []).length, 1);
+  assert.match(shell, /data-ui-hitmarker data-type="body" aria-hidden="true"/);
+});
+
 test('Momentum and Overdrive controls are listed with a remappable KeyF default', () => {
   const ui = Object.create(UIManager.prototype);
   ui.settings = {};

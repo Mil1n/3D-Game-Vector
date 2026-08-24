@@ -1016,7 +1016,6 @@ export class WeaponSystem {
         hit.zone === 'head' ? 0xffdc78 : config.color,
         hit.zone === 'head' ? Math.max(12, config.vfx?.impactCount ?? 0) : (config.vfx?.impactCount ?? 6),
       );
-      this.audio?.playEffect?.(hit.zone === 'head' ? 'headshot' : 'hit', { position: point });
       this.eventBus?.emit?.('combat:hit', {
         shotId,
         weapon: config.id,
@@ -1115,7 +1114,6 @@ export class WeaponSystem {
     const appliedDamage = Number.isFinite(reportedDamage) ? Math.max(0, reportedDamage) : damage;
     this.effects.spawnTracer(sourcePoint, targetPoint, config.color, 1.45);
     this.effects.spawnImpact(targetPoint, direction.clone().negate(), config.color, 8);
-    this.audio?.playEffect?.('hit', { position: targetPoint, pitch: 1.24 });
     this.eventBus?.emit?.('combat:hit', {
       shotId,
       weapon: config.id,

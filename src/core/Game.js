@@ -390,9 +390,14 @@ export class Game {
       this.pushMomentumHUD(state);
     });
 
-    on('combat:hit', ({ zone, killed }) => {
-      this.ui.setHitmarker(zone === 'head' ? 'headshot' : killed ? 'kill' : 'body');
-      this.ui.setCrosshair({ state: 'enemy', target: true });
+    on('combat:impact', (impact = {}) => {
+      const type = impact.killed
+        ? 'kill'
+        : impact.headshot || impact.critical
+          ? 'headshot'
+          : 'body';
+      this.ui.setHitmarker({ ...impact, type });
+      this.audio?.playCombatConfirmation?.(impact);
     });
     on('enemy:killed', ({ id, type, headshot, score }) => {
       const labels = { trooper: 'Штурмовик', hunter: 'Охотник', warden: 'Страж Разлома' };

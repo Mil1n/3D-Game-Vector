@@ -63,6 +63,35 @@ test('Momentum rank cue uses a stable pitch ladder', () => {
   assert.equal(calls[1].options.variation, false);
 });
 
+test('combat confirmations use one non-spatial cue with kill-first priority', async () => {
+  const { manager, calls } = audioHarness();
+
+  manager.playCombatConfirmation({ hitCount: 1 });
+  manager.playCombatConfirmation({ headshot: true, hitCount: 2 });
+  manager.playCombatConfirmation({ critical: true });
+  manager.playCombatConfirmation({ killed: true, headshot: true, hitCount: 8 });
+
+  assert.deepEqual(calls.map(({ id }) => id), ['hitConfirm', 'headshotConfirm', 'headshotConfirm', 'killConfirm']);
+  assert.ok(calls.every(({ options }) => options.group === 'weapons'));
+  assert.ok(calls.every(({ options }) => options.variation === false));
+  assert.ok(calls.every(({ options }) => !Object.hasOwn(options, 'position')));
+  assert.ok(calls[3].options.gain > calls[1].options.gain);
+  assert.ok(calls[1].options.gain > calls[0].options.gain);
+
+  const events = [];
+  const real = new AudioManager({
+    autoUnlock: false,
+    eventBus: { emit: (name, payload) => events.push({ name, payload }) },
+    contextFactory: fakeAudioContext,
+  });
+  await real.unlock();
+  assert.ok(real.playCombatConfirmation({ hitCount: 1 }));
+  assert.ok(real.playCombatConfirmation({ headshot: true }));
+  assert.ok(real.playCombatConfirmation({ killed: true }));
+  assert.equal(events.some(({ name }) => name === 'audio:missing'), false);
+  await real.dispose();
+});
+
 test('Overdrive one-shot helpers select the dedicated procedural cues', () => {
   const { manager, calls } = audioHarness();
 

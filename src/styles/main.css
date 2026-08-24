@@ -384,8 +384,8 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .hud-abilities { scale: var(--ui-scale, 1); transform-origin: center bottom; }
 .interact-prompt, .crosshair { scale: var(--ui-scale, 1); transform-origin: center; }
 .ui-root:not([data-view="playing"]) .crosshair,
-.ui-root:not([data-view="playing"]) .hitmarker,
 .ui-root:not([data-view="playing"]) .interact-prompt { opacity: 0; }
+.ui-root:not([data-view="playing"]) .hitmarker { opacity: 0 !important; animation: none !important; }
 .hud-panel { background: linear-gradient(110deg, rgba(4,11,14,.82), rgba(10,23,27,.62)); filter: drop-shadow(0 5px 12px rgba(0,0,0,.25)); }
 .hud-objective { position: absolute; left: var(--hud-pad); top: var(--hud-pad); width: clamp(245px, 22vw, 340px); padding: 13px 15px 12px; border-left: 2px solid var(--cyan); clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); }
 .hud-objective header { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: 7px; letter-spacing: .13em; }
@@ -516,11 +516,21 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .crosshair[data-state="sprint"] { opacity: .45; --crosshair-spread: 13px; }
 .crosshair.is-target, .crosshair[data-state="enemy"] { --crosshair-color: var(--danger); }
 .crosshair.is-interact { --crosshair-color: var(--amber); rotate: 45deg; }
-.hitmarker { width: 26px; height: 26px; opacity: 0; scale: .65; }
-.hitmarker i { position: absolute; width: 7px; height: 1px; background: #fff; box-shadow: 0 0 3px #000; }
+.hitmarker { --hitmarker-color: #fff; --hitmarker-duration: 110ms; width: 26px; height: 26px; opacity: 0; scale: .65; transform: scale(var(--ui-scale, 1)); transform-origin: center; pointer-events: none; }
+.hitmarker i { position: absolute; width: 7px; height: 1px; background: var(--hitmarker-color); box-shadow: 0 0 3px #000, 0 0 5px color-mix(in srgb, var(--hitmarker-color) 45%, transparent); }
 .hitmarker i:nth-child(1) { left: 2px; top: 5px; rotate: 45deg; }.hitmarker i:nth-child(2) { right: 2px; top: 5px; rotate: -45deg; }.hitmarker i:nth-child(3) { left: 2px; bottom: 5px; rotate: -45deg; }.hitmarker i:nth-child(4) { right: 2px; bottom: 5px; rotate: 45deg; }
-.hitmarker[data-type="headshot"] i { background: var(--magenta); }.hitmarker[data-type="kill"] i { background: var(--danger); }
-.hitmarker.is-active { animation: hitmarker .15s var(--ease-out); }
+.hitmarker::before { content: ""; position: absolute; left: 50%; top: 50%; width: 7px; height: 7px; translate: -50% -50%; opacity: 0; border: 1px solid var(--hitmarker-color); rotate: 45deg; }
+.hitmarker::after { content: attr(data-label); position: absolute; left: 50%; top: calc(100% + 5px); translate: -50% 0; opacity: 0; color: var(--hitmarker-color); font: 800 7px/1 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .13em; text-shadow: 0 1px 3px #000, 0 0 6px color-mix(in srgb, var(--hitmarker-color) 55%, transparent); white-space: nowrap; }
+.hitmarker[data-type="headshot"] { --hitmarker-color: var(--magenta); width: 30px; height: 30px; }
+.hitmarker[data-type="headshot"] i { width: 9px; height: 2px; }
+.hitmarker[data-type="kill"] { --hitmarker-color: var(--danger); width: 36px; height: 36px; }
+.hitmarker[data-type="kill"] i { width: 11px; height: 2px; }
+.hitmarker[data-type="kill"]::before { width: 13px; height: 13px; border-radius: 50%; rotate: 0deg; box-shadow: 0 0 0 3px color-mix(in srgb, var(--hitmarker-color) 18%, transparent), 0 0 10px color-mix(in srgb, var(--hitmarker-color) 65%, transparent); }
+.hitmarker.is-active { animation: hitmarkerBody var(--hitmarker-duration) var(--ease-out); }
+.hitmarker[data-type="headshot"].is-active { animation-name: hitmarkerHeadshot; }
+.hitmarker[data-type="kill"].is-active { animation-name: hitmarkerKill; }
+.hitmarker[data-type="headshot"].is-active::before, .hitmarker[data-type="kill"].is-active::before { animation: hitmarkerCore var(--hitmarker-duration) var(--ease-out); }
+.hitmarker[data-type="headshot"].is-active::after, .hitmarker[data-type="kill"].is-active::after { animation: hitmarkerLabel var(--hitmarker-duration) ease-out; }
 .damage-direction { position: absolute; inset: 18%; }
 .damage-direction i { position: absolute; opacity: 0; width: 70px; height: 4px; background: linear-gradient(90deg, transparent, var(--danger), transparent); filter: drop-shadow(0 0 6px var(--danger)); }
 .damage-direction i[data-damage="front"] { left: 50%; top: 0; translate: -50%; }.damage-direction i[data-damage="back"] { left: 50%; bottom: 0; translate: -50%; }.damage-direction i[data-damage="left"] { left: 0; top: 50%; rotate: 90deg; }.damage-direction i[data-damage="right"] { right: 0; top: 50%; rotate: 90deg; }
@@ -531,7 +541,11 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 @keyframes healthCritical { 50% { opacity: .72; } }
 @keyframes ammoLow { 50% { opacity: .48; } }
 @keyframes feedIn { from { opacity: 0; translate: 20px 0; } }
-@keyframes hitmarker { 0% { opacity: 0; scale: 1.4; } 25%,75% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: .9; } }
+@keyframes hitmarkerBody { 0% { opacity: 0; scale: 1.3; } 22%,72% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: .9; } }
+@keyframes hitmarkerHeadshot { 0% { opacity: 0; scale: 1.65; } 20%,75% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: .82; } }
+@keyframes hitmarkerKill { 0% { opacity: 0; scale: 1.9; } 16%,76% { opacity: 1; scale: 1.08; } 100% { opacity: 0; scale: .72; } }
+@keyframes hitmarkerCore { 0% { opacity: 0; scale: 2.1; } 24%,72% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: 1.45; } }
+@keyframes hitmarkerLabel { 0%,18% { opacity: 0; translate: -50% 4px; } 36%,78% { opacity: 1; translate: -50% 0; } 100% { opacity: 0; translate: -50% -2px; } }
 @keyframes damageFlash { 0% { opacity: 0; scale: .7; } 18% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: 1.15; } }
 @keyframes overdriveOrbit { to { rotate: 360deg; scale: 1.04; } }
 @keyframes overdriveReady { 50% { filter: drop-shadow(0 0 10px rgba(255,190,74,.32)); } }
@@ -671,7 +685,11 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  .ui-root[data-view="playing"] .hitmarker.is-active { animation: none !important; opacity: 1; scale: 1; }
+  .ui-root[data-view="playing"] .hitmarker[data-type="headshot"].is-active::before, .ui-root[data-view="playing"] .hitmarker[data-type="kill"].is-active::before, .ui-root[data-view="playing"] .hitmarker[data-type="headshot"].is-active::after, .ui-root[data-view="playing"] .hitmarker[data-type="kill"].is-active::after { animation: none !important; opacity: 1; }
 }
 .ui-reduced-motion *, .ui-reduced-motion *::before, .ui-reduced-motion *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 .ui-reduced-motion .overdrive-screen-effect i { animation: none !important; }
 .ui-reduced-motion .overdrive-indicator.is-ready, .ui-reduced-motion .overdrive-indicator.is-active { animation: none !important; }
+.ui-root.ui-reduced-motion[data-view="playing"] .hitmarker.is-active { animation: none !important; opacity: 1; scale: 1; }
+.ui-root.ui-reduced-motion[data-view="playing"] .hitmarker[data-type="headshot"].is-active::before, .ui-root.ui-reduced-motion[data-view="playing"] .hitmarker[data-type="kill"].is-active::before, .ui-root.ui-reduced-motion[data-view="playing"] .hitmarker[data-type="headshot"].is-active::after, .ui-root.ui-reduced-motion[data-view="playing"] .hitmarker[data-type="kill"].is-active::after { animation: none !important; opacity: 1; }

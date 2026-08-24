@@ -20,6 +20,9 @@ const SOUND_PRESETS = Object.freeze({
   enemyShot: { group: 'effects', duration: 0.2, gain: 0.26, noise: 0.22, filter: 2200, layers: [['square', 380, 120, 0.34]] },
   dryFire: { group: 'weapons', duration: 0.055, gain: 0.2, noise: 0.35, filter: 3900, layers: [['square', 180, 120, 0.14]] },
   reload: { group: 'weapons', duration: 0.16, gain: 0.17, noise: 0.2, filter: 2600, layers: [['triangle', 240, 410, 0.18]] },
+  hitConfirm: { group: 'weapons', duration: 0.055, gain: 0.13, noise: 0.04, filter: 6800, layers: [['sine', 980, 720, 0.22]] },
+  headshotConfirm: { group: 'weapons', duration: 0.11, gain: 0.2, noise: 0.025, filter: 7600, layers: [['sine', 1320, 1960, 0.28], ['triangle', 660, 980, 0.12]] },
+  killConfirm: { group: 'weapons', duration: 0.18, gain: 0.24, noise: 0.06, filter: 5400, layers: [['triangle', 260, 920, 0.26], ['sine', 780, 1560, 0.18]] },
   hit: { group: 'effects', duration: 0.07, gain: 0.2, noise: 0.22, filter: 5200, layers: [['sine', 920, 620, 0.25]] },
   criticalHit: { group: 'effects', duration: 0.12, gain: 0.25, noise: 0.16, filter: 6200, layers: [['sine', 1450, 740, 0.3]] },
   kill: { group: 'effects', duration: 0.2, gain: 0.25, noise: 0.18, filter: 3800, layers: [['triangle', 220, 760, 0.28]] },
@@ -282,6 +285,33 @@ export class AudioManager {
 
   playEffect(effectId, options = {}) {
     return this.play(effectId, { group: 'effects', ...options });
+  }
+
+  playCombatConfirmation(impact = {}, options = {}) {
+    const data = typeof impact === 'string' ? { type: impact } : (impact ?? {});
+    const requested = String(data.type ?? '').toLowerCase();
+    const type = data.killed === true || requested === 'kill'
+      ? 'kill'
+      : data.headshot === true || data.critical === true || requested === 'headshot'
+        ? 'headshot'
+        : 'body';
+    const soundId = {
+      body: 'hitConfirm',
+      headshot: 'headshotConfirm',
+      kill: 'killConfirm',
+    }[type];
+    const hitCount = Math.max(1, Math.floor(Number(data.hitCount) || 1));
+    const gain = Math.min(1, {
+      body: 0.72,
+      headshot: 0.88,
+      kill: 1,
+    }[type] + Math.min(0.12, (hitCount - 1) * 0.025));
+    return this.play(soundId, {
+      group: 'weapons',
+      gain,
+      variation: false,
+      ...options,
+    });
   }
 
   playEnvironment(soundId, options = {}) {
