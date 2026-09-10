@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { Game } from '../src/core/Game.js';
 import { GAME_STATES } from '../src/core/GameStateManager.js';
 import { HitStopController } from '../src/core/HitStopController.js';
+import { EventBus } from '../src/core/EventBus.js';
 
 function createStartMatchHarness() {
   const input = {
@@ -95,7 +96,7 @@ function createStartMatchHarness() {
 }
 
 function createGameplayHarness() {
-  const calls = { player: [], weapons: [], enemies: [], director: [], arena: [], momentum: [], activations: 0 };
+  const calls = { player: [], weapons: [], enemies: [], director: [], arena: [], traversal: [], momentum: [], activations: 0 };
   const game = {
     input: { wasPressed: () => false, endFrame() {} },
     gameplayInput: {
@@ -115,6 +116,7 @@ function createGameplayHarness() {
     director: { update(dt) { calls.director.push(dt); } },
     effects: { update() {} },
     arena: { update(dt) { calls.arena.push(dt); } },
+    traversalPads: { update(dt, position) { calls.traversal.push({ dt, position }); } },
     momentum: {
       config: { overdrive: { effects: { worldTimeScale: 0.8 } } },
       getState: () => ({ overdrive: { active: true } }),
@@ -153,6 +155,72 @@ test('Overdrive activates once and slows only the world-facing fixed-step system
   assert.equal(calls.enemies[0], (1 / 60) * 0.8);
   assert.equal(calls.director[0], (1 / 60) * 0.8);
   assert.equal(calls.arena[0], (1 / 60) * 0.8);
+  assert.equal(calls.traversal[0].dt, 1 / 60, 'player traversal cooldowns should use player time');
+  assert.equal(calls.traversal[0].position, game.player.position);
+});
+
+test('Game routes one traversal activation into movement, spatial feedback and bounded camera response', () => {
+  const eventBus = new EventBus();
+  const calls = { movement: [], audio: [], effects: [], shake: [] };
+  const game = {
+    eventBus,
+    unsubscribers: [],
+    player: {
+      position: { x: 0, y: 1, z: 0 },
+      applyTraversalBoost(effect) {
+        calls.movement.push(effect);
+        eventBus.emit('player:traversal-boosted', effect);
+        return effect;
+      },
+    },
+    audio: { playAt: (...args) => calls.audio.push(args) },
+    effects: { spawnTraversalPulse: (...args) => calls.effects.push(args) },
+    cameraShake: { impulse: (...args) => calls.shake.push(args) },
+    traversalPads: { reducedMotion: false },
+  };
+  Game.prototype.registerEvents.call(game);
+  const effect = {
+    id: 'test-launch',
+    type: 'launch',
+    position: { x: 3, y: 0, z: -4 },
+    direction: { x: 0, y: 0, z: -1 },
+    color: 0xff44cc,
+    forwardSpeed: 12,
+    verticalSpeed: 13,
+  };
+
+  eventBus.emit('arena:traversal-activated', effect);
+  assert.deepEqual(calls.movement, [effect]);
+  assert.equal(calls.audio.length, 1);
+  assert.equal(calls.audio[0][0], 'launchPad');
+  assert.equal(calls.audio[0][1], effect.position);
+  assert.equal(calls.effects.length, 1);
+  assert.deepEqual(calls.effects[0], [effect.position, effect.direction, effect.color, 'launch']);
+  assert.equal(calls.shake.length, 1);
+  assert.ok(calls.shake[0][0] > 0 && calls.shake[0][0] <= 0.1);
+
+  const boost = {
+    ...effect,
+    id: 'test-boost',
+    type: 'boost',
+    direction: { x: 1, y: 0, z: 0 },
+  };
+  eventBus.emit('arena:traversal-activated', boost);
+  assert.deepEqual(calls.movement, [effect, boost]);
+  assert.equal(calls.audio[1][0], 'speedPad');
+  assert.deepEqual(calls.effects[1], [boost.position, boost.direction, boost.color, 'boost']);
+  assert.ok(calls.shake[1][0] > 0 && calls.shake[1][0] <= 0.1);
+
+  game.traversalPads.reducedMotion = true;
+  eventBus.emit('arena:traversal-activated', boost);
+  assert.equal(calls.movement.length, 3, 'reduced motion must not disable traversal gameplay');
+  assert.equal(calls.audio.length, 3, 'reduced motion must keep the spatial audio cue');
+  assert.equal(calls.audio[2][0], 'speedPad');
+  assert.equal(calls.effects.length, 2, 'reduced motion must suppress the expanding pulse');
+
+  for (const unsubscribe of game.unsubscribers) unsubscribe();
+  assert.equal(eventBus.listenerCount('arena:traversal-activated'), 0);
+  assert.equal(eventBus.listenerCount('player:traversal-boosted'), 0);
 });
 
 test('runtime failure explicitly ends Overdrive before stopping the frame loop', () => {
@@ -469,6 +537,7 @@ test('an impact in the first low-FPS substep freezes exact debt and preserves on
   assert.equal(calls.enemies.length, 1);
   assert.equal(calls.director.length, 1);
   assert.equal(calls.arena.length, 1);
+  assert.equal(calls.traversal.length, 1);
   assert.equal(calls.momentum.length, 1);
   assert.ok(Math.abs(game.physicsAccumulator - ((1 / 60) - 0.01 * game.timeScale)) < 1e-12);
   assert.equal(game.hitStop.active, false);
@@ -549,6 +618,7 @@ test('applySettings sends head-bob, recoil, sway, slide tilt and hit-stop access
     cameraFov: { applySettings() {} },
     cameraShake: { applySettings() {} },
     hitStop: { applySettings: (value) => calls.push(['hit-stop', value.gameplay.hitStop, value.accessibility.reducedMotion]) },
+    traversalPads: { setReducedMotion: (value) => calls.push(['traversal-motion', value]) },
     enemies: { setHitReactionIntensity: (...args) => calls.push(['enemies', ...args]) },
     player: {
       setRecoilIntensity: (...args) => calls.push(['player', ...args]),
@@ -568,6 +638,7 @@ test('applySettings sends head-bob, recoil, sway, slide tilt and hit-stop access
 
   assert.deepEqual(calls, [
     ['hit-stop', 0.6, true],
+    ['traversal-motion', true],
     ['enemies', 0.75, true],
     ['player', 0.4, true],
     ['weapons', 0.4, true],

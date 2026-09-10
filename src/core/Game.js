@@ -13,6 +13,7 @@ import { SettingsManager } from './SettingsManager.js';
 import { SaveManager } from './SaveManager.js';
 import { DebugManager } from './DebugManager.js';
 import { Arena } from '../world/Arena.js';
+import { TraversalPadSystem } from '../world/TraversalPadSystem.js';
 import { PlayerController } from '../player/PlayerController.js';
 import { WeaponSystem } from '../combat/WeaponSystem.js';
 import { EnemySystem } from '../combat/EnemySystem.js';
@@ -134,6 +135,7 @@ export class Game {
     this.cameraFovContext = { sprinting: false, adsAmount: 0, adsFovMultiplier: 1 };
     this.world = null;
     this.arena = null;
+    this.traversalPads = null;
     this.player = null;
     this.effects = null;
     this.enemies = null;
@@ -224,6 +226,12 @@ export class Game {
       autoApplyShifts: false,
     });
     this.arena.build(this.world);
+    this.traversalPads = new TraversalPadSystem({
+      scene: this.sceneManager.scene,
+      eventBus: this.eventBus,
+      mapConfig: this.arena.mapConfig,
+      reducedMotion: settings.accessibility.reducedMotion,
+    });
     this.player = new PlayerController({
       world: this.world,
       eventBus: this.eventBus,
@@ -365,6 +373,32 @@ export class Game {
     on('director:upgrade-request', ({ options }) => this.openUpgrade(options));
     on('director:ended', (payload) => void this.finishMatch(payload));
 
+    on('arena:traversal-activated', (effect) => {
+      this.player?.applyTraversalBoost?.(effect);
+    });
+    on('player:traversal-boosted', (effect = {}) => {
+      const launch = effect.type === 'launch';
+      this.audio?.playAt?.(launch ? 'launchPad' : 'speedPad', effect.position ?? this.player.position, {
+        gain: launch ? 0.88 : 0.78,
+        pitch: launch ? 1 : 1.08,
+        refDistance: 3,
+        maxDistance: 28,
+        rolloffFactor: 1.6,
+      });
+      if (!this.traversalPads?.reducedMotion) {
+        this.effects?.spawnTraversalPulse?.(
+          effect.position ?? this.player.position,
+          effect.direction,
+          effect.color,
+          launch ? 'launch' : 'boost',
+        );
+      }
+      this.cameraShake?.impulse?.(launch ? 0.1 : 0.065, {
+        pitch: launch ? -0.7 : -0.35,
+        roll: launch ? 0 : 0.08,
+      });
+    });
+
     on('momentum:changed', ({ state }) => this.pushMomentumHUD(state));
     on('momentum:rank-changed', ({ rank, direction, state }) => {
       if (direction !== 'down') this.audio.playMomentumRank?.(rank);
@@ -486,6 +520,7 @@ export class Game {
     });
     this.debug.registerMetric('State', () => this.state.state);
     this.debug.registerMetric('Arena', () => this.arena.getMapInfo().shortName);
+    this.debug.registerMetric('Traversal pads', () => this.traversalPads?.devices.length ?? 0);
     this.debug.registerMetric('Accuracy', () => `${(this.weapons.getAccuracy() * 100).toFixed(1)}%`);
     this.debug.registerMetric('Camera FOV', () => this.cameraFov.getState().currentFov.toFixed(1));
     this.debug.registerMetric('Camera trauma', () => this.cameraShake.getState().trauma.toFixed(2));
@@ -532,6 +567,7 @@ export class Game {
       this.enemies.reset();
       this.effects.reset();
       this.arena.setMap(this.matchMapId, { rebuild: true });
+      this.traversalPads?.setMap?.(this.arena.mapConfig);
     }
     void this.input.requestPointerLock(this.canvas, { rawInput: this.settings.get('controls.rawInput', true) });
     this.matchDifficulty = ['easy', 'normal', 'hard'].includes(difficulty) ? difficulty : 'normal';
@@ -544,6 +580,7 @@ export class Game {
     this.gameplayInput.reset();
     this.clearDebugVisuals();
     this.arena.reset();
+    this.traversalPads?.reset?.();
     this.player.reset(this.arena.getSafePlayerSpawn());
     this.effects.reset();
     this.enemies.reset();
@@ -737,6 +774,7 @@ export class Game {
     this.cameraFov?.applySettings(settings, { immediate: true });
     this.cameraShake?.applySettings(settings);
     this.hitStop?.applySettings(settings);
+    this.traversalPads?.setReducedMotion?.(settings.accessibility?.reducedMotion);
     this.enemies?.setHitReactionIntensity(settings.gameplay.enemyHitReaction, settings.accessibility.reducedMotion);
     this.player?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.weapons?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
@@ -814,6 +852,7 @@ export class Game {
       const worldDelta = FIXED_STEP * THREE.MathUtils.clamp(worldTimeScale, 0.5, 1);
       this.player.fixedUpdate(this.gameplayInput, FIXED_STEP);
       this.world.step(FIXED_STEP);
+      this.traversalPads?.update?.(FIXED_STEP, this.player.position);
       this.weapons.update(FIXED_STEP, this.gameplayInput);
       this.enemies.update(worldDelta);
       this.director.update(worldDelta, this.gameplayInput);
@@ -1085,6 +1124,7 @@ export class Game {
     this.enemies?.dispose();
     this.effects?.dispose();
     this.player?.dispose();
+    this.traversalPads?.dispose();
     this.arena?.dispose();
     this.cameraShake?.dispose?.();
     this.hitStop?.dispose?.();

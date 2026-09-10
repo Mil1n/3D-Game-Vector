@@ -546,3 +546,95 @@ test('slide tilt is frame-rate independent, intensity-scaled and allocation-free
   assert.doesNotMatch(source, /\bnew\s+/);
   assert.doesNotMatch(source, /(?:Vector2|Vector3|Quaternion)/);
 });
+
+test('traversal boosts add minimum directed speed without erasing lateral momentum', () => {
+  const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -22, 0) });
+  const events = [];
+  const player = new PlayerController({
+    world,
+    spawn: new THREE.Vector3(0, 2, 0),
+    eventBus: { emit: (type, payload) => events.push({ type, payload }) },
+  });
+  player.grounded = true;
+  player.body.velocity.set(3, -2, 4);
+
+  const result = player.applyTraversalBoost({
+    id: 'test-launch',
+    type: 'launch',
+    direction: new THREE.Vector3(1, 0, 0),
+    horizontalSpeed: 10,
+    verticalSpeed: 12,
+    sustain: 0.2,
+  });
+
+  assert.ok(result);
+  assert.equal(player.body.velocity.x, 10);
+  assert.equal(player.body.velocity.y, 12);
+  assert.equal(player.body.velocity.z, 4, 'perpendicular momentum should be preserved');
+  assert.equal(player.grounded, false);
+  assert.deepEqual(events.map(({ type }) => type), ['player:traversal-boosted']);
+  assert.ok(events[0].payload.velocity.equals(new THREE.Vector3(10, 12, 4)));
+  assert.deepEqual(player.getTraversalBoostState(), {
+    active: true,
+    remaining: 0.2,
+    minimumSpeed: 10,
+    direction: new THREE.Vector3(1, 0, 0),
+  });
+
+  const idle = {
+    isDown: () => false,
+    wasPressed: () => false,
+    getAxis: () => 0,
+    consumeLook: () => ({ x: 0, y: 0 }),
+  };
+  player.fixedUpdate(idle, FIXED_STEP);
+  assert.ok(player.body.velocity.x >= 10, 'sustain must survive normal movement deceleration');
+
+  player.body.velocity.set(16, 3, 1);
+  player.applyTraversalBoost({ direction: [1, 0, 0], speed: 10, verticalSpeed: 0 });
+  assert.equal(player.body.velocity.x, 16, 'a traversal pad must not slow a faster player');
+  assert.equal(player.body.velocity.y, 3, 'a horizontal booster must preserve upward velocity');
+  assert.equal(player.body.velocity.z, 1);
+
+  player.reset();
+  assert.equal(player.getTraversalBoostState().active, false);
+  assert.equal(player.getTraversalBoostState().remaining, 0);
+  assert.equal(player.getTraversalBoostState().minimumSpeed, 0);
+  player.dispose();
+});
+
+test('traversal direction is map-authored, view-independent and rejects invalid payloads', () => {
+  const world = new CANNON.World();
+  const player = new PlayerController({ world, spawn: new THREE.Vector3(0, 2, 0) });
+  player.setLook(Math.PI * 0.73, -0.2);
+  player.body.velocity.set(-5, 2, 2);
+
+  const result = player.applyTraversalBoost({
+    direction: [0, 0, -1],
+    speed: 18,
+    verticalSpeed: 0,
+    sustain: 0.4,
+  });
+  assert.ok(result.direction.equals(new THREE.Vector3(0, 0, -1)));
+  assert.equal(player.body.velocity.x, -5);
+  assert.equal(player.body.velocity.z, -18);
+  assert.equal(player.yaw, Math.PI * 0.73);
+  assert.equal(player.pitch, -0.2);
+
+  const before = player.velocity.clone();
+  const traversalBefore = player.getTraversalBoostState();
+  assert.equal(player.applyTraversalBoost({ direction: [Number.NaN, 0, 1], speed: 999 }), false);
+  assert.equal(player.applyTraversalBoost({ direction: [0, 0, 0], speed: 10 }), false);
+  assert.equal(player.applyTraversalBoost({ direction: [1, 0, 0], speed: Number.POSITIVE_INFINITY }), false);
+  assert.ok(player.velocity.equals(before));
+  assert.deepEqual(player.getTraversalBoostState(), traversalBefore, 'invalid input must not redirect active sustain');
+  player.fixedUpdate({
+    isDown: () => false,
+    wasPressed: () => false,
+    getAxis: () => 0,
+    consumeLook: () => ({ x: 0, y: 0 }),
+  }, FIXED_STEP);
+  assert.ok(player.getTraversalBoostState().direction.equals(new THREE.Vector3(0, 0, -1)));
+  assert.ok(player.body.velocity.z <= -18, 'the original sustain direction must remain effective');
+  player.dispose();
+});

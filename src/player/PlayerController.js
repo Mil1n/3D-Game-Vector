@@ -157,6 +157,10 @@ export class PlayerController {
     this._previousVerticalVelocity = 0;
     this._speedBoostRemaining = 0;
     this._speedBoostScale = 1;
+    this._traversalBoostRemaining = 0;
+    this._traversalMinimumSpeed = 0;
+    this._traversalDirection = new THREE.Vector3(0, 0, -1);
+    this._traversalEffectDirection = new THREE.Vector3(0, 0, -1);
     this._overdriveSpeedScale = 1;
     this.overdriveActive = false;
     this._aimAmount = 0;
@@ -265,6 +269,7 @@ export class PlayerController {
     }
 
     this._applyHorizontalMovement(dt);
+    this._applyTraversalSustain();
     this._tryBufferedJump();
     this._previousVerticalVelocity = this.body.velocity.y;
   }
@@ -394,6 +399,8 @@ export class PlayerController {
     this._dashCooldownRemaining = Math.max(0, this._dashCooldownRemaining - dt);
     this._speedBoostRemaining = Math.max(0, this._speedBoostRemaining - dt);
     if (this._speedBoostRemaining <= 0) this._speedBoostScale = 1;
+    this._traversalBoostRemaining = Math.max(0, this._traversalBoostRemaining - dt);
+    if (this._traversalBoostRemaining <= 0) this._traversalMinimumSpeed = 0;
     if (this.isSliding && (this._slideRemaining <= 0 || !this.grounded)) {
       this.isSliding = false;
       this._emit('player:slideEnded', {});
@@ -473,6 +480,16 @@ export class PlayerController {
     const maxDelta = acceleration * this._overdriveSpeedScale * dt;
     this.body.velocity.x = moveTowards(this.body.velocity.x, targetX, maxDelta);
     this.body.velocity.z = moveTowards(this.body.velocity.z, targetZ, maxDelta);
+  }
+
+  _applyTraversalSustain() {
+    if (this._traversalBoostRemaining <= 0 || this._traversalMinimumSpeed <= 0) return;
+    const projectedSpeed = this.body.velocity.x * this._traversalDirection.x
+      + this.body.velocity.z * this._traversalDirection.z;
+    if (projectedSpeed >= this._traversalMinimumSpeed) return;
+    const increase = this._traversalMinimumSpeed - projectedSpeed;
+    this.body.velocity.x += this._traversalDirection.x * increase;
+    this.body.velocity.z += this._traversalDirection.z * increase;
   }
 
   _tryBufferedJump() {
@@ -738,6 +755,57 @@ export class PlayerController {
     this.body.applyImpulse(new CANNON.Vec3(value.x, value.y, value.z));
   }
 
+  applyTraversalBoost(options = {}) {
+    if (this._disposed || this.dead) return false;
+    const source = options.direction;
+    const directionX = Number(Array.isArray(source) ? source[0] : source?.x);
+    const directionY = Number(Array.isArray(source) ? source[1] : source?.y);
+    const directionZ = Number(Array.isArray(source) ? source[2] : source?.z);
+    const requestedHorizontal = Number(options.horizontalSpeed ?? options.forwardSpeed ?? options.speed ?? 0);
+    const requestedVertical = Number(options.verticalSpeed ?? 0);
+    const requestedSustain = Number(options.sustain ?? 0);
+    if (![directionX, directionY, directionZ, requestedHorizontal, requestedVertical, requestedSustain]
+      .every(Number.isFinite)) return false;
+    if (Math.hypot(directionX, directionZ) < 1e-4) return false;
+    const horizontalSpeed = clamp(requestedHorizontal, 0, 40);
+    const verticalSpeed = clamp(requestedVertical, 0, 30);
+    const sustain = clamp(requestedSustain, 0, 2);
+    this._traversalEffectDirection.set(directionX, 0, directionZ).normalize();
+
+    const projectedSpeed = this.body.velocity.x * this._traversalEffectDirection.x
+      + this.body.velocity.z * this._traversalEffectDirection.z;
+    if (projectedSpeed < horizontalSpeed) {
+      const increase = horizontalSpeed - projectedSpeed;
+      this.body.velocity.x += this._traversalEffectDirection.x * increase;
+      this.body.velocity.z += this._traversalEffectDirection.z * increase;
+    }
+    if (verticalSpeed > this.body.velocity.y) this.body.velocity.y = verticalSpeed;
+    if (verticalSpeed > MAX_GROUNDED_UPWARD_SPEED) {
+      this.grounded = false;
+      this._coyoteRemaining = 0;
+      this._jumpBufferRemaining = 0;
+      this.isSliding = false;
+    }
+    if (horizontalSpeed > 0 && sustain > 0) {
+      this._traversalDirection.copy(this._traversalEffectDirection);
+      this._traversalMinimumSpeed = horizontalSpeed;
+      this._traversalBoostRemaining = sustain;
+    }
+    this._previousVerticalVelocity = this.body.velocity.y;
+    this.body.wakeUp();
+
+    const result = {
+      ...options,
+      direction: this._traversalEffectDirection.clone(),
+      horizontalSpeed,
+      verticalSpeed,
+      sustain,
+      velocity: new THREE.Vector3(this.body.velocity.x, this.body.velocity.y, this.body.velocity.z),
+    };
+    this._emit('player:traversal-boosted', result);
+    return result;
+  }
+
   teleport(position, { resetVelocity = true } = {}) {
     const target = asThreeVector(position, this.initialSpawn);
     this.body.position.set(target.x, target.y, target.z);
@@ -896,6 +964,15 @@ export class PlayerController {
     };
   }
 
+  getTraversalBoostState() {
+    return {
+      active: this._traversalBoostRemaining > 0,
+      remaining: this._traversalBoostRemaining,
+      minimumSpeed: this._traversalMinimumSpeed,
+      direction: this._traversalDirection.clone(),
+    };
+  }
+
   reset(spawn = this.initialSpawn) {
     if (this._disposed) return;
     this.initialSpawn.copy(asThreeVector(spawn, this.initialSpawn));
@@ -937,6 +1014,10 @@ export class PlayerController {
     this._dashCooldownRemaining = 0;
     this._speedBoostRemaining = 0;
     this._speedBoostScale = 1;
+    this._traversalBoostRemaining = 0;
+    this._traversalMinimumSpeed = 0;
+    this._traversalDirection.set(0, 0, -1);
+    this._traversalEffectDirection.set(0, 0, -1);
     this._overdriveSpeedScale = 1;
     this.overdriveActive = false;
     this.resetRecoil();

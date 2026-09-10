@@ -28,6 +28,8 @@ const SOUND_PRESETS = Object.freeze({
   kill: { group: 'effects', duration: 0.2, gain: 0.25, noise: 0.18, filter: 3800, layers: [['triangle', 220, 760, 0.28]] },
   explosion: { group: 'effects', duration: 0.62, gain: 0.55, noise: 1, filter: 720, layers: [['sine', 72, 28, 0.45]] },
   dash: { group: 'effects', duration: 0.24, gain: 0.26, noise: 0.52, filter: 1600, layers: [['sawtooth', 130, 520, 0.18]] },
+  launchPad: { group: 'effects', duration: 0.34, gain: 0.26, noise: 0.12, filter: 3200, layers: [['sine', 145, 780, 0.3], ['triangle', 290, 1180, 0.16]] },
+  speedPad: { group: 'effects', duration: 0.22, gain: 0.23, noise: 0.34, filter: 2600, layers: [['sawtooth', 120, 620, 0.18], ['sine', 340, 920, 0.16]] },
   jump: { group: 'effects', duration: 0.13, gain: 0.11, noise: 0.16, filter: 1400, layers: [['sine', 150, 245, 0.12]] },
   land: { group: 'effects', duration: 0.18, gain: 0.2, noise: 0.58, filter: 420, layers: [['sine', 82, 42, 0.2]] },
   step: { group: 'effects', duration: 0.095, gain: 0.1, noise: 0.6, filter: 620, layers: [] },

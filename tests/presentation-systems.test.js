@@ -148,3 +148,45 @@ test('Overdrive pulses reuse the existing ring pool and restore role-specific st
 
   effects.dispose();
 });
+
+test('traversal cues are procedural and pulses stay separate from combat explosions', async () => {
+  const audioEvents = [];
+  const audio = new AudioManager({
+    autoUnlock: false,
+    eventBus: { emit: (name, payload) => audioEvents.push({ name, payload }) },
+    contextFactory: fakeAudioContext,
+  });
+  await audio.unlock();
+  assert.ok(audio.play('launchPad', { variation: false }));
+  assert.ok(audio.play('speedPad', { variation: false }));
+  assert.equal(audioEvents.some(({ name }) => name === 'audio:missing'), false);
+  await audio.dispose();
+
+  const effectEvents = [];
+  const effects = new EffectsSystem({
+    scene: new THREE.Scene(),
+    camera: new THREE.PerspectiveCamera(),
+    quality: 'low',
+    eventBus: { emit: (name, payload) => effectEvents.push({ name, payload }), on: () => () => {} },
+  });
+  const poolSize = effects.rings.items.length;
+  const launch = effects.spawnTraversalPulse(
+    new THREE.Vector3(1, 0, 2),
+    new THREE.Vector3(0, 0, -1),
+    0xff8844,
+    'launch',
+  );
+  const boost = effects.spawnTraversalPulse(
+    new THREE.Vector3(-2, 0, 3),
+    new THREE.Vector3(1, 0, 0),
+    0x44ddff,
+    'boost',
+  );
+  assert.equal(effects.rings.items.length, poolSize);
+  assert.equal(launch.userData.duration, 0.42);
+  assert.equal(boost.userData.duration, 0.3);
+  assert.equal(launch.material.color.getHex(), 0xff8844);
+  assert.equal(boost.material.color.getHex(), 0x44ddff);
+  assert.equal(effectEvents.some(({ name }) => name === 'effects:explosion'), false);
+  effects.dispose();
+});

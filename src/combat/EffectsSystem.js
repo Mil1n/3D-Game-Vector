@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 const UP = new THREE.Vector3(0, 1, 0);
+const FORWARD = new THREE.Vector3(0, 0, 1);
 
 function makePool(size, factory) {
   const items = Array.from({ length: size }, (_, index) => {
@@ -159,6 +160,29 @@ export class EffectsSystem {
     ring.userData.life = ring.userData.duration;
     this.spawnEnemyDeath(position, color, Math.min(1.6, radius / 2));
     this.eventBus?.emit?.('effects:explosion', { position: position.clone(), radius });
+  }
+
+  spawnTraversalPulse(position, direction = FORWARD, color = 0x5ee7ff, type = 'boost') {
+    const launch = type === 'launch';
+    const ring = this.rings.next();
+    ring.position.copy(position);
+    ring.position.y += launch ? 0.14 : 0.65;
+    ring.rotation.set(0, 0, 0);
+    ring.quaternion.identity();
+    if (launch) {
+      ring.rotation.x = -Math.PI / 2;
+    } else {
+      this.tempDirection.copy(direction).setY(0);
+      if (this.tempDirection.lengthSq() < 1e-8) this.tempDirection.copy(FORWARD);
+      ring.quaternion.setFromUnitVectors(FORWARD, this.tempDirection.normalize());
+    }
+    ring.material.color.setHex(Number.isFinite(Number(color)) ? Number(color) : 0x5ee7ff);
+    ring.material.opacity = 0.9;
+    ring.scale.setScalar(0.08);
+    ring.userData.maxScale = launch ? 9 : 7;
+    ring.userData.duration = launch ? 0.42 : 0.3;
+    ring.userData.life = ring.userData.duration;
+    return ring;
   }
 
   spawnShiftPulse(position, radius = 30) {

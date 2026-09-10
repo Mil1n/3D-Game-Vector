@@ -54,6 +54,52 @@ test('map catalog exposes three immutable canonical variants and legacy aliases'
     assert.ok(map.shifts.bridges.entries.length >= 2);
     assert.ok(map.shifts.doors.count >= 4);
     assert.ok(map.shifts.cover.count >= 10);
+
+    const launchPads = map.traversal?.launchPads ?? [];
+    const speedBoosters = map.traversal?.speedBoosters ?? [];
+    assert.ok(launchPads.length >= 1, `${id} needs a launch pad`);
+    assert.ok(speedBoosters.length >= 1, `${id} needs a speed booster`);
+    const devices = [...launchPads, ...speedBoosters];
+    assert.equal(new Set(devices.map((device) => device.id)).size, devices.length, `${id} traversal ids must be unique`);
+    for (const device of devices) {
+      assert.ok(device.id);
+      assert.ok(device.position.length === 3 && device.position.every(Number.isFinite));
+      assert.ok(device.direction.length === 3 && device.direction.every(Number.isFinite));
+      assert.ok(Math.abs(Math.hypot(...device.direction) - 1) < 1e-8, `${device.id} direction must be normalized`);
+      assert.equal(device.direction[1], 0, `${device.id} direction must be horizontal`);
+      assert.ok(Number.isFinite(device.triggerHeight) && device.triggerHeight > 0);
+      assert.ok(Number.isFinite(device.cooldown) && device.cooldown > 0);
+      assert.ok(Number.isFinite(device.sustain) && device.sustain >= 0);
+      const margin = device.radius ?? Math.max(...device.size) * 0.5;
+      assert.ok(insideFootprint(map, device.position, margin), `${device.id} must stay inside the map footprint`);
+    }
+    for (const device of launchPads) {
+      assert.ok(Number.isFinite(device.radius) && device.radius > 0);
+      assert.ok(Number.isFinite(device.verticalSpeed) && device.verticalSpeed > 0);
+      assert.ok(Number.isFinite(device.forwardSpeed) && device.forwardSpeed > 0);
+      assert.ok(
+        device.landingTarget?.position?.length === 3
+          && device.landingTarget.position.every(Number.isFinite),
+        `${device.id} needs a finite landing target`,
+      );
+      assert.ok(
+        Number.isFinite(device.landingTarget?.radius) && device.landingTarget.radius > 0,
+        `${device.id} needs a positive landing radius`,
+      );
+      assert.ok(
+        insideFootprint(map, device.landingTarget.position, device.landingTarget.radius),
+        `${device.id} landing target must stay inside the map footprint`,
+      );
+      assert.ok(
+        device.landingTarget.position[1] >= map.bounds.minY
+          && device.landingTarget.position[1] <= map.bounds.maxY,
+        `${device.id} landing target height must stay inside map bounds`,
+      );
+    }
+    for (const device of speedBoosters) {
+      assert.ok(device.size.length === 2 && device.size.every((value) => Number.isFinite(value) && value > 0));
+      assert.ok(Number.isFinite(device.speed) && device.speed > 0);
+    }
   }
 });
 

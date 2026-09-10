@@ -87,6 +87,34 @@ const NULL_LATTICE = {
     doors: { count: 4, angleOffset: 0.5, radius: 36.4, closedY: 2.1, openY: -3.2, size: [5.8, 4.1, 0.8] },
     cover: { count: 12, angleOffset: 0.26, radii: [42.5, 32], baseY: 1.05, elevatedEvery: 3, elevatedY: 3.55, tangentDistance: 4.8, size: [3.8, 2.1, 1.1] },
   },
+  traversal: {
+    launchPads: [
+      {
+        id: 'null-rise',
+        position: [0, 0.05, 44],
+        radius: 1.8,
+        triggerHeight: 2.5,
+        direction: [0, 0, -1],
+        verticalSpeed: 12,
+        forwardSpeed: 17.5,
+        sustain: 0.35,
+        cooldown: 0.65,
+        landingTarget: { position: [0, 3.5, 28.5], radius: 3.5 },
+      },
+    ],
+    speedBoosters: [
+      {
+        id: 'null-flow',
+        position: [0, 0.05, -46],
+        size: [3.6, 8],
+        triggerHeight: 2.4,
+        direction: [1, 0, 0],
+        speed: 18,
+        sustain: 0.42,
+        cooldown: 0.55,
+      },
+    ],
+  },
   spawns: {
     player: [[0, 1.05, 46], [-39.8, 1.05, 23], [39.8, 1.05, -23]],
     enemyBands: [
@@ -184,6 +212,34 @@ const ZENITH_FORGE = {
     },
     doors: { count: 5, angleOffset: 0, radius: 33.5, closedY: 6.1, openY: -4, size: [5.8, 4.8, 0.8] },
     cover: { count: 10, angleOffset: 0, radii: [43.5, 25], baseY: 5.1, elevatedEvery: 2, elevatedY: 8.15, tangentDistance: 6, size: [4.8, 2.5, 1.2] },
+  },
+  traversal: {
+    launchPads: [
+      {
+        id: 'forge-lift',
+        position: [0, 7.05, 41],
+        radius: 1.8,
+        triggerHeight: 2.5,
+        direction: [0, 0, -1],
+        verticalSpeed: 12.8,
+        forwardSpeed: 11.5,
+        sustain: 1,
+        cooldown: 0.65,
+        landingTarget: { position: [0, 5, 25.5], radius: 3.5 },
+      },
+    ],
+    speedBoosters: [
+      {
+        id: 'forge-flow',
+        position: [34.78773075812274, 7.05, 25.27476585047755],
+        size: [3.6, 8],
+        triggerHeight: 2.4,
+        direction: [0.5877852522924731, 0, -0.8090169943749475],
+        speed: 19,
+        sustain: 0.42,
+        cooldown: 0.55,
+      },
+    ],
   },
   spawns: {
     player: [[0, 8.05, 43], [-40.9, 8.05, 13.3], [25.3, 8.05, -34.8]],
@@ -286,6 +342,34 @@ const FRACTURE_YARD = {
     },
     doors: { count: 4, angleOffset: 0, radius: 20, closedY: 2.4, openY: -3.2, size: [7, 4.8, 0.8] },
     cover: { count: 12, angleOffset: 0.22, radii: [41, 27], baseY: 1.2, elevatedEvery: 99, elevatedY: 1.2, tangentDistance: 7, size: [5.5, 2.4, 1.25] },
+  },
+  traversal: {
+    launchPads: [
+      {
+        id: 'relay-gantry-lift',
+        position: [0, 0, -22],
+        radius: 2,
+        triggerHeight: 2.5,
+        direction: [0, 0, -1],
+        verticalSpeed: 15.5,
+        forwardSpeed: 15,
+        sustain: 0.25,
+        cooldown: 0.65,
+        landingTarget: { position: [0, 6, -34], radius: 4.5 },
+      },
+    ],
+    speedBoosters: [
+      {
+        id: 'relay-flow',
+        position: [-52, 0, 31],
+        size: [3.6, 9],
+        triggerHeight: 2.4,
+        direction: [0, 0, -1],
+        speed: 19,
+        sustain: 0.42,
+        cooldown: 0.55,
+      },
+    ],
   },
   spawns: {
     player: [[-54, 1.05, 42], [54, 1.05, -42], [-54, 1.05, -42]],
