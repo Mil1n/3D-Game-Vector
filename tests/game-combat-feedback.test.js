@@ -4,6 +4,33 @@ import assert from 'node:assert/strict';
 import { EventBus } from '../src/core/EventBus.js';
 import { Game } from '../src/core/Game.js';
 
+test('container events route spatial feedback and confirm enemy hits once, respecting reduced motion', () => {
+  const eventBus = new EventBus();
+  const markers = [];
+  const sounds = [];
+  const explosions = [];
+  const game = { eventBus, unsubscribers: [], explosiveProps: { reducedMotion: false },
+    ui: { setHitmarker: (impact) => markers.push(impact) },
+    audio: { playAt: (...args) => sounds.push(args), playEffect: (...args) => sounds.push(args),
+      playCombatConfirmation: (...args) => sounds.push(args) },
+    effects: { spawnExplosion: (...args) => explosions.push(args) } };
+  Game.prototype.registerEvents.call(game);
+  const effect = { position: { x: 1, y: 1, z: 2 }, radius: 6, color: 0xffa837, hits: 0, kills: 0 };
+  eventBus.emit('arena:prop-armed', effect);
+  assert.equal(sounds[0][0], 'hazardWarning');
+  assert.equal(sounds[0][1], effect.position);
+  eventBus.emit('arena:prop-exploded', effect);
+  assert.equal(explosions.length, 1);
+  assert.equal(markers.length, 0);
+  game.explosiveProps.reducedMotion = true;
+  eventBus.emit('arena:prop-exploded', { ...effect, hits: 2, kills: 1 });
+  assert.equal(explosions.length, 1);
+  assert.deepEqual(markers, [{ type: 'kill', killed: true, hitCount: 2 }]);
+  game.unsubscribers.forEach((unsubscribe) => unsubscribe());
+  eventBus.emit('arena:prop-exploded', effect);
+  assert.equal(explosions.length, 1);
+});
+
 test('Game emits one tiered HUD and audio confirmation per aggregate combat impact', () => {
   const eventBus = new EventBus();
   const markers = [];

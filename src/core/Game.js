@@ -15,6 +15,7 @@ import { DebugManager } from './DebugManager.js';
 import { Arena } from '../world/Arena.js';
 import { TraversalPadSystem } from '../world/TraversalPadSystem.js';
 import { ArenaHazardSystem } from '../world/ArenaHazardSystem.js';
+import { ExplosivePropSystem } from '../world/ExplosivePropSystem.js';
 import { PlayerController } from '../player/PlayerController.js';
 import { WeaponSystem } from '../combat/WeaponSystem.js';
 import { EnemySystem } from '../combat/EnemySystem.js';
@@ -138,6 +139,7 @@ export class Game {
     this.arena = null;
     this.traversalPads = null;
     this.arenaHazards = null;
+    this.explosiveProps = null;
     this.player = null;
     this.effects = null;
     this.enemies = null;
@@ -276,6 +278,16 @@ export class Game {
       hitReactionIntensity: settings.gameplay.enemyHitReaction,
       reducedMotion: settings.accessibility.reducedMotion,
     });
+    this.explosiveProps = new ExplosivePropSystem({
+      scene: this.sceneManager.scene,
+      world: this.world,
+      arena: this.arena,
+      player: this.player,
+      enemySystem: this.enemies,
+      eventBus: this.eventBus,
+      mapConfig: this.arena.mapConfig,
+      reducedMotion: settings.accessibility.reducedMotion,
+    });
     this.weapons = new WeaponSystem({
       camera: this.sceneManager.camera,
       scene: this.sceneManager.scene,
@@ -285,6 +297,7 @@ export class Game {
       arena: this.arena,
       player: this.player,
       enemySystem: this.enemies,
+      explosiveSystem: this.explosiveProps,
     });
     this.upgrades = new UpgradeSystem({ eventBus: this.eventBus });
     this.upgrades.reset({ player: this.player, weaponSystem: this.weapons });
@@ -408,6 +421,20 @@ export class Game {
       });
     });
 
+    on('arena:prop-armed', (effect) => {
+      this.audio?.playAt?.('hazardWarning', effect.position, { gain: 0.85, pitch: 1.2, maxDistance: 38 });
+    });
+    on('arena:prop-exploded', (effect) => {
+      this.audio?.playEffect?.('explosion', { position: effect.position, volume: 0.9, pitch: 0.75 });
+      if (!this.explosiveProps?.reducedMotion) {
+        this.effects?.spawnExplosion?.(effect.position, effect.radius, effect.color);
+      }
+      if (effect.hits > 0) {
+        const impact = { type: effect.kills > 0 ? 'kill' : 'body', killed: effect.kills > 0, hitCount: effect.hits };
+        this.ui?.setHitmarker?.(impact);
+        this.audio?.playCombatConfirmation?.(impact);
+      }
+    });
     on('arena:hazard-warning', (effect = {}) => {
       this.audio?.playAt?.('hazardWarning', effect.position ?? this.player.position, {
         gain: 0.82,
@@ -556,6 +583,10 @@ export class Game {
     this.debug.registerMetric('State', () => this.state.state);
     this.debug.registerMetric('Arena', () => this.arena.getMapInfo().shortName);
     this.debug.registerMetric('Traversal pads', () => this.traversalPads?.devices.length ?? 0);
+    this.debug.registerMetric('Explosive containers', () => {
+      const props = this.explosiveProps?.props ?? [];
+      return `${props.filter((prop) => prop.state !== 'spent').length} / ${props.length}`;
+    });
     this.debug.registerMetric('Arena hazards', () => {
       const zones = this.arenaHazards?.zones ?? [];
       let active = 0;
@@ -616,6 +647,7 @@ export class Game {
       this.arena.setMap(this.matchMapId, { rebuild: true });
       this.traversalPads?.setMap?.(this.arena.mapConfig);
       this.arenaHazards?.setMap?.(this.arena.mapConfig);
+      this.explosiveProps?.setMap?.(this.arena.mapConfig);
     }
     void this.input.requestPointerLock(this.canvas, { rawInput: this.settings.get('controls.rawInput', true) });
     this.matchDifficulty = ['easy', 'normal', 'hard'].includes(difficulty) ? difficulty : 'normal';
@@ -630,6 +662,7 @@ export class Game {
     this.arena.reset();
     this.traversalPads?.reset?.();
     this.arenaHazards?.reset?.();
+    this.explosiveProps?.reset?.();
     this.player.reset(this.arena.getSafePlayerSpawn());
     this.effects.reset();
     this.enemies.reset();
@@ -770,6 +803,7 @@ export class Game {
     }
     this.clearDebugVisuals();
     this.arenaHazards?.reset?.();
+    this.explosiveProps?.reset?.();
     this.positionMenuCamera();
     this.audio.setVolume('master', this.settings.get('audio.master', 0.8));
     if (show) this.ui.showMainMenu(this.decorateProfile(this.save.getProfile()));
@@ -826,6 +860,7 @@ export class Game {
     this.hitStop?.applySettings(settings);
     this.traversalPads?.setReducedMotion?.(settings.accessibility?.reducedMotion);
     this.arenaHazards?.setReducedMotion?.(settings.accessibility?.reducedMotion);
+    this.explosiveProps?.setReducedMotion?.(settings.accessibility?.reducedMotion);
     this.enemies?.setHitReactionIntensity(settings.gameplay.enemyHitReaction, settings.accessibility.reducedMotion);
     this.player?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.weapons?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
@@ -905,6 +940,7 @@ export class Game {
       this.world.step(FIXED_STEP);
       this.traversalPads?.update?.(FIXED_STEP, this.player.position);
       this.arenaHazards?.update?.(worldDelta, this.player.position);
+      this.explosiveProps?.update?.(worldDelta);
       this.weapons.update(FIXED_STEP, this.gameplayInput);
       this.enemies.update(worldDelta);
       this.director.update(worldDelta, this.gameplayInput);
@@ -1176,6 +1212,7 @@ export class Game {
     this.enemies?.dispose();
     this.effects?.dispose();
     this.arenaHazards?.dispose();
+    this.explosiveProps?.dispose();
     this.player?.dispose();
     this.traversalPads?.dispose();
     this.arena?.dispose();

@@ -437,6 +437,7 @@ export class WeaponSystem {
     arena,
     player,
     enemySystem = null,
+    explosiveSystem = null,
     random = Math.random,
   }) {
     this.camera = camera;
@@ -447,6 +448,7 @@ export class WeaponSystem {
     this.arena = arena;
     this.player = player;
     this.enemySystem = enemySystem;
+    this.explosiveSystem = explosiveSystem;
     this.random = typeof random === 'function' ? random : Math.random;
     this.disposed = false;
     this.enabled = false;
@@ -1336,7 +1338,11 @@ export class WeaponSystem {
         secondaryDamage: Number(ricochet?.damage) || 0,
       };
     }
-    if (worldHit) {
+    if (worldHit?.hit || Number.isFinite(worldHit?.distance)) {
+      const falloff = 1 - THREE.MathUtils.clamp(
+        (distance - config.falloffStart) / Math.max(1, config.falloffEnd - config.falloffStart), 0, 1,
+      ) * (1 - (config.minDamageMultiplier ?? 0.45));
+      this.explosiveSystem?.damageBody?.(worldHit.body, config.damage * falloff * this.modifiers.damage);
       this.effects.spawnImpact(
         point,
         worldHit.normal ?? direction.clone().negate(),
@@ -1366,6 +1372,7 @@ export class WeaponSystem {
       : 1;
     const damage = blast.damage * this.modifiers.damage * lowHealthBonus;
     const radius = blast.radius;
+    this.explosiveSystem?.damageInRadius?.(point, radius, damage);
     const reported = this.enemySystem?.damageInRadius?.(point, radius, damage, {
       source: 'player',
       weapon: `${config.id}-blast`,

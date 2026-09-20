@@ -162,6 +162,20 @@ test('Overdrive activates once and slows only the world-facing fixed-step system
   assert.equal(calls.hazards[0].position, game.player.position);
 });
 
+test('Game freezes container fuses in menus and hit-stop and advances them with Overdrive world time', () => {
+  const { game } = createGameplayHarness();
+  const deltas = [];
+  game.explosiveProps = { update: (delta) => deltas.push(delta) };
+  Game.prototype.updateGameplay.call(game, 1 / 60);
+  assert.deepEqual(deltas, [(1 / 60) * 0.8]);
+  Game.prototype.updateGameplay.call(game, 0, { hitStopped: true });
+  for (const state of [GAME_STATES.PAUSED, GAME_STATES.UPGRADE_SELECTION, GAME_STATES.MAIN_MENU]) {
+    game.state.state = state;
+    Game.prototype.updateGameplay.call(game, 1 / 60);
+  }
+  assert.equal(deltas.length, 1);
+});
+
 test('Game routes one traversal activation into movement, spatial feedback and bounded camera response', () => {
   const eventBus = new EventBus();
   const calls = { movement: [], audio: [], effects: [], shake: [] };

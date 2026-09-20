@@ -133,6 +133,11 @@ const NULL_LATTICE = {
       },
     ],
   },
+  explosives: [
+    { id: 'null-cell-a', position: [8, 0.05, 45] },
+    { id: 'null-cell-b', position: [11, 0.05, 44] },
+    { id: 'null-cell-c', position: [-25, 2.55, 10] },
+  ],
   spawns: {
     player: [[0, 1.05, 46], [-39.8, 1.05, 23], [39.8, 1.05, -23]],
     enemyBands: [
@@ -279,6 +284,11 @@ const ZENITH_FORGE = {
       },
     ],
   },
+  explosives: [
+    { id: 'forge-cell-a', position: [24.28, 7.05, 35.49] },
+    { id: 'forge-cell-b', position: [26.7, 7.05, 33.7] },
+    { id: 'forge-cell-c', position: [-23, 4.05, 10] },
+  ],
   spawns: {
     player: [[0, 8.05, 43], [-40.9, 8.05, 13.3], [25.3, 8.05, -34.8]],
     enemyBands: [
@@ -428,6 +438,11 @@ const FRACTURE_YARD = {
       },
     ],
   },
+  explosives: [
+    { id: 'relay-cell-a', position: [-35, 0, 15] },
+    { id: 'relay-cell-b', position: [-32, 0, 15] },
+    { id: 'relay-cell-c', position: [35, 0, -12] },
+  ],
   spawns: {
     player: [[-54, 1.05, 42], [54, 1.05, -42], [-54, 1.05, -42]],
     enemyPoints: [
