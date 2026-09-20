@@ -14,6 +14,7 @@ import { SaveManager } from './SaveManager.js';
 import { DebugManager } from './DebugManager.js';
 import { Arena } from '../world/Arena.js';
 import { TraversalPadSystem } from '../world/TraversalPadSystem.js';
+import { ArenaHazardSystem } from '../world/ArenaHazardSystem.js';
 import { PlayerController } from '../player/PlayerController.js';
 import { WeaponSystem } from '../combat/WeaponSystem.js';
 import { EnemySystem } from '../combat/EnemySystem.js';
@@ -136,6 +137,7 @@ export class Game {
     this.world = null;
     this.arena = null;
     this.traversalPads = null;
+    this.arenaHazards = null;
     this.player = null;
     this.effects = null;
     this.enemies = null;
@@ -238,6 +240,13 @@ export class Game {
       camera: this.sceneManager.camera,
       config: GAME_CONFIG.player,
       spawn: this.arena.getSafePlayerSpawn(),
+    });
+    this.arenaHazards = new ArenaHazardSystem({
+      scene: this.sceneManager.scene,
+      eventBus: this.eventBus,
+      player: this.player,
+      mapConfig: this.arena.mapConfig,
+      reducedMotion: settings.accessibility.reducedMotion,
     });
     this.cameraShake = new CameraShakeController({
       camera: this.sceneManager.camera,
@@ -399,6 +408,32 @@ export class Game {
       });
     });
 
+    on('arena:hazard-warning', (effect = {}) => {
+      this.audio?.playAt?.('hazardWarning', effect.position ?? this.player.position, {
+        gain: 0.82,
+        pitch: 0.94,
+        refDistance: 4,
+        maxDistance: 34,
+        rolloffFactor: 1.35,
+      });
+    });
+    on('arena:hazard-activated', (effect = {}) => {
+      this.audio?.playAt?.('hazardActive', effect.position ?? this.player.position, {
+        gain: 0.9,
+        pitch: 0.88,
+        refDistance: 4,
+        maxDistance: 34,
+        rolloffFactor: 1.35,
+      });
+      if (!this.arenaHazards?.reducedMotion) {
+        this.effects?.spawnExplosion?.(
+          effect.position ?? this.player.position,
+          Math.max(1, Number(effect.radius) || 1) * 0.72,
+          effect.color ?? 0xff456d,
+        );
+      }
+    });
+
     on('momentum:changed', ({ state }) => this.pushMomentumHUD(state));
     on('momentum:rank-changed', ({ rank, direction, state }) => {
       if (direction !== 'down') this.audio.playMomentumRank?.(rank);
@@ -521,6 +556,18 @@ export class Game {
     this.debug.registerMetric('State', () => this.state.state);
     this.debug.registerMetric('Arena', () => this.arena.getMapInfo().shortName);
     this.debug.registerMetric('Traversal pads', () => this.traversalPads?.devices.length ?? 0);
+    this.debug.registerMetric('Arena hazards', () => {
+      const zones = this.arenaHazards?.zones ?? [];
+      let active = 0;
+      let warning = 0;
+      for (const zone of zones) {
+        if (zone.state === 'active') active += 1;
+        else if (zone.state === 'warning') warning += 1;
+      }
+      if (active > 0) return `active ${active} / ${zones.length}`;
+      if (warning > 0) return `warning ${warning} / ${zones.length}`;
+      return `idle 0 / ${zones.length}`;
+    });
     this.debug.registerMetric('Accuracy', () => `${(this.weapons.getAccuracy() * 100).toFixed(1)}%`);
     this.debug.registerMetric('Camera FOV', () => this.cameraFov.getState().currentFov.toFixed(1));
     this.debug.registerMetric('Camera trauma', () => this.cameraShake.getState().trauma.toFixed(2));
@@ -568,6 +615,7 @@ export class Game {
       this.effects.reset();
       this.arena.setMap(this.matchMapId, { rebuild: true });
       this.traversalPads?.setMap?.(this.arena.mapConfig);
+      this.arenaHazards?.setMap?.(this.arena.mapConfig);
     }
     void this.input.requestPointerLock(this.canvas, { rawInput: this.settings.get('controls.rawInput', true) });
     this.matchDifficulty = ['easy', 'normal', 'hard'].includes(difficulty) ? difficulty : 'normal';
@@ -581,6 +629,7 @@ export class Game {
     this.clearDebugVisuals();
     this.arena.reset();
     this.traversalPads?.reset?.();
+    this.arenaHazards?.reset?.();
     this.player.reset(this.arena.getSafePlayerSpawn());
     this.effects.reset();
     this.enemies.reset();
@@ -720,6 +769,7 @@ export class Game {
       }
     }
     this.clearDebugVisuals();
+    this.arenaHazards?.reset?.();
     this.positionMenuCamera();
     this.audio.setVolume('master', this.settings.get('audio.master', 0.8));
     if (show) this.ui.showMainMenu(this.decorateProfile(this.save.getProfile()));
@@ -775,6 +825,7 @@ export class Game {
     this.cameraShake?.applySettings(settings);
     this.hitStop?.applySettings(settings);
     this.traversalPads?.setReducedMotion?.(settings.accessibility?.reducedMotion);
+    this.arenaHazards?.setReducedMotion?.(settings.accessibility?.reducedMotion);
     this.enemies?.setHitReactionIntensity(settings.gameplay.enemyHitReaction, settings.accessibility.reducedMotion);
     this.player?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
     this.weapons?.setRecoilIntensity(settings.gameplay.weaponRecoil, settings.accessibility.reducedMotion);
@@ -853,6 +904,7 @@ export class Game {
       this.player.fixedUpdate(this.gameplayInput, FIXED_STEP);
       this.world.step(FIXED_STEP);
       this.traversalPads?.update?.(FIXED_STEP, this.player.position);
+      this.arenaHazards?.update?.(worldDelta, this.player.position);
       this.weapons.update(FIXED_STEP, this.gameplayInput);
       this.enemies.update(worldDelta);
       this.director.update(worldDelta, this.gameplayInput);
@@ -1123,6 +1175,7 @@ export class Game {
     this.weapons?.dispose();
     this.enemies?.dispose();
     this.effects?.dispose();
+    this.arenaHazards?.dispose();
     this.player?.dispose();
     this.traversalPads?.dispose();
     this.arena?.dispose();

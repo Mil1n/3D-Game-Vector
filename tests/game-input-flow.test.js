@@ -96,7 +96,7 @@ function createStartMatchHarness() {
 }
 
 function createGameplayHarness() {
-  const calls = { player: [], weapons: [], enemies: [], director: [], arena: [], traversal: [], momentum: [], activations: 0 };
+  const calls = { player: [], weapons: [], enemies: [], director: [], arena: [], traversal: [], hazards: [], momentum: [], activations: 0 };
   const game = {
     input: { wasPressed: () => false, endFrame() {} },
     gameplayInput: {
@@ -117,6 +117,7 @@ function createGameplayHarness() {
     effects: { update() {} },
     arena: { update(dt) { calls.arena.push(dt); } },
     traversalPads: { update(dt, position) { calls.traversal.push({ dt, position }); } },
+    arenaHazards: { update(dt, position) { calls.hazards.push({ dt, position }); } },
     momentum: {
       config: { overdrive: { effects: { worldTimeScale: 0.8 } } },
       getState: () => ({ overdrive: { active: true } }),
@@ -157,6 +158,8 @@ test('Overdrive activates once and slows only the world-facing fixed-step system
   assert.equal(calls.arena[0], (1 / 60) * 0.8);
   assert.equal(calls.traversal[0].dt, 1 / 60, 'player traversal cooldowns should use player time');
   assert.equal(calls.traversal[0].position, game.player.position);
+  assert.equal(calls.hazards[0].dt, (1 / 60) * 0.8, 'environment hazards should slow with the surrounding world');
+  assert.equal(calls.hazards[0].position, game.player.position);
 });
 
 test('Game routes one traversal activation into movement, spatial feedback and bounded camera response', () => {
@@ -221,6 +224,47 @@ test('Game routes one traversal activation into movement, spatial feedback and b
   for (const unsubscribe of game.unsubscribers) unsubscribe();
   assert.equal(eventBus.listenerCount('arena:traversal-activated'), 0);
   assert.equal(eventBus.listenerCount('player:traversal-boosted'), 0);
+});
+
+test('Game gives arena hazards spatial warning and activation feedback without bypassing reduced motion', () => {
+  const eventBus = new EventBus();
+  const calls = { audio: [], explosions: [] };
+  const game = {
+    eventBus,
+    unsubscribers: [],
+    player: { position: { x: 0, y: 1, z: 0 } },
+    audio: { playAt: (...args) => calls.audio.push(args) },
+    effects: { spawnExplosion: (...args) => calls.explosions.push(args) },
+    arenaHazards: { reducedMotion: false },
+  };
+  Game.prototype.registerEvents.call(game);
+  const effect = {
+    id: 'test-hazard',
+    position: { x: 4, y: 0, z: -3 },
+    radius: 3,
+    color: 0xff456d,
+  };
+
+  eventBus.emit('arena:hazard-warning', effect);
+  eventBus.emit('arena:hazard-activated', effect);
+  assert.deepEqual(calls.audio.map(([name]) => name), ['hazardWarning', 'hazardActive']);
+  assert.equal(calls.audio[0][1], effect.position);
+  assert.equal(calls.audio[1][1], effect.position);
+  assert.deepEqual(calls.explosions, [[effect.position, effect.radius * 0.72, effect.color]]);
+
+  game.arenaHazards.reducedMotion = true;
+  eventBus.emit('arena:hazard-warning', effect);
+  eventBus.emit('arena:hazard-activated', effect);
+  assert.deepEqual(
+    calls.audio.map(([name]) => name),
+    ['hazardWarning', 'hazardActive', 'hazardWarning', 'hazardActive'],
+    'reduced motion must preserve both audio warnings',
+  );
+  assert.equal(calls.explosions.length, 1, 'reduced motion must suppress the expanding activation VFX');
+
+  for (const unsubscribe of game.unsubscribers) unsubscribe();
+  eventBus.emit('arena:hazard-activated', effect);
+  assert.equal(calls.audio.length, 4);
 });
 
 test('runtime failure explicitly ends Overdrive before stopping the frame loop', () => {
@@ -619,6 +663,7 @@ test('applySettings sends head-bob, recoil, sway, slide tilt and hit-stop access
     cameraShake: { applySettings() {} },
     hitStop: { applySettings: (value) => calls.push(['hit-stop', value.gameplay.hitStop, value.accessibility.reducedMotion]) },
     traversalPads: { setReducedMotion: (value) => calls.push(['traversal-motion', value]) },
+    arenaHazards: { setReducedMotion: (value) => calls.push(['hazard-motion', value]) },
     enemies: { setHitReactionIntensity: (...args) => calls.push(['enemies', ...args]) },
     player: {
       setRecoilIntensity: (...args) => calls.push(['player', ...args]),
@@ -639,6 +684,7 @@ test('applySettings sends head-bob, recoil, sway, slide tilt and hit-stop access
   assert.deepEqual(calls, [
     ['hit-stop', 0.6, true],
     ['traversal-motion', true],
+    ['hazard-motion', true],
     ['enemies', 0.75, true],
     ['player', 0.4, true],
     ['weapons', 0.4, true],

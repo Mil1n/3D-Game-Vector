@@ -3,15 +3,22 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 
 import { GAME_CONFIG } from '../src/configs/gameConfig.js';
+import { EventBus } from '../src/core/EventBus.js';
 import { PHASES, RunDirector } from '../src/systems/RunDirector.js';
 
 const idleInput = { isDown: () => false };
 
-function createHarness({ choices = [], runConfig = GAME_CONFIG.run, random = () => 0.9, momentumSystem = null } = {}) {
+function createHarness({
+  choices = [],
+  runConfig = GAME_CONFIG.run,
+  random = () => 0.9,
+  momentumSystem = null,
+  eventBus: suppliedEventBus = null,
+} = {}) {
   const events = [];
   const spawned = [];
   const shifts = [];
-  const eventBus = {
+  const eventBus = suppliedEventBus ?? {
     on: () => () => {},
     emit: (name, payload) => {
       events.push({ name, payload });
@@ -156,6 +163,28 @@ test('Momentum multipliers replace combo reward scaling while combo tracking rem
   assert.equal(director.stats.bestCombo, 2);
   assert.equal(director.stats.score, 500, 'the second kill must not multiply Momentum by the old combo bonus');
   assert.equal(director.stats.experience, 50);
+});
+
+test('RunDirector records applied damage before a lethal hit ends the run', (t) => {
+  const eventBus = new EventBus();
+  const { director } = createHarness({ eventBus });
+  t.after(() => director.dispose());
+  eventBus.on('player:died', () => director.end(false, 'Тестовый урон'));
+  director.start();
+  director.combo = 4;
+
+  eventBus.emit('player:damaged', {
+    amount: 99,
+    healthDamage: 7,
+    armorDamage: 5,
+  });
+  eventBus.emit('player:died', {});
+
+  assert.equal(director.running, false);
+  assert.equal(director.stats.damageTaken, 12, 'stats use applied health + armor damage, not nominal overkill');
+  assert.equal(director.combo, 3);
+  eventBus.emit('combat:player-hit', { damage: 99 });
+  assert.equal(director.stats.damageTaken, 12, 'legacy combat event cannot double-count the same hit');
 });
 
 test('objective completion records style before applying current Momentum rewards', (t) => {

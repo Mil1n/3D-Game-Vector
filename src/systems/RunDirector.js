@@ -173,7 +173,7 @@ export class RunDirector {
     this.temp = new THREE.Vector3();
     this.unsubscribers = [
       this.eventBus?.on?.('enemy:killed', (event) => this.onEnemyKilled(event)),
-      this.eventBus?.on?.('combat:player-hit', (event) => this.onPlayerHit(event)),
+      this.eventBus?.on?.('player:damaged', (event) => this.onPlayerHit(event)),
       this.eventBus?.on?.('pickup:collected', (event) => this.onPickup(event)),
     ].filter(Boolean);
     this.reset();
@@ -653,8 +653,15 @@ export class RunDirector {
     this.pushHUD(true);
   }
 
-  onPlayerHit({ damage = 0 }) {
+  onPlayerHit(event = {}) {
     if (!this.running) return;
+    const healthDamage = Number(event.healthDamage);
+    const armorDamage = Number(event.armorDamage);
+    const hasAppliedBreakdown = Number.isFinite(healthDamage) || Number.isFinite(armorDamage);
+    const damage = Math.max(0, hasAppliedBreakdown
+      ? (Number.isFinite(healthDamage) ? healthDamage : 0) + (Number.isFinite(armorDamage) ? armorDamage : 0)
+      : Number(event.damage ?? event.amount) || 0);
+    if (damage <= 0) return;
     this.stats.damageTaken += damage;
     this.combo = Math.max(1, this.combo - 1);
     this.pushHUD(true);

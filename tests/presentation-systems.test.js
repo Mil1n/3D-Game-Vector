@@ -149,7 +149,7 @@ test('Overdrive pulses reuse the existing ring pool and restore role-specific st
   effects.dispose();
 });
 
-test('traversal cues are procedural and pulses stay separate from combat explosions', async () => {
+test('traversal and hazard cues are procedural while traversal pulses stay separate from combat explosions', async () => {
   const audioEvents = [];
   const audio = new AudioManager({
     autoUnlock: false,
@@ -159,6 +159,8 @@ test('traversal cues are procedural and pulses stay separate from combat explosi
   await audio.unlock();
   assert.ok(audio.play('launchPad', { variation: false }));
   assert.ok(audio.play('speedPad', { variation: false }));
+  assert.ok(audio.play('hazardWarning', { variation: false }));
+  assert.ok(audio.play('hazardActive', { variation: false }));
   assert.equal(audioEvents.some(({ name }) => name === 'audio:missing'), false);
   await audio.dispose();
 

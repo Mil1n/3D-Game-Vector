@@ -100,6 +100,37 @@ test('map catalog exposes three immutable canonical variants and legacy aliases'
       assert.ok(device.size.length === 2 && device.size.every((value) => Number.isFinite(value) && value > 0));
       assert.ok(Number.isFinite(device.speed) && device.speed > 0);
     }
+
+    const hazardZones = map.hazards?.zones ?? [];
+    assert.ok(hazardZones.length >= 1, `${id} needs an environmental hazard zone`);
+    assert.equal(new Set(hazardZones.map((zone) => zone.id)).size, hazardZones.length, `${id} hazard ids must be unique`);
+    for (const zone of hazardZones) {
+      assert.ok(zone.id && zone.name && zone.cause);
+      assert.ok(zone.position.length === 3 && zone.position.every(Number.isFinite));
+      assert.ok(Number.isFinite(zone.radius) && zone.radius >= 2);
+      assert.ok(insideFootprint(map, zone.position, zone.radius), `${zone.id} must stay inside the map footprint`);
+      assert.ok(Number.isFinite(zone.initialDelay) && zone.initialDelay >= 3);
+      assert.ok(Number.isFinite(zone.telegraphDuration) && zone.telegraphDuration >= 1);
+      assert.ok(Number.isFinite(zone.activeDuration) && zone.activeDuration >= 1);
+      assert.ok(Number.isFinite(zone.cooldown) && zone.cooldown >= 3);
+      assert.ok(Number.isFinite(zone.tickInterval) && zone.tickInterval >= 0.5);
+      assert.ok(Number.isFinite(zone.damage) && zone.damage > 0);
+      for (const spawn of map.spawns.player) {
+        assert.ok(
+          Math.hypot(zone.position[0] - spawn[0], zone.position[2] - spawn[2]) > zone.radius + 8,
+          `${zone.id} must not cycle beside a player spawn`,
+        );
+      }
+      for (const pad of launchPads) {
+        assert.ok(
+          Math.hypot(
+            zone.position[0] - pad.landingTarget.position[0],
+            zone.position[2] - pad.landingTarget.position[2],
+          ) > zone.radius + pad.landingTarget.radius + 4,
+          `${zone.id} must not cover a launch landing target`,
+        );
+      }
+    }
   }
 });
 
